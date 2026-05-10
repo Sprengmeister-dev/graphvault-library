@@ -7,10 +7,12 @@ export {
   jsValueToEncoded,
   matchBindings,
   parseGvql,
+  propertyIndexKey,
   referencedEdges,
   visitEncodedNode,
 } from "./gvql.js";
 export type {
+  GvqlAggregateFunction,
   GvqlBinding,
   GvqlCompareOperator,
   GvqlDirection,

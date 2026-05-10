@@ -16,6 +16,8 @@ class Document {
     this.id = id;
     this.title = title;
     this.owner = owner;
+    this.status = "draft";
+    this.views = 0;
     this.tags = new Set();
     this.links = new Map();
     this.related = [];
@@ -33,6 +35,8 @@ try {
   const owner = new Owner("owner-1", "Platform Team");
   const first = new Document("doc-1", "Object graph persistence", owner);
   const second = new Document("doc-2", "Admin workflows", owner);
+  first.views = 10;
+  second.views = 15;
   first.tags.add("typescript");
   first.tags.add("storage");
   second.links.set("source", first);
@@ -75,6 +79,16 @@ try {
     { id: "doc-1", title: "Object graph persistence" },
     { id: "doc-2", title: "Admin workflows" },
   ]);
+
+  const aggregate = await reloaded.gvql(`
+    MATCH (doc:Document)
+    WHERE doc.status = "draft"
+    RETURN doc.status AS status, count(*) AS count, count(doc.views) AS viewed, sum(doc.views) AS views, avg(doc.views) AS avgViews
+    GROUP BY doc.status
+  `);
+  assert.equal(aggregate.kind, "select");
+  assert.deepEqual(aggregate.rows, [{ status: "draft", count: 2, viewed: 2, views: 25, avgViews: 12.5 }]);
+  assert.ok(aggregate.matched <= aggregate.scannedObjects);
 
   const preview = await reloaded.previewGvql(
     'MATCH (doc:Document) WHERE doc.id = $id SET doc.title = "Admin workflows updated" RETURN doc.id AS id, doc.title AS title',

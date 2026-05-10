@@ -1,9 +1,11 @@
+import { encodedValueToJs } from "./gvql-values.js";
 import type { EncodedNode, EncodedValue, SerializedEnvelope } from "./types.js";
 import type { GvqlGraphEdge, GvqlGraphIndex, GvqlGraphNode } from "./gvql-types.js";
 
 export function buildGvqlGraphIndex(envelope: SerializedEnvelope): GvqlGraphIndex {
   const nodes = new Map<string, GvqlGraphNode>();
   const byType = new Map<string, string[]>();
+  const byProperty = new Map<string, string[]>();
   const outgoing = new Map<string, GvqlGraphEdge[]>();
   const incoming = new Map<string, GvqlGraphEdge[]>();
 
@@ -19,6 +21,11 @@ export function buildGvqlGraphIndex(envelope: SerializedEnvelope): GvqlGraphInde
       typed.push(objectId);
       byType.set(node.type, typed);
     }
+    if (encoded.kind === "object") {
+      for (const [path, value] of Object.entries(encoded.props)) {
+        indexProperty(byProperty, node.type, path, encodedValueToJs(value), objectId);
+      }
+    }
 
     for (const edge of referencedEdges(objectId, encoded)) {
       const fromList = outgoing.get(edge.from) ?? [];
@@ -30,7 +37,26 @@ export function buildGvqlGraphIndex(envelope: SerializedEnvelope): GvqlGraphInde
     }
   }
 
-  return { envelope, nodes, byType, outgoing, incoming };
+  return { envelope, nodes, byType, byProperty, outgoing, incoming };
+}
+
+export function propertyIndexKey(type: string | undefined, path: string, value: unknown): string {
+  return `${type ?? "*"}\u0000${path}\u0000${stableValueKey(value)}`;
+}
+
+function indexProperty(byProperty: Map<string, string[]>, type: string | undefined, path: string, value: unknown, objectId: string): void {
+  const keys = type ? [propertyIndexKey(type, path, value), propertyIndexKey(undefined, path, value)] : [propertyIndexKey(undefined, path, value)];
+  for (const key of keys) {
+    const indexed = byProperty.get(key) ?? [];
+    indexed.push(objectId);
+    byProperty.set(key, indexed);
+  }
+}
+
+function stableValueKey(value: unknown): string {
+  if (typeof value === "bigint") return `bigint:${value.toString()}`;
+  if (value && typeof value === "object") return JSON.stringify(value);
+  return `${typeof value}:${String(value)}`;
 }
 
 export function referencedEdges(from: string, node: EncodedNode): GvqlGraphEdge[] {

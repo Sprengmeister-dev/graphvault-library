@@ -10,9 +10,10 @@ import type {
   GvqlSetExpression,
   GvqlStatement,
   GvqlWhereClause,
+  GvqlAggregateFunction,
 } from "./gvql-types.js";
 
-type ClauseName = "MATCH" | "WHERE" | "SET" | "RETURN" | "ORDER BY" | "LIMIT";
+type ClauseName = "MATCH" | "WHERE" | "SET" | "RETURN" | "GROUP BY" | "ORDER BY" | "LIMIT";
 
 export function parseGvql(source: string): GvqlStatement {
   const clauses = splitClauses(source);
@@ -29,6 +30,7 @@ export function parseGvql(source: string): GvqlStatement {
     returns,
     set,
     ...(clauses.get("ORDER BY") ? { orderBy: parseOrderBy(clauses.get("ORDER BY") as string) } : {}),
+    ...(clauses.get("GROUP BY") ? { groupBy: parseGroupBy(clauses.get("GROUP BY") as string) } : {}),
     ...(clauses.get("LIMIT") ? { limit: parseLimit(clauses.get("LIMIT") as string) } : {}),
   };
 }
@@ -36,7 +38,7 @@ export function parseGvql(source: string): GvqlStatement {
 function splitClauses(source: string): Map<ClauseName, string> {
   const normalized = source.trim().replace(/;$/, "");
   const matches: Array<{ name: ClauseName; index: number; end: number }> = [];
-  for (const name of ["MATCH", "WHERE", "SET", "RETURN", "ORDER BY", "LIMIT"] as ClauseName[]) {
+  for (const name of ["MATCH", "WHERE", "SET", "RETURN", "GROUP BY", "ORDER BY", "LIMIT"] as ClauseName[]) {
     const found = findKeyword(normalized, name);
     if (found >= 0) {
       matches.push({ name, index: found, end: found + name.length });
@@ -138,11 +140,27 @@ function parseReturnList(input: string): GvqlReturnExpression[] {
   return splitComma(input).map((item) => {
     const { expression, aliasName } = splitAlias(item);
     if (expression === "*") return { kind: "all", ...(aliasName ? { aliasName } : {}) };
-    const count = /^count\s*\(\s*\*\s*\)$/i.exec(expression);
-    if (count) return { kind: "count", ...(aliasName ? { aliasName } : {}) };
+    const count = /^count\s*\(\s*(\*|[A-Za-z_][\w]*(?:\.[A-Za-z_][\w]*)?)\s*\)$/i.exec(expression);
+    if (count) {
+      const countExpression = count[1] && count[1] !== "*" ? parsePathExpression(count[1]) : undefined;
+      return { kind: "count", ...(countExpression ? { expression: countExpression } : {}), ...(aliasName ? { aliasName } : {}) };
+    }
+    const aggregate = /^(sum|avg|min|max)\s*\(\s*([A-Za-z_][\w]*(?:\.[A-Za-z_][\w]*)+)\s*\)$/i.exec(expression);
+    if (aggregate) {
+      return {
+        kind: "aggregate",
+        fn: aggregate[1]?.toLowerCase() as Exclude<GvqlAggregateFunction, "count">,
+        expression: parsePathExpression(aggregate[2] as string),
+        ...(aliasName ? { aliasName } : {}),
+      };
+    }
     if (/^[A-Za-z_][\w]*$/.test(expression)) return { kind: "all", alias: expression, ...(aliasName ? { aliasName } : {}) };
     return { kind: "path", expression: parsePathExpression(expression), ...(aliasName ? { aliasName } : {}) };
   });
+}
+
+function parseGroupBy(input: string): GvqlPathExpression[] {
+  return splitComma(input).map(parsePathExpression);
 }
 
 function parseOrderBy(input: string): { expression: GvqlPathExpression; direction: "asc" | "desc" } {

@@ -329,8 +329,10 @@ Current GVQL supports:
 - `WHERE` predicates with `=`, `!=`, `<`, `<=`, `>`, `>=`, `CONTAINS`, `STARTS WITH`, `ENDS WITH`, `IN`
 - `$parameters`
 - `RETURN`, aliases with `AS`, `count(*)`
+- `GROUP BY` with `count`, `sum`, `avg`, `min`, `max`
 - `ORDER BY`, `LIMIT`
 - `SET` for primitive field updates
+- type and primitive-property indexes for common equality filters on the first matched node
 
 ## Performance
 

@@ -4,6 +4,7 @@ export type GvqlStatementKind = "select" | "update";
 export type GvqlDirection = "out" | "in";
 export type GvqlCompareOperator = "=" | "!=" | ">" | ">=" | "<" | "<=" | "CONTAINS" | "STARTS WITH" | "ENDS WITH" | "IN";
 export type GvqlLogicalOperator = "AND" | "OR";
+export type GvqlAggregateFunction = "count" | "sum" | "avg" | "min" | "max";
 
 export interface GvqlNodePattern {
   alias: string;
@@ -47,7 +48,8 @@ export interface GvqlWhereClause {
 export type GvqlReturnExpression =
   | { kind: "all"; alias?: string; aliasName?: string }
   | { kind: "path"; expression: GvqlPathExpression; aliasName?: string }
-  | { kind: "count"; aliasName?: string };
+  | { kind: "count"; expression?: GvqlPathExpression; aliasName?: string }
+  | { kind: "aggregate"; fn: Exclude<GvqlAggregateFunction, "count">; expression: GvqlPathExpression; aliasName?: string };
 
 export interface GvqlSetExpression {
   target: GvqlPathExpression;
@@ -66,6 +68,7 @@ export interface GvqlStatement {
   returns: GvqlReturnExpression[];
   set: GvqlSetExpression[];
   orderBy?: GvqlOrderBy;
+  groupBy?: GvqlPathExpression[];
   limit?: number;
 }
 
@@ -86,6 +89,7 @@ export interface GvqlGraphIndex {
   envelope: SerializedEnvelope;
   nodes: Map<string, GvqlGraphNode>;
   byType: Map<string, string[]>;
+  byProperty: Map<string, string[]>;
   outgoing: Map<string, GvqlGraphEdge[]>;
   incoming: Map<string, GvqlGraphEdge[]>;
 }
