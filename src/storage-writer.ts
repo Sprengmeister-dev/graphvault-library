@@ -3,6 +3,7 @@ import { encodeBinaryRecord } from "./binary-codec.js";
 import { buildParentIndexRecord } from "./storage-parent-index.js";
 import type { StorageLayout } from "./storage-layout.js";
 import type {
+  ObjectRecordWriteFormat,
   ObjectRecord,
   SerializedEnvelope,
   StorageManifest,
@@ -13,19 +14,35 @@ import type {
 
 const OBJECT_RECORD_WRITE_CONCURRENCY = 32;
 
+export interface StorageWriterOptions {
+  objectRecordFormat?: ObjectRecordWriteFormat;
+  objectRecordWriteConcurrency?: number;
+  prettyJson?: boolean;
+}
+
 export class StorageWriter {
+  private readonly objectRecordFormat: ObjectRecordWriteFormat;
+  private readonly objectRecordWriteConcurrency: number;
+  private readonly prettyJson: boolean;
+
   constructor(
     private readonly target: StorageTarget,
     private readonly layout: StorageLayout,
-  ) {}
+    options: StorageWriterOptions = {},
+  ) {
+    this.objectRecordFormat = options.objectRecordFormat ?? "binary-and-json";
+    this.objectRecordWriteConcurrency = options.objectRecordWriteConcurrency ?? OBJECT_RECORD_WRITE_CONCURRENCY;
+    this.prettyJson = options.prettyJson ?? true;
+  }
 
   async writeJson(path: string, value: unknown): Promise<void> {
-    await this.target.writeTextAtomic(path, `${JSON.stringify(value, null, 2)}\n`);
+    const spacing = this.prettyJson ? 2 : 0;
+    await this.target.writeTextAtomic(path, `${JSON.stringify(value, null, spacing)}\n`);
   }
 
   async writeObjectRecords(envelope: SerializedEnvelope, transactionId: number, objectIds: readonly string[]): Promise<void> {
     const storedAt = new Date().toISOString();
-    await mapWithConcurrency(objectIds, OBJECT_RECORD_WRITE_CONCURRENCY, async (objectId) => {
+    await mapWithConcurrency(objectIds, this.objectRecordWriteConcurrency, async (objectId) => {
       const node = envelope.nodes[objectId];
       if (!node) {
         return;
@@ -38,10 +55,14 @@ export class StorageWriter {
         storedAt,
         node,
       };
-      await Promise.all([
-        this.target.writeBufferAtomic(this.layout.binaryObjectPath(objectId), encodeBinaryRecord(record)),
-        this.writeJson(this.layout.objectRecordPath(objectId), record),
-      ]);
+      const writes: Array<Promise<void>> = [];
+      if (this.objectRecordFormat !== "json") {
+        writes.push(this.target.writeBufferAtomic(this.layout.binaryObjectPath(objectId), encodeBinaryRecord(record)));
+      }
+      if (this.objectRecordFormat !== "binary") {
+        writes.push(this.writeJson(this.layout.objectRecordPath(objectId), record));
+      }
+      await Promise.all(writes);
     });
   }
 

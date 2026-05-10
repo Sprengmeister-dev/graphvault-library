@@ -75,6 +75,7 @@ export {
 } from "./storage-target.js";
 export type {
   HttpStorageTargetOptions,
+  LocalFilesystemTargetOptions,
   S3Body,
   S3ListObjectsRequest,
   S3ListObjectsResponse,
@@ -110,5 +111,8 @@ export type {
   StorageTargetLock,
   StoreMetadata,
   StoreMode,
+  StorageWriteDurability,
+  StorageWriteProfile,
+  ObjectRecordWriteFormat,
   TypeRegistration,
 } from "./types.js";

@@ -164,11 +164,12 @@ async function benchmarkMemory(count) {
   };
 }
 
-async function benchmarkFilesystem(count) {
+async function benchmarkFilesystem(count, options = {}) {
+  const { target = "filesystem", storageOptions = {} } = options;
   const directory = await mkdtemp(join(tmpdir(), "graphvault-bench-"));
   try {
     const root = createRoot(count);
-    const storage = await EmbeddedStorage.start({ storageDirectory: directory, root, types: typeRegistrations() });
+    const storage = await EmbeddedStorage.start({ storageDirectory: directory, root, types: typeRegistrations(), ...storageOptions });
     const store = await time(() => storage.storeRoot());
     const gvql = await time(() =>
       storage.gvql('MATCH (doc:Document)-[:owner]->(owner:Owner) WHERE owner.name = "Owner 1" RETURN doc.id AS id, doc.title AS title LIMIT 25'),
@@ -234,11 +235,11 @@ async function benchmarkFilesystem(count) {
     );
     await storage.shutdown();
     const load = await time(async () => {
-      const loaded = await EmbeddedStorage.start({ storageDirectory: directory, rootFactory: () => ({}), types: typeRegistrations() });
+      const loaded = await EmbeddedStorage.start({ storageDirectory: directory, rootFactory: () => ({}), types: typeRegistrations(), ...storageOptions });
       await loaded.shutdown();
     });
     return {
-      target: "filesystem",
+      target,
       count,
       storeMs: store.ms,
       gvqlMs: gvql.ms,
@@ -298,6 +299,7 @@ const rows = [];
 for (const count of sizes) {
   rows.push(await benchmarkMemory(count));
   rows.push(await benchmarkFilesystem(count));
+  rows.push(await benchmarkFilesystem(count, { target: "filesystem/maximum", storageOptions: { writeProfile: "maximum" } }));
 }
 
 console.log(`# GraphVault object graph benchmark`);

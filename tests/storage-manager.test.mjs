@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm, readFile, access } from "node:fs/promises";
+import { mkdtemp, rm, readFile, access, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { EmbeddedStorage } from "../dist/index.js";
 
 const workingDirectory = await mkdtemp(join(tmpdir(), "graphvault-storage-tests-"));
 const backupDirectory = await mkdtemp(join(tmpdir(), "graphvault-storage-backup-"));
+const maximumWriteDirectory = await mkdtemp(join(tmpdir(), "graphvault-storage-maximum-"));
 
 try {
   const writeable = await EmbeddedStorage.start({
@@ -63,7 +64,28 @@ try {
   const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
   assert.equal(manifest.format, "graphvault-manifest");
   assert.equal(Array.isArray(manifest.objectIds), true);
+
+  const maximumWrite = await EmbeddedStorage.start({
+    storageDirectory: maximumWriteDirectory,
+    rootFactory: () => ({
+      docs: [{ id: "doc-fast", title: "Binary only" }],
+    }),
+    writeProfile: "maximum",
+  });
+  await maximumWrite.storeRoot();
+  await maximumWrite.shutdown();
+  assert.deepEqual(await readdir(join(maximumWriteDirectory, "objects")), []);
+  assert.equal((await readdir(join(maximumWriteDirectory, "objects-bin"))).length >= 2, true);
+  assert.deepEqual(await readdir(join(maximumWriteDirectory, "snapshots")), []);
+  const maximumRestored = await EmbeddedStorage.start({
+    storageDirectory: maximumWriteDirectory,
+    rootFactory: () => ({ docs: [] }),
+    readOnly: true,
+  });
+  assert.equal(maximumRestored.root.docs[0].title, "Binary only");
+  await maximumRestored.shutdown();
 } finally {
   await rm(workingDirectory, { recursive: true, force: true });
   await rm(backupDirectory, { recursive: true, force: true });
+  await rm(maximumWriteDirectory, { recursive: true, force: true });
 }

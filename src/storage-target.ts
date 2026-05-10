@@ -16,7 +16,17 @@ export type {
 export { SqlStorageTarget } from "./storage-targets/sql.js";
 export type { SqlQueryResult, SqlStorageClient, SqlStorageTargetOptions } from "./storage-targets/sql.js";
 
+export interface LocalFilesystemTargetOptions {
+  syncWrites?: boolean;
+}
+
 export class LocalFilesystemTarget implements StorageTarget {
+  private readonly syncWrites: boolean;
+
+  constructor(options: LocalFilesystemTargetOptions = {}) {
+    this.syncWrites = options.syncWrites ?? true;
+  }
+
   async ensureDirectory(path: string): Promise<void> {
     await mkdir(path, { recursive: true });
   }
@@ -52,7 +62,9 @@ export class LocalFilesystemTarget implements StorageTarget {
     const handle = await open(tempPath, "w");
     try {
       await handle.writeFile(value);
-      await handle.sync();
+      if (this.syncWrites) {
+        await handle.sync();
+      }
     } finally {
       await handle.close();
     }

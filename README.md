@@ -544,7 +544,7 @@ GraphVault includes a real benchmark instead of README-only claims:
 npm run benchmark
 ```
 
-Latest local results are documented in [docs/BENCHMARKS.md](./docs/BENCHMARKS.md). The short version: in-memory graph serialization is fast for typical embedded workloads; the local filesystem target is intentionally conservative because it writes atomic binary records and inspectable JSON records.
+Latest local results are documented in [docs/BENCHMARKS.md](./docs/BENCHMARKS.md). The short version: in-memory graph serialization is fast for typical embedded workloads; the default local filesystem profile is intentionally conservative, while `writeProfile: "maximum"` removes debug-oriented write duplication and is built for write-heavy paths.
 
 ## Developer Experience
 
@@ -583,6 +583,24 @@ const storage = await EmbeddedStorage.start({
   rootFactory: () => ({ documents: [] }),
 });
 ```
+
+For write-heavy services, choose an explicit write profile:
+
+```ts
+const storage = await EmbeddedStorage.start({
+  storageDirectory: "./data",
+  rootFactory: () => ({ documents: [] }),
+  writeProfile: "maximum",
+});
+```
+
+Write profiles:
+
+- `standard`: strict local writes, inspectable JSON object records, binary object records, snapshots, manifest, parent index, and journal.
+- `fast`: relaxed local writes, compact JSON metadata, binary-only object records, snapshots, manifest, parent index, and journal.
+- `maximum`: relaxed local writes, compact JSON metadata, binary-only object records, no checkpoint snapshots, manifest, parent index, and journal.
+
+You can override the profile details with `objectRecordFormat`, `objectRecordWriteConcurrency`, `prettyJson`, `writeDurability`, and `writeSnapshots`.
 
 ### In-Memory
 
@@ -669,6 +687,12 @@ const storage = await EmbeddedStorage.start({
 - `lockTimeoutMs`: how long a writer waits for the single-writer lock.
 - `housekeepingIntervalMs`: enables periodic garbage collection and maintenance work.
 - `readOnly`: opens a store without acquiring a writer lock or mutating files.
+- `writeProfile`: selects `standard`, `fast`, or `maximum` write behavior.
+- `objectRecordFormat`: writes object records as `binary-and-json`, `binary`, or `json`.
+- `objectRecordWriteConcurrency`: controls parallel object-record writes.
+- `prettyJson`: keeps metadata human-formatted when `true`; compact JSON is faster and smaller.
+- `writeDurability`: `strict` fsyncs local atomic writes; `relaxed` favors throughput.
+- `writeSnapshots`: controls checkpoint snapshot writes; manifest-based loading still works without snapshots.
 
 ## NestJS
 
@@ -814,6 +838,12 @@ Main runtime API.
 - `channelCount`: spreads object records across channel folders.
 - `lockTimeoutMs`: writer-lock timeout.
 - `housekeepingIntervalMs`: periodic maintenance interval.
+- `writeProfile`: `standard`, `fast`, or `maximum` write throughput profile.
+- `writeDurability`: `strict` for fsynced local atomic writes, `relaxed` for higher throughput.
+- `objectRecordFormat`: `binary-and-json`, `binary`, or `json`.
+- `objectRecordWriteConcurrency`: parallelism for object-record writes.
+- `prettyJson`: pretty metadata when `true`, compact metadata when `false`.
+- `writeSnapshots`: checkpoint snapshot writes on or off.
 
 ## Admin UI
 

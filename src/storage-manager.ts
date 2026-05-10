@@ -22,6 +22,9 @@ import type {
   StorageTargetLock,
   StoreMetadata,
   StoreMode,
+  StorageWriteDurability,
+  StorageWriteProfile,
+  ObjectRecordWriteFormat,
   TransactionRecord,
   VerificationResult,
   MaintenanceResult,
@@ -37,22 +40,25 @@ export class StorageManager<TRoot = unknown> {
   private readonly layout: StorageLayout;
   private readonly reader: StorageReader;
   private readonly writer: StorageWriter;
+  private readonly writeOptions: ResolvedStorageWriteOptions;
   private readonly mutex = new AsyncMutex();
   private rootValue?: TRoot;
   private started = false;
   private transactionId = 0;
   private recoveredFrom: "manifest" | "snapshot" | "empty" | undefined;
   private readonly persistedObjectIds = new Set<string>();
+  private typeDictionarySignature = "";
   private lockHandle: StorageTargetLock | undefined;
   private housekeepingTimer: NodeJS.Timeout | undefined;
 
   constructor(options: StorageManagerOptions<TRoot>, serializer = new GraphSerializer(options.types ?? [])) {
     this.options = { lockTimeoutMs: 5_000, housekeepingIntervalMs: 0, ...options };
+    this.writeOptions = resolveStorageWriteOptions(this.options);
     this.layout = new StorageLayout(this.options.storageDirectory, this.options.channelCount ?? 1);
     this.serializer = serializer;
-    this.target = options.storageTarget ?? new LocalFilesystemTarget();
+    this.target = options.storageTarget ?? new LocalFilesystemTarget({ syncWrites: this.writeOptions.durability === "strict" });
     this.reader = new StorageReader(this.target, this.layout);
-    this.writer = new StorageWriter(this.target, this.layout);
+    this.writer = new StorageWriter(this.target, this.layout, this.writeOptions);
   }
 
   get root(): TRoot {
@@ -77,7 +83,7 @@ export class StorageManager<TRoot = unknown> {
     }
     if (!this.options.readOnly) {
       await this.acquireLock();
-      await this.writer.writeTypeDictionary(this.serializer.types.entries());
+      await this.writeTypeDictionaryIfChanged();
     }
 
     const loaded = await this.reader.loadExistingEnvelope();
@@ -425,11 +431,13 @@ export class StorageManager<TRoot = unknown> {
     const snapshotPath = join(this.layout.snapshotsDirectory, snapshotFile);
     const objectIds = mode === "eager" ? Object.keys(envelope.nodes) : this.collectObjectIds(envelope, targets);
     await this.writer.writeObjectRecords(envelope, nextTransactionId, objectIds);
-    await this.writer.writeTypeDictionary(this.serializer.types.entries());
+    await this.writeTypeDictionaryIfChanged();
     await this.writer.writeManifest(envelope, nextTransactionId);
     await this.writer.writeParentIndex(envelope, nextTransactionId);
-    await this.writer.writeJson(snapshotPath, envelope);
-    await this.target.writeTextAtomic(this.layout.currentFile, snapshotFile);
+    if (this.writeOptions.writeSnapshots) {
+      await this.writer.writeJson(snapshotPath, envelope);
+      await this.target.writeTextAtomic(this.layout.currentFile, snapshotFile);
+    }
     const journalFile = await this.writer.writeTransactionRecord({
       format: "graphvault-transaction",
       version: 1,
@@ -451,11 +459,13 @@ export class StorageManager<TRoot = unknown> {
     const snapshotPath = join(this.layout.snapshotsDirectory, snapshotFile);
     const objectIds = Array.from(new Set(changedObjectIds.length ? changedObjectIds : Object.keys(envelope.nodes))).sort((a, b) => Number(a) - Number(b));
     await this.writer.writeObjectRecords(envelope, nextTransactionId, objectIds);
-    await this.writer.writeTypeDictionary(this.serializer.types.entries());
+    await this.writeTypeDictionaryIfChanged();
     await this.writer.writeManifest(envelope, nextTransactionId);
     await this.writer.writeParentIndex(envelope, nextTransactionId);
-    await this.writer.writeJson(snapshotPath, envelope);
-    await this.target.writeTextAtomic(this.layout.currentFile, snapshotFile);
+    if (this.writeOptions.writeSnapshots) {
+      await this.writer.writeJson(snapshotPath, envelope);
+      await this.target.writeTextAtomic(this.layout.currentFile, snapshotFile);
+    }
     const journalFile = await this.writer.writeTransactionRecord({
       format: "graphvault-transaction",
       version: 1,
@@ -530,6 +540,16 @@ export class StorageManager<TRoot = unknown> {
     for (const objectId of objectIds) {
       this.persistedObjectIds.add(objectId);
     }
+  }
+
+  private async writeTypeDictionaryIfChanged(): Promise<void> {
+    const entries = this.serializer.types.entries();
+    const signature = JSON.stringify(entries);
+    if (signature === this.typeDictionarySignature) {
+      return;
+    }
+    await this.writer.writeTypeDictionary(entries);
+    this.typeDictionarySignature = signature;
   }
 
   private fillCustomRoot(loadedRoot: TRoot, envelope: SerializedEnvelope): TRoot {
@@ -641,4 +661,35 @@ function replaceObjectContents(target: object, source: object): void {
     delete (target as Record<string, unknown>)[key];
   }
   Object.assign(target, source);
+}
+
+interface ResolvedStorageWriteOptions {
+  profile: StorageWriteProfile;
+  objectRecordFormat: ObjectRecordWriteFormat;
+  objectRecordWriteConcurrency: number;
+  prettyJson: boolean;
+  durability: StorageWriteDurability;
+  writeSnapshots: boolean;
+}
+
+function resolveStorageWriteOptions(options: StorageManagerOptions<unknown>): ResolvedStorageWriteOptions {
+  const profile = options.writeProfile ?? "standard";
+  return {
+    profile,
+    objectRecordFormat: options.objectRecordFormat ?? (profile === "standard" ? "binary-and-json" : "binary"),
+    objectRecordWriteConcurrency: options.objectRecordWriteConcurrency ?? defaultObjectRecordWriteConcurrency(profile),
+    prettyJson: options.prettyJson ?? profile === "standard",
+    durability: options.writeDurability ?? (profile === "standard" ? "strict" : "relaxed"),
+    writeSnapshots: options.writeSnapshots ?? profile !== "maximum",
+  };
+}
+
+function defaultObjectRecordWriteConcurrency(profile: StorageWriteProfile): number {
+  if (profile === "maximum") {
+    return 128;
+  }
+  if (profile === "fast") {
+    return 64;
+  }
+  return 32;
 }

@@ -124,6 +124,12 @@ export interface StorageManagerOptions<TRoot = unknown> {
   eagerFieldEvaluator?: EagerFieldEvaluator;
   storageTarget?: StorageTarget;
   channelCount?: number;
+  writeProfile?: StorageWriteProfile;
+  objectRecordFormat?: ObjectRecordWriteFormat;
+  objectRecordWriteConcurrency?: number;
+  prettyJson?: boolean;
+  writeDurability?: StorageWriteDurability;
+  writeSnapshots?: boolean;
 }
 
 export interface StorageTarget {
@@ -203,6 +209,12 @@ export interface MaintenanceResult {
 }
 
 export type StoreMode = "standard" | "lazy" | "eager";
+
+export type StorageWriteProfile = "standard" | "fast" | "maximum";
+
+export type ObjectRecordWriteFormat = "binary-and-json" | "binary" | "json";
+
+export type StorageWriteDurability = "strict" | "relaxed";
 
 export type EagerFieldEvaluator = (context: {
   owner: object;
