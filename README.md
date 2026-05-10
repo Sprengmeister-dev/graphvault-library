@@ -2,6 +2,19 @@
 
 GraphVault is a TypeScript persistence library for applications whose natural data model is an object graph: a root object with nested objects, arrays, maps, sets, shared references, cycles, and domain classes.
 
+It is embedded, explicit, and TypeScript-first: you keep your domain model in memory, call `storeRoot()` or `store(object)` when you want durability, and GraphVault writes a verifiable object graph store.
+
+## Highlights
+
+- TypeScript-native object graph persistence
+- no database server required for embedded use cases
+- preserves object identity, cycles, `Map`, `Set`, classes, and rich JS values
+- explicit persistence instead of hidden ORM-style unit-of-work magic
+- local filesystem, memory, HTTP, S3-compatible, and SQL-backed storage targets
+- NestJS provider integration
+- separate graphical admin tool: [GraphVault Studio](https://github.com/Sprengmeister-dev/graphvault-studio)
+- reproducible benchmark: [`npm run benchmark`](./docs/BENCHMARKS.md)
+
 ## Why Use This Instead Of A Normal Database?
 
 Relational and document databases are excellent when your application is primarily about querying independent records. They become awkward when the important shape is an in-memory domain model with identity, links, and behavior. GraphVault is for cases where you want to keep that model intact and persist it deliberately.
@@ -37,6 +50,22 @@ GraphVault is not trying to replace Postgres, SQLite, MongoDB, or Redis. It is f
 
 ## Install
 
+From GitHub today:
+
+```bash
+npm install github:Sprengmeister-dev/graphvault-library
+```
+
+Or pin the package name locally with an npm alias:
+
+```bash
+npm install graphvault@github:Sprengmeister-dev/graphvault-library
+```
+
+Registry publishing is planned. The unscoped npm name `graphvault` currently appears to be blocked by a previous unpublished package, so the first registry release may use `graphvault-library` or a scoped package name.
+
+Once published to the npm registry:
+
 ```bash
 npm install graphvault
 ```
@@ -64,6 +93,23 @@ storage.root.documents.push({
 await storage.storeRoot();
 await storage.shutdown();
 ```
+
+Run the complete JavaScript example:
+
+```bash
+npm run build
+node examples/basic.mjs
+```
+
+## Performance
+
+GraphVault includes a real benchmark instead of README-only claims:
+
+```bash
+npm run benchmark
+```
+
+Latest local results are documented in [docs/BENCHMARKS.md](./docs/BENCHMARKS.md). The short version: in-memory graph serialization is fast for typical embedded workloads; the local filesystem target is intentionally conservative because it writes atomic binary records and inspectable JSON records.
 
 ## Storage Configuration
 

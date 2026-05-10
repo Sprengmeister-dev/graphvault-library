@@ -11,6 +11,8 @@ import type {
   TypeDictionaryEntry,
 } from "./types.js";
 
+const OBJECT_RECORD_WRITE_CONCURRENCY = 32;
+
 export class StorageWriter {
   constructor(
     private readonly target: StorageTarget,
@@ -23,10 +25,10 @@ export class StorageWriter {
 
   async writeObjectRecords(envelope: SerializedEnvelope, transactionId: number, objectIds: readonly string[]): Promise<void> {
     const storedAt = new Date().toISOString();
-    for (const objectId of objectIds) {
+    await mapWithConcurrency(objectIds, OBJECT_RECORD_WRITE_CONCURRENCY, async (objectId) => {
       const node = envelope.nodes[objectId];
       if (!node) {
-        continue;
+        return;
       }
       const record: ObjectRecord = {
         format: "graphvault-object",
@@ -36,9 +38,11 @@ export class StorageWriter {
         storedAt,
         node,
       };
-      await this.target.writeBufferAtomic(this.layout.binaryObjectPath(objectId), encodeBinaryRecord(record));
-      await this.writeJson(this.layout.objectRecordPath(objectId), record);
-    }
+      await Promise.all([
+        this.target.writeBufferAtomic(this.layout.binaryObjectPath(objectId), encodeBinaryRecord(record)),
+        this.writeJson(this.layout.objectRecordPath(objectId), record),
+      ]);
+    });
   }
 
   async writeManifest(envelope: SerializedEnvelope, transactionId: number): Promise<void> {
@@ -70,4 +74,17 @@ export class StorageWriter {
       types,
     });
   }
+}
+
+async function mapWithConcurrency<T>(items: readonly T[], concurrency: number, fn: (item: T) => Promise<void>): Promise<void> {
+  let next = 0;
+  const workers = Array.from({ length: Math.min(concurrency, items.length) }, async () => {
+    while (next < items.length) {
+      const item = items[next++];
+      if (item !== undefined) {
+        await fn(item);
+      }
+    }
+  });
+  await Promise.all(workers);
 }
