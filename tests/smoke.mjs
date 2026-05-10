@@ -206,6 +206,15 @@ try {
   assert.equal(whereParentheses.kind, "select");
   assert.deepEqual(whereParentheses.rows, [{ id: "doc-3" }]);
 
+  const whereNot = await reloaded.gvql(`
+    MATCH (doc:Document)
+    WHERE NOT (doc.status = "published" OR doc.views < 12)
+    RETURN doc.id AS id
+    ORDER BY doc.id ASC
+  `);
+  assert.equal(whereNot.kind, "select");
+  assert.deepEqual(whereNot.rows, [{ id: "doc-2" }]);
+
   const aggregate = await reloaded.gvql(`
     MATCH (doc:Document)
     RETURN doc.status AS status, count(*) AS count, count(doc.views) AS viewed, sum(doc.views) AS views, avg(doc.views) AS avgViews
@@ -259,6 +268,16 @@ try {
   `);
   assert.equal(havingParentheses.kind, "select");
   assert.deepEqual(havingParentheses.rows, [{ status: "draft", count: 2, avgViews: 12.5 }]);
+
+  const havingNot = await reloaded.gvql(`
+    MATCH (doc:Document)
+    RETURN doc.status AS status, count(*) AS count, avg(doc.views) AS avgViews
+    GROUP BY doc.status
+    HAVING NOT (status = "published" OR avgViews < 10)
+    ORDER BY status ASC
+  `);
+  assert.equal(havingNot.kind, "select");
+  assert.deepEqual(havingNot.rows, [{ status: "draft", count: 2, avgViews: 12.5 }]);
 
   const indexed = await reloaded.gvql('MATCH (doc:Document) WHERE doc.id = $id RETURN doc.id AS id', { parameters: { id: "doc-2" } });
   assert.equal(indexed.kind, "select");

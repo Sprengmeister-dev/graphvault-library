@@ -55,6 +55,7 @@ export interface GvqlPredicate {
 
 export type GvqlBooleanExpression<TPredicate> =
   | { kind: "predicate"; predicate: TPredicate }
+  | { kind: "not"; expression: GvqlBooleanExpression<TPredicate> }
   | { kind: "logical"; operator: GvqlLogicalOperator; left: GvqlBooleanExpression<TPredicate>; right: GvqlBooleanExpression<TPredicate> };
 
 export type GvqlWhereClause = GvqlBooleanExpression<GvqlPredicate>;

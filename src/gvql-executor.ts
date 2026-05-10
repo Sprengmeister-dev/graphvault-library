@@ -298,6 +298,7 @@ function evaluateBooleanExpression<TPredicate>(
   evaluate: (predicate: TPredicate) => boolean,
 ): boolean {
   if (expression.kind === "predicate") return evaluate(expression.predicate);
+  if (expression.kind === "not") return !evaluateBooleanExpression(expression.expression, evaluate);
   if (expression.operator === "AND") return evaluateBooleanExpression(expression.left, evaluate) && evaluateBooleanExpression(expression.right, evaluate);
   return evaluateBooleanExpression(expression.left, evaluate) || evaluateBooleanExpression(expression.right, evaluate);
 }
@@ -628,6 +629,7 @@ function indexablePredicates(
 
 function flattenLogicalPredicates(expression: GvqlBooleanExpression<GvqlPredicate>, operator: "AND" | "OR"): GvqlPredicate[] | undefined {
   if (expression.kind === "predicate") return [expression.predicate];
+  if (expression.kind === "not") return undefined;
   if (expression.operator !== operator) return undefined;
   const left = flattenLogicalPredicates(expression.left, operator);
   const right = flattenLogicalPredicates(expression.right, operator);

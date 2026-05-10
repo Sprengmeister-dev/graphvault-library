@@ -145,6 +145,9 @@ function parseBooleanExpression<TPredicate>(
       right: parseBooleanExpression(trimmed.slice(andIndex + "AND".length), parseLeaf, clauseName),
     };
   }
+  if (keywordAt(trimmed, 0, "NOT")) {
+    return { kind: "not", expression: parseBooleanExpression(trimmed.slice("NOT".length), parseLeaf, clauseName) };
+  }
   return { kind: "predicate", predicate: parseLeaf(trimmed) };
 }
 
