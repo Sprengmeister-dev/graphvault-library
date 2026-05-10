@@ -37,7 +37,7 @@ const result = await storage.gvql(`
 });
 ```
 
-GVQL supports graph traversal, indexed metadata and property filters, indexed equality/`IN` intersections and `OR` unions, parenthesized `WHERE`/`HAVING` logic with SQL-style `AND` precedence, grouping, aggregates, `RETURN DISTINCT`, `count(DISTINCT path)`, pagination, execution plans, and preview-first batch updates with `SET` and `REMOVE`. It is also what powers GraphVault Studio's search, inspection, and manipulation workflows.
+GVQL supports graph traversal, indexed metadata and property filters, indexed equality/`IN` intersections and `OR` unions, parenthesized `WHERE`/`HAVING` logic with SQL-style `AND` precedence, grouping, aggregates, `RETURN DISTINCT`, `count(DISTINCT path)`, pagination, execution plans, and preview-first batch updates with `SET`, arithmetic `SET` expressions, and `REMOVE`. It is also what powers GraphVault Studio's search, inspection, and manipulation workflows.
 
 ## Why Use This Instead Of A Normal Database?
 
@@ -341,6 +341,19 @@ const committed = await storage.gvql(`
 `);
 ```
 
+Numeric fields can be updated with arithmetic expressions:
+
+```ts
+const bumped = await storage.previewGvql(`
+  MATCH (doc:Document)
+  WHERE doc.status = "published"
+  SET doc.views = (doc.views + $increment) * 2
+  RETURN doc.id AS id, doc.views AS views
+`, {
+  parameters: { increment: 5 },
+});
+```
+
 Remove optional object fields in the same preview-first workflow:
 
 ```ts
@@ -362,7 +375,7 @@ Current GVQL supports:
 - `GROUP BY` with `count`, `sum`, `avg`, `min`, `max`
 - `HAVING` over returned aliases for aggregate filtering, with `AND`, `OR`, and parentheses
 - `ORDER BY` paths and returned aliases, with multiple criteria plus `LIMIT` and `OFFSET`
-- `SET` for primitive field updates and `REMOVE` for object-field cleanup
+- `SET` for primitive field updates, arithmetic `SET` expressions over numeric values, and `REMOVE` for object-field cleanup
 - type indexes, primitive-property index intersections, indexed `IN` unions, and indexed `OR` unions for common filters on the first matched node
 - indexed virtual metadata filters for `$id` and `$type`
 

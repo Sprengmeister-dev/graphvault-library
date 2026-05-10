@@ -13,6 +13,7 @@ import type {
   GvqlRowPredicate,
   GvqlReturnExpression,
   GvqlSetExpression,
+  GvqlSetValueExpression,
   GvqlStatement,
   GvqlWhereClause,
   GvqlAggregateFunction,
@@ -223,7 +224,7 @@ function parseSetList(input: string): GvqlSetExpression[] {
     }
     return {
       target: parsePathExpression(item.slice(0, index).trim()),
-      value: parseValueOrPath(item.slice(index + 1).trim()),
+      value: parseSetValueExpression(item.slice(index + 1).trim()),
     };
   });
 }
@@ -333,6 +334,29 @@ function parseValueOrPath(input: string): GvqlLiteral | GvqlPathExpression {
   return parseLiteral(input);
 }
 
+function parseSetValueExpression(input: string): GvqlSetValueExpression {
+  const trimmed = stripOuterParentheses(input.trim());
+  const additive = findTopLevelArithmeticOperator(trimmed, ["+", "-"]);
+  if (additive) {
+    return {
+      kind: "binary",
+      operator: additive.operator,
+      left: parseSetValueExpression(trimmed.slice(0, additive.index)),
+      right: parseSetValueExpression(trimmed.slice(additive.index + 1)),
+    };
+  }
+  const multiplicative = findTopLevelArithmeticOperator(trimmed, ["*", "/"]);
+  if (multiplicative) {
+    return {
+      kind: "binary",
+      operator: multiplicative.operator,
+      left: parseSetValueExpression(trimmed.slice(0, multiplicative.index)),
+      right: parseSetValueExpression(trimmed.slice(multiplicative.index + 1)),
+    };
+  }
+  return parseValueOrPath(trimmed);
+}
+
 function parseRowValueOrLiteral(input: string): GvqlLiteral | { aliasName: string } {
   if (/^[A-Za-z_][\w]*$/.test(input)) return { aliasName: input };
   return parseLiteral(input);
@@ -413,6 +437,33 @@ function findTopLevelLogicalOperator(input: string, operator: GvqlLogicalOperato
     }
   }
   return found;
+}
+
+function findTopLevelArithmeticOperator(input: string, operators: Array<"+" | "-" | "*" | "/">): { index: number; operator: "+" | "-" | "*" | "/" } | undefined {
+  let depth = 0;
+  for (let index = input.length - 1; index >= 0; index--) {
+    if (isQuoted(input, index)) continue;
+    const char = input[index] as "+" | "-" | "*" | "/" | string;
+    if (char === ")" || char === "]") {
+      depth++;
+      continue;
+    }
+    if (char === "(" || char === "[") {
+      depth--;
+      continue;
+    }
+    if (depth !== 0 || !operators.includes(char as "+" | "-" | "*" | "/")) continue;
+    if ((char === "+" || char === "-") && isUnarySign(input, index)) continue;
+    return { index, operator: char as "+" | "-" | "*" | "/" };
+  }
+  return undefined;
+}
+
+function isUnarySign(input: string, index: number): boolean {
+  let cursor = index - 1;
+  while (cursor >= 0 && /\s/.test(input[cursor] ?? "")) cursor--;
+  if (cursor < 0) return true;
+  return /[([+\-*/]/.test(input[cursor] ?? "");
 }
 
 function splitAlias(input: string): { expression: string; aliasName?: string } {

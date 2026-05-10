@@ -13,6 +13,7 @@ export {
 } from "./gvql.js";
 export type {
   GvqlAggregateFunction,
+  GvqlArithmeticOperator,
   GvqlBinding,
   GvqlCompareOperator,
   GvqlDirection,
@@ -35,6 +36,7 @@ export type {
   GvqlResult,
   GvqlReturnExpression,
   GvqlSetExpression,
+  GvqlSetValueExpression,
   GvqlStatement,
   GvqlStatementKind,
   GvqlWhereClause,

@@ -14,6 +14,7 @@ import type {
   GvqlPredicate,
   GvqlResult,
   GvqlRowPredicate,
+  GvqlSetValueExpression,
   GvqlStatement,
 } from "./gvql-types.js";
 
@@ -433,7 +434,7 @@ function applySet(index: GvqlGraphIndex, bindings: GvqlBinding[], statement: Gvq
       const node = objectId ? index.envelope.nodes[objectId] : undefined;
       if (!node) continue;
       const beforeEncoded = getNodePath(node, item.target.path);
-      const next = isPathExpression(item.value) ? readPath(index, binding, item.value) : literalToJs(item.value, options.parameters ?? {});
+      const next = evaluateSetValue(index, binding, item.value, options.parameters ?? {});
       const afterEncoded = jsValueToEncoded(next);
       changes.push({
         objectId: objectId,
@@ -448,6 +449,32 @@ function applySet(index: GvqlGraphIndex, bindings: GvqlBinding[], statement: Gvq
     }
   }
   return changes;
+}
+
+function evaluateSetValue(
+  index: GvqlGraphIndex,
+  binding: GvqlBinding,
+  expression: GvqlSetValueExpression,
+  parameters: Record<string, unknown>,
+): unknown {
+  if (isBinarySetExpression(expression)) {
+    const left = evaluateSetValue(index, binding, expression.left, parameters);
+    const right = evaluateSetValue(index, binding, expression.right, parameters);
+    if (typeof left !== "number" || typeof right !== "number") {
+      throw new Error("GVQL arithmetic SET expressions require numeric operands.");
+    }
+    switch (expression.operator) {
+      case "+":
+        return left + right;
+      case "-":
+        return left - right;
+      case "*":
+        return left * right;
+      case "/":
+        return left / right;
+    }
+  }
+  return isPathExpression(expression) ? readPath(index, binding, expression) : literalToJs(expression, parameters);
 }
 
 function applyRemove(index: GvqlGraphIndex, bindings: GvqlBinding[], statement: GvqlStatement, options: GvqlExecutionOptions): GvqlMutationPreview[] {
@@ -509,6 +536,10 @@ function readNode(index: GvqlGraphIndex, objectId: string | undefined): unknown 
 
 function isPathExpression(value: unknown): value is { alias: string; path?: string } {
   return Boolean(value && typeof value === "object" && "alias" in value);
+}
+
+function isBinarySetExpression(value: unknown): value is Extract<GvqlSetValueExpression, { kind: "binary" }> {
+  return Boolean(value && typeof value === "object" && "kind" in value && value.kind === "binary");
 }
 
 function isRowReference(value: unknown): value is { aliasName: string } {

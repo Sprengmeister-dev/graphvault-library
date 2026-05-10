@@ -16,6 +16,7 @@ export type GvqlCompareOperator =
   | "IS NULL"
   | "IS NOT NULL";
 export type GvqlLogicalOperator = "AND" | "OR";
+export type GvqlArithmeticOperator = "+" | "-" | "*" | "/";
 export type GvqlAggregateFunction = "count" | "sum" | "avg" | "min" | "max";
 
 export interface GvqlNodePattern {
@@ -76,9 +77,14 @@ export type GvqlReturnExpression =
   | { kind: "count"; expression?: GvqlPathExpression; distinct?: boolean; aliasName?: string }
   | { kind: "aggregate"; fn: Exclude<GvqlAggregateFunction, "count">; expression: GvqlPathExpression; aliasName?: string };
 
+export type GvqlSetValueExpression =
+  | GvqlLiteral
+  | GvqlPathExpression
+  | { kind: "binary"; operator: GvqlArithmeticOperator; left: GvqlSetValueExpression; right: GvqlSetValueExpression };
+
 export interface GvqlSetExpression {
   target: GvqlPathExpression;
-  value: GvqlLiteral | GvqlPathExpression;
+  value: GvqlSetValueExpression;
 }
 
 export interface GvqlRemoveExpression {

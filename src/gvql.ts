@@ -4,6 +4,7 @@ export { parseGvql } from "./gvql-parser.js";
 export { encodedValueToJs, jsValueToEncoded } from "./gvql-values.js";
 export type {
   GvqlAggregateFunction,
+  GvqlArithmeticOperator,
   GvqlBinding,
   GvqlCompareOperator,
   GvqlDirection,
@@ -26,6 +27,7 @@ export type {
   GvqlResult,
   GvqlReturnExpression,
   GvqlSetExpression,
+  GvqlSetValueExpression,
   GvqlStatement,
   GvqlStatementKind,
   GvqlWhereClause,

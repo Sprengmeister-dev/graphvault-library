@@ -321,6 +321,25 @@ try {
   assert.equal(update.changed, 1);
   assert.equal(reloaded.root.documents[1].title, "Admin workflows updated");
 
+  const arithmeticPreview = await reloaded.previewGvql(
+    "MATCH (doc:Document) WHERE doc.id = $id SET doc.views = (doc.views + $increment) * 2 RETURN doc.id AS id, doc.views AS views",
+    { parameters: { id: "doc-2", increment: 5 } },
+  );
+  assert.equal(arithmeticPreview.kind, "update");
+  assert.equal(arithmeticPreview.dryRun, true);
+  assert.equal(arithmeticPreview.changed, 1);
+  assert.equal(arithmeticPreview.changes[0].before, 15);
+  assert.equal(arithmeticPreview.changes[0].after, 40);
+  assert.equal(reloaded.root.documents[1].views, 15);
+
+  const arithmeticUpdate = await reloaded.gvql(
+    "MATCH (doc:Document) WHERE doc.id = $id SET doc.views = (doc.views + $increment) * 2 RETURN doc.id AS id, doc.views AS views",
+    { parameters: { id: "doc-2", increment: 5 } },
+  );
+  assert.equal(arithmeticUpdate.kind, "update");
+  assert.equal(arithmeticUpdate.changed, 1);
+  assert.equal(reloaded.root.documents[1].views, 40);
+
   const removePreview = await reloaded.previewGvql('MATCH (doc:Document) WHERE doc.id = $id REMOVE doc.archivedAt RETURN doc.id AS id', {
     parameters: { id: "doc-2" },
   });
