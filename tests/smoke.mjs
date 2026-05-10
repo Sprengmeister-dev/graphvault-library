@@ -258,7 +258,9 @@ try {
   `);
   assert.equal(disjunction.kind, "select");
   assert.deepEqual(disjunction.rows, [{ id: "doc-3" }]);
-  assert.equal(disjunction.plan.candidateSource, "type-index");
+  assert.equal(disjunction.plan.candidateSource, "property-index");
+  assert.equal(disjunction.plan.startCandidates, 1);
+  assert.equal(disjunction.plan.operations.includes("index-or-union:2"), true);
 
   const preview = await reloaded.previewGvql(
     'MATCH (doc:Document) WHERE doc.id = $id SET doc.title = "Admin workflows updated" RETURN doc.id AS id, doc.title AS title',

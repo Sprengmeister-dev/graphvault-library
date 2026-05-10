@@ -37,7 +37,7 @@ const result = await storage.gvql(`
 });
 ```
 
-GVQL supports graph traversal, indexed metadata and property filters, grouping, aggregates, `RETURN DISTINCT`, `count(DISTINCT path)`, pagination, execution plans, and preview-first batch updates with `SET` and `REMOVE`. It is also what powers GraphVault Studio's search, inspection, and manipulation workflows.
+GVQL supports graph traversal, indexed metadata and property filters, indexed equality/`IN` intersections and `OR` unions, grouping, aggregates, `RETURN DISTINCT`, `count(DISTINCT path)`, pagination, execution plans, and preview-first batch updates with `SET` and `REMOVE`. It is also what powers GraphVault Studio's search, inspection, and manipulation workflows.
 
 ## Why Use This Instead Of A Normal Database?
 
@@ -363,7 +363,7 @@ Current GVQL supports:
 - `HAVING` over returned aliases for aggregate filtering
 - `ORDER BY` paths and returned aliases, with multiple criteria plus `LIMIT` and `OFFSET`
 - `SET` for primitive field updates and `REMOVE` for object-field cleanup
-- type indexes and primitive-property index intersections/unions for common equality and `IN` filters on the first matched node
+- type indexes, primitive-property index intersections, indexed `IN` unions, and indexed `OR` unions for common filters on the first matched node
 - indexed virtual metadata filters for `$id` and `$type`
 
 Aggregate queries stay compact:

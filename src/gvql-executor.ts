@@ -24,6 +24,16 @@ interface IndexedCandidateSelection {
   operation: string;
 }
 
+interface IndexablePredicate {
+  path: string;
+  keyValues: Array<{ key: string; value: unknown }>;
+}
+
+interface IndexablePredicateSet {
+  mode: "AND" | "OR";
+  predicates: IndexablePredicate[];
+}
+
 export function executeGvqlStatement(envelope: SerializedEnvelope, statement: GvqlStatement, options: GvqlExecutionOptions = {}): GvqlResult {
   const started = performance.now();
   const parameters = options.parameters ?? {};
@@ -161,7 +171,7 @@ function candidates(
   const type = statement.match.start.type;
   const typeCandidates = type ? index.byType.get(type) ?? [] : Array.from(index.nodes.keys());
   const indexed = indexablePredicates(statement, parameters);
-  if (indexed.length === 0) {
+  if (!indexed || indexed.predicates.length === 0) {
     return {
       objectIds: typeCandidates,
       source: type ? "type-index" : "full-scan",
@@ -169,9 +179,13 @@ function candidates(
     };
   }
   const indexedCandidates = indexed
+    .predicates
     .map((item) => indexedCandidateSelection(index, item))
     .sort((a, b) => a.objectIds.length - b.objectIds.length);
-  const allowed = intersectCandidates(indexedCandidates.map((item) => item.objectIds));
+  const allowed =
+    indexed.mode === "OR"
+      ? new Set(unionCandidates(indexedCandidates.map((item) => item.objectIds)))
+      : intersectCandidates(indexedCandidates.map((item) => item.objectIds));
   const propertyIndexes = indexedCandidates.flatMap((item) => item.propertyIndexes);
   const source = indexedCandidates.find((item) => item.source === "property-index")?.source ?? indexedCandidates[0]?.source ?? (type ? "type-index" : "full-scan");
   return {
@@ -181,7 +195,9 @@ function candidates(
     propertyIndexes,
     operations: [
       ...indexedCandidates.map((item) => item.operation),
-      ...(indexedCandidates.length > 1 ? [`property-index-intersect:${indexedCandidates.length}`] : []),
+      ...(indexedCandidates.length > 1
+        ? [indexed.mode === "OR" ? `index-or-union:${indexedCandidates.length}` : `property-index-intersect:${indexedCandidates.length}`]
+        : []),
       ...(type ? [`type-filter:${type}`] : []),
     ],
   };
@@ -550,11 +566,14 @@ function stableStringify(value: unknown): string {
 function indexablePredicates(
   statement: GvqlStatement,
   parameters: Record<string, unknown>,
-): Array<{ path: string; keyValues: Array<{ key: string; value: unknown }> }> {
-  if (!statement.where || statement.where.rest.some((item) => item.operator === "OR")) return [];
+): IndexablePredicateSet | undefined {
+  if (!statement.where) return undefined;
+  const operators = statement.where.rest.map((item) => item.operator);
+  const mode = operators.every((operator) => operator === "OR") ? "OR" : operators.every((operator) => operator === "AND") ? "AND" : undefined;
+  if (!mode) return undefined;
   const predicates = [statement.where.first, ...statement.where.rest.map((item) => item.predicate)];
   const start = statement.match.start;
-  const result: Array<{ path: string; keyValues: Array<{ key: string; value: unknown }> }> = [];
+  const result: IndexablePredicate[] = [];
   for (const predicate of predicates) {
     if (predicate.left.alias !== start.alias || !predicate.left.path || isPathExpression(predicate.right)) continue;
     if (predicate.operator === "=") {
@@ -572,7 +591,8 @@ function indexablePredicates(
       });
     }
   }
-  return result;
+  if (mode === "OR" && result.length !== predicates.length) return undefined;
+  return result.length > 0 ? { mode, predicates: result } : undefined;
 }
 
 function intersectCandidates(candidateLists: string[][]): Set<string> {
