@@ -16,7 +16,7 @@ import type {
   GvqlAggregateFunction,
 } from "./gvql-types.js";
 
-type ClauseName = "MATCH" | "WHERE" | "SET" | "RETURN" | "GROUP BY" | "HAVING" | "ORDER BY" | "LIMIT";
+type ClauseName = "MATCH" | "WHERE" | "SET" | "RETURN" | "GROUP BY" | "HAVING" | "ORDER BY" | "LIMIT" | "OFFSET";
 
 export function parseGvql(source: string): GvqlStatement {
   const clauses = splitClauses(source);
@@ -36,13 +36,14 @@ export function parseGvql(source: string): GvqlStatement {
     ...(clauses.get("GROUP BY") ? { groupBy: parseGroupBy(clauses.get("GROUP BY") as string) } : {}),
     ...(clauses.get("HAVING") ? { having: parseHaving(clauses.get("HAVING") as string) } : {}),
     ...(clauses.get("LIMIT") ? { limit: parseLimit(clauses.get("LIMIT") as string) } : {}),
+    ...(clauses.get("OFFSET") ? { offset: parseOffset(clauses.get("OFFSET") as string) } : {}),
   };
 }
 
 function splitClauses(source: string): Map<ClauseName, string> {
   const normalized = source.trim().replace(/;$/, "");
   const matches: Array<{ name: ClauseName; index: number; end: number }> = [];
-  for (const name of ["MATCH", "WHERE", "SET", "RETURN", "GROUP BY", "HAVING", "ORDER BY", "LIMIT"] as ClauseName[]) {
+  for (const name of ["MATCH", "WHERE", "SET", "RETURN", "GROUP BY", "HAVING", "ORDER BY", "LIMIT", "OFFSET"] as ClauseName[]) {
     const found = findKeyword(normalized, name);
     if (found >= 0) {
       matches.push({ name, index: found, end: found + name.length });
@@ -203,6 +204,14 @@ function parseLimit(input: string): number {
   const value = Number(input.trim());
   if (!Number.isInteger(value) || value < 0) {
     throw new Error(`Invalid GVQL LIMIT "${input}".`);
+  }
+  return value;
+}
+
+function parseOffset(input: string): number {
+  const value = Number(input.trim());
+  if (!Number.isInteger(value) || value < 0) {
+    throw new Error(`Invalid GVQL OFFSET "${input}".`);
   }
   return value;
 }

@@ -109,11 +109,14 @@ function matchBindingsWithPlan(
       indexUsed: selection.source !== "full-scan",
       ...(statement.match.start.type ? { startType: statement.match.start.type } : {}),
       ...(selection.propertyIndex ? { propertyIndex: selection.propertyIndex } : {}),
+      ...(selection.propertyIndexes ? { propertyIndexes: selection.propertyIndexes } : {}),
       startCandidates: firstCandidates.length,
       edgeSteps: statement.match.chain.length,
       matchedBindings: bindings.length,
       filteredBindings: bindings.length,
       returnedRows: 0,
+      ...(typeof statement.limit === "number" ? { limit: statement.limit } : {}),
+      offset: statement.offset ?? 0,
       grouped: isAggregateStatement(statement),
       having: Boolean(statement.having),
       operations,
@@ -138,25 +141,33 @@ function candidates(
   objectIds: string[];
   source: GvqlExecutionPlan["candidateSource"];
   propertyIndex?: GvqlExecutionPlan["propertyIndex"];
+  propertyIndexes?: GvqlExecutionPlan["propertyIndexes"];
   operations: string[];
 } {
   const type = statement.match.start.type;
   const typeCandidates = type ? index.byType.get(type) ?? [] : Array.from(index.nodes.keys());
-  const indexed = firstEqualityPredicate(statement, parameters);
-  if (!indexed) {
+  const indexed = equalityPredicates(statement, parameters);
+  if (indexed.length === 0) {
     return {
       objectIds: typeCandidates,
       source: type ? "type-index" : "full-scan",
       operations: [type ? `type-index:${type}` : "full-scan"],
     };
   }
-  const propertyCandidates = index.byProperty.get(indexed.key) ?? [];
-  const allowed = new Set(propertyCandidates);
+  const indexedCandidates = indexed
+    .map((item) => ({ ...item, objectIds: index.byProperty.get(item.key) ?? [] }))
+    .sort((a, b) => a.objectIds.length - b.objectIds.length);
+  const allowed = intersectCandidates(indexedCandidates.map((item) => item.objectIds));
+  const propertyIndexes = indexedCandidates.map((item) => ({ path: item.path, key: item.key, value: item.value, candidates: item.objectIds.length }));
   return {
     objectIds: typeCandidates.filter((objectId) => allowed.has(objectId)),
     source: "property-index",
-    propertyIndex: { path: indexed.path, key: indexed.key, value: indexed.value },
-    operations: [`property-index:${indexed.path}`, ...(type ? [`type-filter:${type}`] : [])],
+    ...(propertyIndexes[0] ? { propertyIndex: { path: propertyIndexes[0].path, key: propertyIndexes[0].key, value: propertyIndexes[0].value } } : {}),
+    propertyIndexes,
+    operations: [
+      indexedCandidates.length > 1 ? `property-index-intersect:${indexedCandidates.length}` : `property-index:${indexedCandidates[0]?.path ?? "unknown"}`,
+      ...(type ? [`type-filter:${type}`] : []),
+    ],
   };
 }
 
@@ -223,7 +234,7 @@ function applyBindingOrderingAndLimit(index: GvqlGraphIndex, bindings: GvqlBindi
       return order.direction === "desc" ? -comparison : comparison;
     });
   }
-  return typeof statement.limit === "number" ? rows.slice(0, statement.limit) : rows;
+  return applyOffsetAndLimit(rows, statement);
 }
 
 function applyRowOrderingAndLimit(rows: Array<Record<string, unknown>>, statement: GvqlStatement): Array<Record<string, unknown>> {
@@ -238,7 +249,7 @@ function applyRowOrderingAndLimit(rows: Array<Record<string, unknown>>, statemen
       return order.direction === "desc" ? -comparison : comparison;
     });
   }
-  return typeof statement.limit === "number" ? ordered.slice(0, statement.limit) : ordered;
+  return applyOffsetAndLimit(ordered, statement);
 }
 
 function matchesHaving(row: Record<string, unknown>, statement: GvqlStatement, parameters: Record<string, unknown>): boolean {
@@ -339,6 +350,7 @@ function rowKey(expression: { alias: string; path?: string }): string {
 }
 
 function completePlan(plan: GvqlExecutionPlan, filteredBindings: GvqlBinding[], returnedRows: number): GvqlExecutionPlan {
+  const windowed = plan.offset > 0 || typeof plan.limit === "number";
   return {
     ...plan,
     filteredBindings: filteredBindings.length,
@@ -348,21 +360,42 @@ function completePlan(plan: GvqlExecutionPlan, filteredBindings: GvqlBinding[], 
       ...(filteredBindings.length !== plan.matchedBindings ? ["where-filter"] : []),
       ...(plan.grouped ? ["aggregate"] : []),
       ...(plan.having ? ["having-filter"] : []),
-      ...(returnedRows !== filteredBindings.length ? ["project-or-limit"] : ["project"]),
+      ...(windowed || returnedRows !== filteredBindings.length ? ["project-window"] : ["project"]),
     ],
   };
 }
 
-function firstEqualityPredicate(
+function equalityPredicates(
   statement: GvqlStatement,
   parameters: Record<string, unknown>,
-): { key: string; path: string; value: unknown } | undefined {
-  const predicates = statement.where ? [statement.where.first, ...statement.where.rest.filter((item) => item.operator === "AND").map((item) => item.predicate)] : [];
+): Array<{ key: string; path: string; value: unknown }> {
+  if (!statement.where || statement.where.rest.some((item) => item.operator === "OR")) return [];
+  const predicates = [statement.where.first, ...statement.where.rest.map((item) => item.predicate)];
   const start = statement.match.start;
+  const result: Array<{ key: string; path: string; value: unknown }> = [];
   for (const predicate of predicates) {
     if (predicate.operator !== "=" || predicate.left.alias !== start.alias || !predicate.left.path || isPathExpression(predicate.right)) continue;
     const value = literalToJs(predicate.right, parameters);
-    return { key: propertyIndexKey(start.type, predicate.left.path, value), path: predicate.left.path, value };
+    result.push({ key: propertyIndexKey(start.type, predicate.left.path, value), path: predicate.left.path, value });
   }
-  return undefined;
+  return result;
+}
+
+function intersectCandidates(candidateLists: string[][]): Set<string> {
+  const [first = [], ...rest] = candidateLists;
+  const result = new Set(first);
+  for (const candidates of rest) {
+    const allowed = new Set(candidates);
+    for (const objectId of result) {
+      if (!allowed.has(objectId)) result.delete(objectId);
+    }
+  }
+  return result;
+}
+
+function applyOffsetAndLimit<T>(items: T[], statement: GvqlStatement): T[] {
+  const offset = statement.offset ?? 0;
+  const start = Math.min(offset, items.length);
+  const end = typeof statement.limit === "number" ? start + statement.limit : undefined;
+  return items.slice(start, end);
 }

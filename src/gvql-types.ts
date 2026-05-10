@@ -90,6 +90,7 @@ export interface GvqlStatement {
   groupBy?: GvqlPathExpression[];
   having?: GvqlHavingClause;
   limit?: number;
+  offset?: number;
 }
 
 export interface GvqlGraphNode {
@@ -132,11 +133,19 @@ export interface GvqlExecutionPlan {
     key: string;
     value: unknown;
   };
+  propertyIndexes?: Array<{
+    path: string;
+    key: string;
+    value: unknown;
+    candidates: number;
+  }>;
   startCandidates: number;
   edgeSteps: number;
   matchedBindings: number;
   filteredBindings: number;
   returnedRows: number;
+  limit?: number;
+  offset: number;
   grouped: boolean;
   having: boolean;
   operations: string[];

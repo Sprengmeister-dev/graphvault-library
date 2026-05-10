@@ -15,6 +15,7 @@ The benchmark creates a typed object graph with:
 - arrays of related objects
 - a GVQL property-graph query across object references
 - a GVQL grouped aggregate with `HAVING`, aggregate alias ordering, and the primitive-property index
+- a GVQL multi-property index lookup
 - both in-memory and local filesystem storage targets
 
 ## Latest Local Run
@@ -23,17 +24,17 @@ Environment:
 
 - Runtime: Node.js `v25.9.0`
 - Platform: `darwin arm64`
-- Date: `2026-05-10T16:34:13.764Z`
+- Date: `2026-05-10T16:41:28.231Z`
 - Storage format: GraphVault `0.1.0`
 
-| target | documents | storeRoot | GVQL traversal | GVQL indexed aggregate | reload | storage size |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| memory | 100 | 8.9 ms | 3.9 ms | 1.7 ms | 2.9 ms | - |
-| filesystem | 100 | 2949.2 ms | 6.6 ms | 5.2 ms | 44.8 ms | 0.51 MiB |
-| memory | 300 | 11.5 ms | 3.7 ms | 3.7 ms | 4.9 ms | - |
-| filesystem | 300 | 8026.8 ms | 15.6 ms | 10.4 ms | 76.5 ms | 1.36 MiB |
-| memory | 750 | 24.9 ms | 7.4 ms | 7.8 ms | 13.5 ms | - |
-| filesystem | 750 | 20374.0 ms | 16.2 ms | 11.7 ms | 178.4 ms | 3.30 MiB |
+| target | documents | storeRoot | GVQL traversal | GVQL indexed aggregate | GVQL multi-index lookup | reload | storage size |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| memory | 100 | 8.9 ms | 4.8 ms | 1.8 ms | 1.7 ms | 3.0 ms | - |
+| filesystem | 100 | 2930.8 ms | 4.9 ms | 4.5 ms | 5.0 ms | 42.4 ms | 0.51 MiB |
+| memory | 300 | 12.8 ms | 3.5 ms | 4.0 ms | 4.1 ms | 5.1 ms | - |
+| filesystem | 300 | 8112.0 ms | 6.7 ms | 4.5 ms | 4.1 ms | 86.5 ms | 1.36 MiB |
+| memory | 750 | 25.6 ms | 9.2 ms | 9.2 ms | 8.7 ms | 15.2 ms | - |
+| filesystem | 750 | 19824.6 ms | 12.1 ms | 10.9 ms | 7.4 ms | 164.2 ms | 3.30 MiB |
 
 ## Reading The Numbers
 

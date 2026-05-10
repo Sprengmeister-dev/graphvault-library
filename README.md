@@ -15,6 +15,7 @@ It is embedded, explicit, and TypeScript-first: you keep your domain model in me
 - no database server required for embedded use cases
 - preserves object identity, cycles, `Map`, `Set`, classes, and rich JS values
 - explicit persistence instead of hidden ORM-style unit-of-work magic
+- GVQL query language for graph traversal, indexed filters, grouping, aggregate analysis, execution plans, and safe batch-update previews
 - local filesystem, memory, HTTP, S3-compatible, and SQL-backed storage targets
 - NestJS provider integration
 - separate graphical admin tool: [GraphVault Studio](https://github.com/Sprengmeister-dev/graphvault-studio)
@@ -331,9 +332,9 @@ Current GVQL supports:
 - `RETURN`, aliases with `AS`, `count(*)`
 - `GROUP BY` with `count`, `sum`, `avg`, `min`, `max`
 - `HAVING` over returned aliases for aggregate filtering
-- `ORDER BY` paths and returned aliases, plus `LIMIT`
+- `ORDER BY` paths and returned aliases, plus `LIMIT` and `OFFSET`
 - `SET` for primitive field updates
-- type and primitive-property indexes for common equality filters on the first matched node
+- type indexes and primitive-property index intersections for common equality filters on the first matched node
 
 Aggregate queries stay compact:
 
@@ -362,6 +363,18 @@ const result = await storage.gvql(`
 
 console.log(result.plan.candidateSource); // "property-index"
 console.log(result.plan.startCandidates); // number of objects read from the first candidate set
+```
+
+For paginated admin screens or background jobs, use `LIMIT` with `OFFSET`:
+
+```ts
+const page = await storage.gvql(`
+  MATCH (doc:Document)
+  RETURN doc.id AS id, doc.title AS title
+  ORDER BY doc.id ASC
+  LIMIT 100
+  OFFSET 200
+`);
 ```
 
 ## Performance

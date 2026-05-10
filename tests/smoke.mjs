@@ -87,6 +87,19 @@ try {
   assert.equal(query.plan.edgeSteps, 1);
   assert.equal(query.plan.returnedRows, 2);
 
+  const paged = await reloaded.gvql(`
+    MATCH (doc:Document)
+    RETURN doc.id AS id
+    ORDER BY doc.id ASC
+    LIMIT 1
+    OFFSET 1
+  `);
+  assert.equal(paged.kind, "select");
+  assert.deepEqual(paged.rows, [{ id: "doc-2" }]);
+  assert.equal(paged.plan.limit, 1);
+  assert.equal(paged.plan.offset, 1);
+  assert.equal(paged.plan.operations.includes("project-window"), true);
+
   const aggregate = await reloaded.gvql(`
     MATCH (doc:Document)
     RETURN doc.status AS status, count(*) AS count, count(doc.views) AS viewed, sum(doc.views) AS views, avg(doc.views) AS avgViews
@@ -125,6 +138,25 @@ try {
   assert.equal(indexed.plan.indexUsed, true);
   assert.equal(indexed.plan.propertyIndex.path, "id");
   assert.equal(indexed.plan.startCandidates, 1);
+
+  const indexedIntersection = await reloaded.gvql(
+    'MATCH (doc:Document) WHERE doc.status = "draft" AND doc.id = $id RETURN doc.id AS id',
+    { parameters: { id: "doc-2" } },
+  );
+  assert.equal(indexedIntersection.kind, "select");
+  assert.deepEqual(indexedIntersection.rows, [{ id: "doc-2" }]);
+  assert.equal(indexedIntersection.plan.candidateSource, "property-index");
+  assert.equal(indexedIntersection.plan.propertyIndexes.length, 2);
+  assert.equal(indexedIntersection.plan.operations.includes("property-index-intersect:2"), true);
+
+  const disjunction = await reloaded.gvql(`
+    MATCH (doc:Document)
+    WHERE doc.id = "missing" OR doc.status = "published"
+    RETURN doc.id AS id
+  `);
+  assert.equal(disjunction.kind, "select");
+  assert.deepEqual(disjunction.rows, [{ id: "doc-3" }]);
+  assert.equal(disjunction.plan.candidateSource, "type-index");
 
   const preview = await reloaded.previewGvql(
     'MATCH (doc:Document) WHERE doc.id = $id SET doc.title = "Admin workflows updated" RETURN doc.id AS id, doc.title AS title',
