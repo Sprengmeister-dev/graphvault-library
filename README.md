@@ -37,7 +37,7 @@ const result = await storage.gvql(`
 });
 ```
 
-GVQL supports graph traversal, comma-separated `MATCH` patterns for joins, `OPTIONAL MATCH` for left-join style graph expansion, indexed metadata and property filters, indexed equality/`IN` intersections and `OR` unions, parenthesized `WHERE`/`HAVING` logic with `NOT` and SQL-style `AND` precedence, computed `RETURN` expressions, grouping, aggregates, `RETURN DISTINCT`, `count(DISTINCT path)`, pagination, execution plans, and preview-first batch updates with `CREATE`, `SET`, arithmetic `SET` expressions, `REMOVE`, and `DELETE`. It is also what powers GraphVault Studio's search, inspection, and manipulation workflows.
+GVQL supports graph traversal, comma-separated `MATCH` patterns for joins, `OPTIONAL MATCH` for left-join style graph expansion, indexed metadata and property filters, indexed equality/`IN` intersections and `OR` unions, parenthesized `WHERE`/`HAVING` logic with `NOT` and SQL-style `AND` precedence, computed `RETURN` expressions and scalar functions, grouping, aggregates, `RETURN DISTINCT`, `count(DISTINCT path)`, pagination, execution plans, and preview-first batch updates with `CREATE`, `SET`, arithmetic `SET` expressions, `REMOVE`, and `DELETE`. It is also what powers GraphVault Studio's search, inspection, and manipulation workflows.
 
 ## Why Use This Instead Of A Normal Database?
 
@@ -347,6 +347,18 @@ const withOptionalLinks = await storage.gvql(`
 `);
 ```
 
+Normalize values inline with scalar functions in `WHERE`, `RETURN`, `SET`, and `CREATE` expressions:
+
+```ts
+const normalized = await storage.gvql(`
+  MATCH (doc:Document)
+  WHERE lower(doc.title) CONTAINS lower($needle)
+  RETURN doc.id AS id, upper(trim(doc.title)) AS title, length(doc.title) AS titleLength, coalesce(doc.archivedAt, "none") AS archived
+`, {
+  parameters: { needle: "storage" },
+});
+```
+
 Batch updates are explicit and can be previewed first:
 
 ```ts
@@ -423,7 +435,7 @@ Current GVQL supports:
 - `OPTIONAL MATCH` for left-join style relationship expansion
 - `WHERE` predicates with `=`, `!=`, `<`, `<=`, `>`, `>=`, `CONTAINS`, `STARTS WITH`, `ENDS WITH`, `IN`, `IS NULL`, `IS NOT NULL`, `AND`, `OR`, `NOT`, and parentheses
 - `$parameters`
-- `RETURN`, `RETURN DISTINCT`, aliases with `AS`, arithmetic computed expressions such as `(doc.views + $bonus) * 2 AS score`, `count(*)`, `count(DISTINCT path)`, and virtual metadata paths `$id`, `$type`, `$kind`
+- `RETURN`, `RETURN DISTINCT`, aliases with `AS`, arithmetic computed expressions such as `(doc.views + $bonus) * 2 AS score`, scalar functions `lower`, `upper`, `trim`, `length`, `coalesce`, `count(*)`, `count(DISTINCT path)`, and virtual metadata paths `$id`, `$type`, `$kind`
 - `GROUP BY` with `count`, `sum`, `avg`, `min`, `max`
 - `HAVING` over returned aliases for aggregate filtering, with `AND`, `OR`, `NOT`, and parentheses
 - `ORDER BY` paths and returned aliases, with multiple criteria plus `LIMIT` and `OFFSET`

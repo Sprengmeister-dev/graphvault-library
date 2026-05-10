@@ -27,7 +27,30 @@ export function evaluateGvqlValueExpression(
         return left / right;
     }
   }
+  if (isFunctionValueExpression(expression)) {
+    const args = expression.args.map((arg) => evaluateGvqlValueExpression(index, binding, arg, parameters, readPath));
+    return evaluateScalarFunction(expression.fn, args);
+  }
   return isPathExpression(expression) ? readPath(index, binding, expression) : literalToJs(expression, parameters);
+}
+
+function evaluateScalarFunction(fn: "lower" | "upper" | "trim" | "length" | "coalesce", args: unknown[]): unknown {
+  if (fn === "coalesce") {
+    if (args.length === 0) throw new Error("GVQL coalesce() requires at least one argument.");
+    return args.find((value) => value !== null && typeof value !== "undefined");
+  }
+  if (args.length !== 1) throw new Error(`GVQL ${fn}() expects exactly one argument.`);
+  const [value] = args;
+  if (value === null || typeof value === "undefined") return null;
+  if (fn === "length") {
+    if (typeof value === "string" || Array.isArray(value)) return value.length;
+    if (value instanceof Map || value instanceof Set) return value.size;
+    return String(value).length;
+  }
+  const text = String(value);
+  if (fn === "lower") return text.toLowerCase();
+  if (fn === "upper") return text.toUpperCase();
+  return text.trim();
 }
 
 function isPathExpression(value: unknown): value is GvqlPathExpression {
@@ -36,4 +59,8 @@ function isPathExpression(value: unknown): value is GvqlPathExpression {
 
 function isBinaryValueExpression(value: unknown): value is Extract<GvqlValueExpression, { kind: "binary" }> {
   return Boolean(value && typeof value === "object" && "kind" in value && value.kind === "binary");
+}
+
+function isFunctionValueExpression(value: unknown): value is Extract<GvqlValueExpression, { kind: "function" }> {
+  return Boolean(value && typeof value === "object" && "kind" in value && value.kind === "function");
 }

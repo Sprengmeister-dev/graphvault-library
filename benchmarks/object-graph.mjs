@@ -106,6 +106,11 @@ async function benchmarkMemory(count) {
       parameters: { bonus: 3 },
     }),
   );
+  const gvqlScalarFunctions = await time(() =>
+    storage.gvql('MATCH (doc:Document) WHERE lower(doc.title) CONTAINS lower($needle) RETURN upper(trim(doc.title)) AS title, length(doc.title) AS titleLength LIMIT 25', {
+      parameters: { needle: "DOCUMENT" },
+    }),
+  );
   const gvqlCreatePreview = await time(() =>
     storage.previewGvql(
       'MATCH (doc:Document) WHERE doc.id = 1 CREATE (created:Document { id: 1000001, title: "Benchmark create", status: "draft", views: $views }) INTO doc.related RETURN created.id AS id',
@@ -132,6 +137,7 @@ async function benchmarkMemory(count) {
     gvqlIndexedInMs: gvqlIndexedIn.ms,
     gvqlIndexedOrMs: gvqlIndexedOr.ms,
     gvqlComputedReturnMs: gvqlComputedReturn.ms,
+    gvqlScalarFunctionsMs: gvqlScalarFunctions.ms,
     gvqlCreatePreviewMs: gvqlCreatePreview.ms,
     gvqlDeletePreviewMs: gvqlDeletePreview.ms,
     loadMs: load.ms,
@@ -177,6 +183,11 @@ async function benchmarkFilesystem(count) {
         parameters: { bonus: 3 },
       }),
     );
+    const gvqlScalarFunctions = await time(() =>
+      storage.gvql('MATCH (doc:Document) WHERE lower(doc.title) CONTAINS lower($needle) RETURN upper(trim(doc.title)) AS title, length(doc.title) AS titleLength LIMIT 25', {
+        parameters: { needle: "DOCUMENT" },
+      }),
+    );
     const gvqlCreatePreview = await time(() =>
       storage.previewGvql(
         'MATCH (doc:Document) WHERE doc.id = 1 CREATE (created:Document { id: 1000001, title: "Benchmark create", status: "draft", views: $views }) INTO doc.related RETURN created.id AS id',
@@ -203,6 +214,7 @@ async function benchmarkFilesystem(count) {
       gvqlIndexedInMs: gvqlIndexedIn.ms,
       gvqlIndexedOrMs: gvqlIndexedOr.ms,
       gvqlComputedReturnMs: gvqlComputedReturn.ms,
+      gvqlScalarFunctionsMs: gvqlScalarFunctions.ms,
       gvqlCreatePreviewMs: gvqlCreatePreview.ms,
       gvqlDeletePreviewMs: gvqlDeletePreview.ms,
       loadMs: load.ms,
@@ -256,10 +268,10 @@ console.log(`Runtime: ${process.version}`);
 console.log(`Platform: ${process.platform} ${process.arch}`);
 console.log(`Date: ${new Date().toISOString()}`);
 console.log();
-console.log(`| target | documents | storeRoot | GVQL traversal | GVQL multi-match join | GVQL optional match | GVQL indexed aggregate | GVQL multi-index lookup | GVQL indexed IN lookup | GVQL indexed OR lookup | GVQL computed return | GVQL CREATE preview | GVQL DELETE preview | reload | storage size |`);
-console.log(`| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |`);
+console.log(`| target | documents | storeRoot | GVQL traversal | GVQL multi-match join | GVQL optional match | GVQL indexed aggregate | GVQL multi-index lookup | GVQL indexed IN lookup | GVQL indexed OR lookup | GVQL computed return | GVQL scalar functions | GVQL CREATE preview | GVQL DELETE preview | reload | storage size |`);
+console.log(`| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |`);
 for (const row of rows) {
   console.log(
-    `| ${row.target} | ${row.count.toLocaleString("en-US")} | ${formatMs(row.storeMs)} | ${formatMs(row.gvqlMs)} | ${formatMs(row.gvqlMultiMatchMs)} | ${formatMs(row.gvqlOptionalMatchMs)} | ${formatMs(row.gvqlIndexedMs)} | ${formatMs(row.gvqlMultiIndexMs)} | ${formatMs(row.gvqlIndexedInMs)} | ${formatMs(row.gvqlIndexedOrMs)} | ${formatMs(row.gvqlComputedReturnMs)} | ${formatMs(row.gvqlCreatePreviewMs)} | ${formatMs(row.gvqlDeletePreviewMs)} | ${formatMs(row.loadMs)} | ${formatBytes(row.bytes)} |`,
+    `| ${row.target} | ${row.count.toLocaleString("en-US")} | ${formatMs(row.storeMs)} | ${formatMs(row.gvqlMs)} | ${formatMs(row.gvqlMultiMatchMs)} | ${formatMs(row.gvqlOptionalMatchMs)} | ${formatMs(row.gvqlIndexedMs)} | ${formatMs(row.gvqlMultiIndexMs)} | ${formatMs(row.gvqlIndexedInMs)} | ${formatMs(row.gvqlIndexedOrMs)} | ${formatMs(row.gvqlComputedReturnMs)} | ${formatMs(row.gvqlScalarFunctionsMs)} | ${formatMs(row.gvqlCreatePreviewMs)} | ${formatMs(row.gvqlDeletePreviewMs)} | ${formatMs(row.loadMs)} | ${formatBytes(row.bytes)} |`,
   );
 }

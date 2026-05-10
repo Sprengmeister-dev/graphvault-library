@@ -18,6 +18,7 @@ export type GvqlCompareOperator =
 export type GvqlLogicalOperator = "AND" | "OR";
 export type GvqlArithmeticOperator = "+" | "-" | "*" | "/";
 export type GvqlAggregateFunction = "count" | "sum" | "avg" | "min" | "max";
+export type GvqlScalarFunction = "lower" | "upper" | "trim" | "length" | "coalesce";
 
 export interface GvqlNodePattern {
   alias: string;
@@ -48,9 +49,9 @@ export type GvqlLiteral =
   | GvqlLiteral[];
 
 export interface GvqlPredicate {
-  left: GvqlPathExpression;
+  left: GvqlValueExpression;
   operator: GvqlCompareOperator;
-  right: GvqlLiteral | GvqlPathExpression;
+  right: GvqlValueExpression;
 }
 
 export type GvqlBooleanExpression<TPredicate> =
@@ -82,7 +83,8 @@ export type GvqlReturnExpression =
 export type GvqlValueExpression =
   | GvqlLiteral
   | GvqlPathExpression
-  | { kind: "binary"; operator: GvqlArithmeticOperator; left: GvqlValueExpression; right: GvqlValueExpression };
+  | { kind: "binary"; operator: GvqlArithmeticOperator; left: GvqlValueExpression; right: GvqlValueExpression }
+  | { kind: "function"; fn: GvqlScalarFunction; args: GvqlValueExpression[] };
 
 export type GvqlSetValueExpression = GvqlValueExpression;
 

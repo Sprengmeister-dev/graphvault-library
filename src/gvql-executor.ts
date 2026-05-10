@@ -1,5 +1,6 @@
 import { performance } from "node:perf_hooks";
 import { projectGvqlRows } from "./gvql-aggregation.js";
+import { evaluateGvqlValueExpression } from "./gvql-expressions.js";
 import { buildGvqlGraphIndex, propertyIndexKey } from "./gvql-index.js";
 import { applyGvqlMutations } from "./gvql-mutations.js";
 import { encodedValueToJs, getNodePath, literalToJs, nodeSummary } from "./gvql-values.js";
@@ -12,6 +13,8 @@ import type {
   GvqlGraphEdge,
   GvqlGraphIndex,
   GvqlMatchPattern,
+  GvqlPathExpression,
+  GvqlValueExpression,
   GvqlPredicate,
   GvqlResult,
   GvqlRowPredicate,
@@ -377,8 +380,8 @@ function evaluatePredicate(
   predicate: GvqlPredicate,
   parameters: Record<string, unknown>,
 ): boolean {
-  const left = readPath(index, binding, predicate.left);
-  const right = isPathExpression(predicate.right) ? readPath(index, binding, predicate.right) : literalToJs(predicate.right, parameters);
+  const left = evaluateGvqlValueExpression(index, binding, predicate.left, parameters, readPath);
+  const right = evaluateGvqlValueExpression(index, binding, predicate.right, parameters, readPath);
   switch (predicate.operator) {
     case "=":
       return left === right;
@@ -514,7 +517,7 @@ function readNode(index: GvqlGraphIndex, objectId: string | undefined): unknown 
   return summary && typeof summary === "object" && !Array.isArray(summary) ? { objectId, ...summary } : { objectId, value: summary };
 }
 
-function isPathExpression(value: unknown): value is { alias: string; path?: string } {
+function isPathExpression(value: unknown): value is GvqlPathExpression {
   return Boolean(value && typeof value === "object" && "alias" in value);
 }
 
@@ -583,19 +586,20 @@ function indexablePredicates(
   const start = pattern.start;
   const result: IndexablePredicate[] = [];
   for (const predicate of predicates) {
-    if (predicate.left.alias !== start.alias || !predicate.left.path || isPathExpression(predicate.right)) continue;
+    const left = predicate.left;
+    if (!isPathExpression(left) || left.alias !== start.alias || !left.path || !isLiteralExpression(predicate.right)) continue;
     if (predicate.operator === "=") {
       const value = literalToJs(predicate.right, parameters);
       result.push({
-        path: predicate.left.path,
-        keyValues: [{ key: propertyIndexKey(start.type, predicate.left.path, value), value }],
+        path: left.path,
+        keyValues: [{ key: propertyIndexKey(start.type, left.path, value), value }],
       });
     } else if (predicate.operator === "IN") {
       const values = literalToJs(predicate.right, parameters);
       if (!Array.isArray(values) || values.length === 0) continue;
       result.push({
-        path: predicate.left.path,
-        keyValues: values.map((value) => ({ key: propertyIndexKey(start.type, predicate.left.path as string, value), value })),
+        path: left.path,
+        keyValues: values.map((value) => ({ key: propertyIndexKey(start.type, left.path as string, value), value })),
       });
     }
   }
@@ -611,6 +615,10 @@ function flattenLogicalPredicates(expression: GvqlBooleanExpression<GvqlPredicat
   const right = flattenLogicalPredicates(expression.right, operator);
   if (!left || !right) return undefined;
   return [...left, ...right];
+}
+
+function isLiteralExpression(value: GvqlValueExpression): value is Exclude<GvqlValueExpression, { alias: string; path?: string } | { kind: "binary" } | { kind: "function" }> {
+  return !isPathExpression(value) && !(value && typeof value === "object" && "kind" in value);
 }
 
 function intersectCandidates(candidateLists: string[][]): Set<string> {

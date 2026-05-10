@@ -14,6 +14,7 @@ import type {
   GvqlRemoveExpression,
   GvqlRowPredicate,
   GvqlReturnExpression,
+  GvqlScalarFunction,
   GvqlSetExpression,
   GvqlValueExpression,
   GvqlStatement,
@@ -214,15 +215,15 @@ function parsePredicate(input: string): GvqlPredicate {
     if (index >= 0) {
       if (operator === "IS NULL" || operator === "IS NOT NULL") {
         return {
-          left: parsePathExpression(input.slice(0, index).trim()),
+          left: parseValueExpression(input.slice(0, index).trim()),
           operator,
           right: null,
         };
       }
       return {
-        left: parsePathExpression(input.slice(0, index).trim()),
+        left: parseValueExpression(input.slice(0, index).trim()),
         operator,
-        right: parseValueOrPath(input.slice(index + operator.length).trim()),
+        right: parseValueExpression(input.slice(index + operator.length).trim()),
       };
     }
   }
@@ -466,7 +467,38 @@ function parseValueExpression(input: string): GvqlValueExpression {
       right: parseValueExpression(trimmed.slice(multiplicative.index + 1)),
     };
   }
+  const call = parseFunctionCall(trimmed);
+  if (call) return call;
   return parseValueOrPath(trimmed);
+}
+
+function parseFunctionCall(input: string): GvqlValueExpression | undefined {
+  const open = input.indexOf("(");
+  if (open < 0 || !input.endsWith(")") || !/^[A-Za-z_][\w]*$/.test(input.slice(0, open).trim())) return undefined;
+  if (!outerFunctionCall(input, open)) return undefined;
+  const fn = input.slice(0, open).trim().toLowerCase();
+  if (!isScalarFunction(fn)) {
+    throw new Error(`Unsupported GVQL function "${fn}". Supported functions: lower, upper, trim, length, coalesce.`);
+  }
+  const body = input.slice(open + 1, -1).trim();
+  const args = body ? splitComma(body).map(parseValueExpression) : [];
+  return { kind: "function", fn, args };
+}
+
+function outerFunctionCall(input: string, open: number): boolean {
+  let depth = 0;
+  for (let index = open; index < input.length; index++) {
+    if (isQuoted(input, index)) continue;
+    const char = input[index];
+    if (char === "(") depth++;
+    if (char === ")") depth--;
+    if (depth === 0) return index === input.length - 1;
+  }
+  return false;
+}
+
+function isScalarFunction(value: string): value is GvqlScalarFunction {
+  return value === "lower" || value === "upper" || value === "trim" || value === "length" || value === "coalesce";
 }
 
 function parseRowValueOrLiteral(input: string): GvqlLiteral | { aliasName: string } {
@@ -501,9 +533,15 @@ function isValueExpression(input: string): boolean {
       trimmed === "true" ||
       trimmed === "false" ||
       /^-?\d+(?:\.\d+)?$/.test(trimmed) ||
+      isFunctionExpressionSource(trimmed) ||
       (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
       (trimmed.startsWith("'") && trimmed.endsWith("'")),
   );
+}
+
+function isFunctionExpressionSource(input: string): boolean {
+  const open = input.indexOf("(");
+  return open > 0 && input.endsWith(")") && /^[A-Za-z_][\w]*$/.test(input.slice(0, open).trim()) && outerFunctionCall(input, open);
 }
 
 function isPathExpressionSource(input: string): boolean {

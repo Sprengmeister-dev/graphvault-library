@@ -274,6 +274,24 @@ try {
   assert.equal(computedReturn.kind, "select");
   assert.deepEqual(computedReturn.rows, [{ id: "doc-3", score: 210 }]);
 
+  const scalarFunctions = await reloaded.gvql(
+    `
+      MATCH (doc:Document)
+      WHERE lower(doc.title) CONTAINS lower($needle)
+      RETURN doc.id AS id, upper(trim(doc.title)) AS normalizedTitle, length(doc.title) AS titleLength, coalesce(doc.archivedAt, "none") AS archived
+    `,
+    { parameters: { needle: "OBJECT" } },
+  );
+  assert.equal(scalarFunctions.kind, "select");
+  assert.deepEqual(scalarFunctions.rows, [
+    {
+      id: "doc-1",
+      normalizedTitle: "OBJECT GRAPH PERSISTENCE",
+      titleLength: "Object graph persistence".length,
+      archived: "none",
+    },
+  ]);
+
   const aggregate = await reloaded.gvql(`
     MATCH (doc:Document)
     RETURN doc.status AS status, count(*) AS count, count(doc.views) AS viewed, sum(doc.views) AS views, avg(doc.views) AS avgViews
@@ -409,6 +427,16 @@ try {
   assert.equal(arithmeticPreview.changes[0].before, 15);
   assert.equal(arithmeticPreview.changes[0].after, 40);
   assert.equal(reloaded.root.documents[1].views, 15);
+
+  const functionSetPreview = await reloaded.previewGvql(
+    'MATCH (doc:Document) WHERE doc.id = "doc-1" SET doc.status = lower(trim($status)) RETURN doc.id AS id',
+    { parameters: { status: " Reviewed " } },
+  );
+  assert.equal(functionSetPreview.kind, "update");
+  assert.equal(functionSetPreview.dryRun, true);
+  assert.equal(functionSetPreview.changed, 1);
+  assert.equal(functionSetPreview.changes[0].after, "reviewed");
+  assert.equal(reloaded.root.documents[0].status, "draft");
 
   const arithmeticUpdate = await reloaded.gvql(
     "MATCH (doc:Document) WHERE doc.id = $id SET doc.views = (doc.views + $increment) * 2 RETURN doc.id AS id, doc.views AS views",
