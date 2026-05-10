@@ -47,7 +47,7 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "test": "npm run build && node tests/smoke.mjs",
+    "test": "npm run build && node tests/smoke.mjs && node tests/parser.test.mjs && node tests/engine.test.mjs && node tests/storage-manager.test.mjs",
     "benchmark": "npm run build && node benchmarks/object-graph.mjs",
     "pack:dry-run": "npm pack --dry-run --cache ./.npm-cache",
     "prepare": "npm run build",
