@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import type { ObjectRecord, StorageManifest, StorageTarget, TransactionRecord, VerificationResult } from "./types.js";
+import type { ObjectRecord, StorageManifest, StorageTarget, TransactionRecord, VerificationResult } from "../core/types.js";
 
 export interface StorageVerifierOptions {
   target: StorageTarget;

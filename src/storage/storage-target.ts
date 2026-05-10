@@ -1,9 +1,9 @@
 import { constants } from "node:fs";
 import { access, mkdir, open, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
-import { StorageLockError } from "./errors.js";
-import type { StorageTarget, StorageTargetLock } from "./types.js";
-export { S3StorageTarget } from "./storage-targets/s3.js";
+import { StorageLockError } from "../core/errors.js";
+import type { StorageTarget, StorageTargetLock } from "../core/types.js";
+export { S3StorageTarget } from "./targets/s3.js";
 export type {
   S3Body,
   S3ListObjectsRequest,
@@ -12,9 +12,9 @@ export type {
   S3PutObjectRequest,
   S3StorageClient,
   S3StorageTargetOptions,
-} from "./storage-targets/s3.js";
-export { SqlStorageTarget } from "./storage-targets/sql.js";
-export type { SqlQueryResult, SqlStorageClient, SqlStorageTargetOptions } from "./storage-targets/sql.js";
+} from "./targets/s3.js";
+export { SqlStorageTarget } from "./targets/sql.js";
+export type { SqlQueryResult, SqlStorageClient, SqlStorageTargetOptions } from "./targets/sql.js";
 
 export interface LocalFilesystemTargetOptions {
   syncWrites?: boolean;

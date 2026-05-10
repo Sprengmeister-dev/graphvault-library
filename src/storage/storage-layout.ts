@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { CorruptStorageError } from "./errors.js";
+import { CorruptStorageError } from "../core/errors.js";
 
 export type ObjectRecordKind = "json" | "binary";
 

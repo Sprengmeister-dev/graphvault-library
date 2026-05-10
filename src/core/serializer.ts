@@ -1,6 +1,6 @@
 import { Buffer } from "node:buffer";
-import { LazyArrayList } from "./lazy-array-list.js";
-import { LazyRef } from "./lazy-ref.js";
+import { LazyArrayList } from "../lazy/lazy-array-list.js";
+import { LazyRef } from "../lazy/lazy-ref.js";
 import type {
   ClassConstructor,
   EncodedNode,

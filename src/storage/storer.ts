@@ -1,5 +1,5 @@
 import type { StorageManager } from "./storage-manager.js";
-import type { StoreMetadata, StoreMode } from "./types.js";
+import type { StoreMetadata, StoreMode } from "../core/types.js";
 
 export class Storer {
   private readonly targets: unknown[] = [];

@@ -1,4 +1,4 @@
-import type { EncodedNode, EncodedValue } from "./types.js";
+import type { EncodedNode, EncodedValue } from "../core/types.js";
 import type { GvqlLiteral } from "./gvql-types.js";
 
 export function encodedValueToJs(value: EncodedValue | undefined): unknown {

@@ -1,4 +1,4 @@
-import type { EncodedValue, SerializedEnvelope, StoreMetadata } from "./types.js";
+import type { EncodedValue, SerializedEnvelope, StoreMetadata } from "../core/types.js";
 
 export type GvqlStatementKind = "select" | "update";
 export type GvqlDirection = "out" | "in";

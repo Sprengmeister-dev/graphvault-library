@@ -6,7 +6,7 @@ import {
   literalToJs,
   removeNodePath,
   setNodePath,
-} from "../dist/gvql-values.js";
+} from "../dist/gvql/gvql-values.js";
 
 const specialNumber = { $type: "number", value: "NaN" };
 assert.equal(Number.isNaN(encodedValueToJs(specialNumber)), true);

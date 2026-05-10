@@ -1,5 +1,5 @@
-export { EmbeddedStorage } from "./embedded-storage.js";
-export { decodeBinaryRecord, encodeBinaryRecord } from "./binary-codec.js";
+export { EmbeddedStorage } from "./storage/embedded-storage.js";
+export { decodeBinaryRecord, encodeBinaryRecord } from "./core/binary-codec.js";
 export {
   buildGvqlGraphIndex,
   encodedValueToJs,
@@ -10,7 +10,7 @@ export {
   propertyIndexKey,
   referencedEdges,
   visitEncodedNode,
-} from "./gvql.js";
+} from "./gvql/gvql.js";
 export type {
   GvqlAggregateFunction,
   GvqlArithmeticOperator,
@@ -40,31 +40,31 @@ export type {
   GvqlStatement,
   GvqlStatementKind,
   GvqlWhereClause,
-} from "./gvql.js";
+} from "./gvql/gvql.js";
 export {
   GraphVaultModule,
   GRAPHVAULT_MANAGER,
   GRAPHVAULT_OPTIONS,
-} from "./nest.js";
+} from "./integrations/nest.js";
 export type {
   DynamicModuleLike,
   GraphVaultModuleAsyncOptions,
   GraphVaultModuleOptions,
   NestProvider,
-} from "./nest.js";
+} from "./integrations/nest.js";
 export {
   GraphVaultError,
   StorageLockError,
   StorageNotStartedError,
   ReadonlyStorageError,
   UnknownTypeError,
-} from "./errors.js";
-export { startStorage } from "./factory.js";
-export { LazyArrayList } from "./lazy-array-list.js";
-export { lazy, LazyRef } from "./lazy-ref.js";
-export { PersistentCache } from "./persistent-cache.js";
-export type { PersistentCacheRoot } from "./persistent-cache.js";
-export { GraphSerializer, ObjectIdRegistry, TypeRegistry } from "./serializer.js";
+} from "./core/errors.js";
+export { startStorage } from "./storage/factory.js";
+export { LazyArrayList } from "./lazy/lazy-array-list.js";
+export { lazy, LazyRef } from "./lazy/lazy-ref.js";
+export { PersistentCache } from "./cache/persistent-cache.js";
+export type { PersistentCacheRoot } from "./cache/persistent-cache.js";
+export { GraphSerializer, ObjectIdRegistry, TypeRegistry } from "./core/serializer.js";
 export {
   copyStorageTargetTree,
   HttpStorageTarget,
@@ -72,7 +72,7 @@ export {
   MemoryStorageTarget,
   S3StorageTarget,
   SqlStorageTarget,
-} from "./storage-target.js";
+} from "./storage/storage-target.js";
 export type {
   HttpStorageTargetOptions,
   LocalFilesystemTargetOptions,
@@ -86,9 +86,9 @@ export type {
   SqlQueryResult,
   SqlStorageClient,
   SqlStorageTargetOptions,
-} from "./storage-target.js";
-export { StorageManager } from "./storage-manager.js";
-export { Storer } from "./storer.js";
+} from "./storage/storage-target.js";
+export { StorageManager } from "./storage/storage-manager.js";
+export { Storer } from "./storage/storer.js";
 export type {
   ClassConstructor,
   BackupResult,
@@ -115,4 +115,4 @@ export type {
   StorageWriteProfile,
   ObjectRecordWriteFormat,
   TypeRegistration,
-} from "./types.js";
+} from "./core/types.js";

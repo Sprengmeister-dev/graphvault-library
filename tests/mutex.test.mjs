@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { AsyncMutex } from "../dist/mutex.js";
+import { AsyncMutex } from "../dist/concurrency/mutex.js";
 
 const mutex = new AsyncMutex();
 const events = [];

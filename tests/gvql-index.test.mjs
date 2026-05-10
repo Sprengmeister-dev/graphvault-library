@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { GraphSerializer } from "../dist/serializer.js";
-import { buildGvqlGraphIndex, propertyIndexKey, referencedEdges, visitEncodedNode } from "../dist/gvql-index.js";
+import { GraphSerializer } from "../dist/core/serializer.js";
+import { buildGvqlGraphIndex, propertyIndexKey, referencedEdges, visitEncodedNode } from "../dist/gvql/gvql-index.js";
 
 class Document {
   constructor(id, status, title, owner) {

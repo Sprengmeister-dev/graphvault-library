@@ -1,16 +1,16 @@
 import { join } from "node:path";
-import { AsyncMutex } from "./mutex.js";
-import { GraphSerializer } from "./serializer.js";
+import { AsyncMutex } from "../concurrency/mutex.js";
+import { GraphSerializer } from "../core/serializer.js";
 import { StorageLayout } from "./storage-layout.js";
 import { StorageReader } from "./storage-reader.js";
 import { verifyStorage } from "./storage-verifier.js";
 import { StorageWriter } from "./storage-writer.js";
 import { copyStorageTargetTree, LocalFilesystemTarget } from "./storage-target.js";
 import { Storer } from "./storer.js";
-import { LazyRef } from "./lazy-ref.js";
-import { ReadonlyStorageError, StorageNotStartedError } from "./errors.js";
-import { executeGvqlStatement } from "./gvql-executor.js";
-import { parseGvql } from "./gvql-parser.js";
+import { LazyRef } from "../lazy/lazy-ref.js";
+import { ReadonlyStorageError, StorageNotStartedError } from "../core/errors.js";
+import { executeGvqlStatement } from "../gvql/gvql-executor.js";
+import { parseGvql } from "../gvql/gvql-parser.js";
 import type {
   CompactionResult,
   BackupResult,
@@ -29,8 +29,8 @@ import type {
   VerificationResult,
   MaintenanceResult,
   MaintenanceOptions,
-} from "./types.js";
-import type { GvqlExecutionOptions, GvqlResult } from "./gvql-types.js";
+} from "../core/types.js";
+import type { GvqlExecutionOptions, GvqlResult } from "../gvql/gvql-types.js";
 
 export class StorageManager<TRoot = unknown> {
   private readonly options: Required<Pick<StorageManagerOptions<TRoot>, "lockTimeoutMs" | "housekeepingIntervalMs">> &

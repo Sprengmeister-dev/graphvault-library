@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { PersistentCache } from "../dist/persistent-cache.js";
+import { PersistentCache } from "../dist/cache/persistent-cache.js";
 
 const temporaryDirectory = await mkdtemp(join(tmpdir(), "graphvault-persistent-cache-"));
 

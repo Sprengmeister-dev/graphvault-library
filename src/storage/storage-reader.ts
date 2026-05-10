@@ -1,7 +1,7 @@
 import { join } from "node:path";
-import { decodeBinaryRecord } from "./binary-codec.js";
+import { decodeBinaryRecord } from "../core/binary-codec.js";
 import type { StorageLayout } from "./storage-layout.js";
-import type { ObjectRecord, ParentIndexRecord, SerializedEnvelope, StorageManifest, StorageTarget, TransactionRecord } from "./types.js";
+import type { ObjectRecord, ParentIndexRecord, SerializedEnvelope, StorageManifest, StorageTarget, TransactionRecord } from "../core/types.js";
 
 export type LoadedEnvelope =
   | { source: "manifest"; envelope: SerializedEnvelope; transactionId: number }

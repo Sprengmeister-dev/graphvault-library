@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { GraphSerializer, TypeRegistry } from "../dist/serializer.js";
-import { UnknownTypeError } from "../dist/errors.js";
+import { GraphSerializer, TypeRegistry } from "../dist/core/serializer.js";
+import { UnknownTypeError } from "../dist/core/errors.js";
 
 class EventItem {
   constructor(id, seen = new Date("2026-01-01T00:00:00.000Z")) {

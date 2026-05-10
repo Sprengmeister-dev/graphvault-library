@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { decodeBinaryRecord, encodeBinaryRecord } from "../dist/binary-codec.js";
+import { decodeBinaryRecord, encodeBinaryRecord } from "../dist/core/binary-codec.js";
 
 const encoded = encodeBinaryRecord({ kind: "object", value: [1, 2, 3] });
 const decoded = decodeBinaryRecord(encoded);

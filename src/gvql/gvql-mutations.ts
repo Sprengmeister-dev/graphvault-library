@@ -1,6 +1,6 @@
 import { evaluateGvqlValueExpression } from "./gvql-expressions.js";
 import { encodedValueToJs, getNodePath, jsValueToEncoded, nodeSummary, removeNodePath, setNodePath } from "./gvql-values.js";
-import type { EncodedNode, EncodedValue, SerializedEnvelope } from "./types.js";
+import type { EncodedNode, EncodedValue, SerializedEnvelope } from "../core/types.js";
 import type {
   GvqlBinding,
   GvqlExecutionOptions,

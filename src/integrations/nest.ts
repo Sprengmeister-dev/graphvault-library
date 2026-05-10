@@ -1,5 +1,5 @@
-import { StorageManager } from "./storage-manager.js";
-import type { StorageManagerOptions } from "./types.js";
+import { StorageManager } from "../storage/storage-manager.js";
+import type { StorageManagerOptions } from "../core/types.js";
 
 export const GRAPHVAULT_MANAGER = Symbol("GRAPHVAULT_MANAGER");
 export const GRAPHVAULT_OPTIONS = Symbol("GRAPHVAULT_OPTIONS");

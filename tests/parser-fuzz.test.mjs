@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { parseGvql } from "../dist/gvql-parser.js";
+import { parseGvql } from "../dist/gvql/gvql-parser.js";
 
 function randomId(seed, index) {
   const base = String.fromCharCode(97 + (index % 26));

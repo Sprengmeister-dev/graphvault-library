@@ -4,7 +4,7 @@ import { evaluateGvqlValueExpression } from "./gvql-expressions.js";
 import { buildGvqlGraphIndex, propertyIndexKey } from "./gvql-index.js";
 import { applyGvqlMutations } from "./gvql-mutations.js";
 import { encodedValueToJs, getNodePath, literalToJs, nodeSummary } from "./gvql-values.js";
-import type { EncodedNode, SerializedEnvelope } from "./types.js";
+import type { EncodedNode, SerializedEnvelope } from "../core/types.js";
 import type {
   GvqlBinding,
   GvqlBooleanExpression,

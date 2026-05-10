@@ -1,4 +1,4 @@
-import type { EncodedNode, EncodedValue, ParentIndexRecord, SerializedEnvelope } from "./types.js";
+import type { EncodedNode, EncodedValue, ParentIndexRecord, SerializedEnvelope } from "../core/types.js";
 
 export function buildParentIndexRecord(envelope: SerializedEnvelope, transactionId: number): ParentIndexRecord {
   const parents: ParentIndexRecord["parents"] = {};

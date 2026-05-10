@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { S3StorageTarget } from "../dist/storage-targets/s3.js";
+import { S3StorageTarget } from "../dist/storage/targets/s3.js";
 
 class MockS3Client {
   constructor() {

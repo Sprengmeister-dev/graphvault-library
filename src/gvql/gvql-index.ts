@@ -1,5 +1,5 @@
 import { encodedValueToJs } from "./gvql-values.js";
-import type { EncodedNode, EncodedValue, SerializedEnvelope } from "./types.js";
+import type { EncodedNode, EncodedValue, SerializedEnvelope } from "../core/types.js";
 import type { GvqlGraphEdge, GvqlGraphIndex, GvqlGraphNode } from "./gvql-types.js";
 
 export function buildGvqlGraphIndex(envelope: SerializedEnvelope): GvqlGraphIndex {

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { SqlStorageTarget } from "../dist/storage-targets/sql.js";
+import { SqlStorageTarget } from "../dist/storage/targets/sql.js";
 
 class MockSqlClient {
   constructor() {

@@ -22,16 +22,40 @@
       "import": "./dist/index.js"
     },
     "./nest": {
-      "types": "./dist/nest.d.ts",
-      "import": "./dist/nest.js"
+      "types": "./dist/integrations/nest.d.ts",
+      "import": "./dist/integrations/nest.js"
     },
-    "./internal/*": {
-      "types": "./dist/*.d.ts",
-      "import": "./dist/*.js"
+    "./internal/cache/*": {
+      "types": "./dist/cache/*.d.ts",
+      "import": "./dist/cache/*.js"
+    },
+    "./internal/concurrency/*": {
+      "types": "./dist/concurrency/*.d.ts",
+      "import": "./dist/concurrency/*.js"
+    },
+    "./internal/core/*": {
+      "types": "./dist/core/*.d.ts",
+      "import": "./dist/core/*.js"
+    },
+    "./internal/gvql/*": {
+      "types": "./dist/gvql/*.d.ts",
+      "import": "./dist/gvql/*.js"
+    },
+    "./internal/lazy/*": {
+      "types": "./dist/lazy/*.d.ts",
+      "import": "./dist/lazy/*.js"
+    },
+    "./internal/storage/*": {
+      "types": "./dist/storage/*.d.ts",
+      "import": "./dist/storage/*.js"
     },
     "./internal/storage-targets/*": {
-      "types": "./dist/storage-targets/*.d.ts",
-      "import": "./dist/storage-targets/*.js"
+      "types": "./dist/storage/targets/*.d.ts",
+      "import": "./dist/storage/targets/*.js"
+    },
+    "./internal/storage/targets/*": {
+      "types": "./dist/storage/targets/*.d.ts",
+      "import": "./dist/storage/targets/*.js"
     }
   },
   "files": [

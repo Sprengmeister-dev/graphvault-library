@@ -1,5 +1,5 @@
-import { StorageLockError } from "../errors.js";
-import type { StorageTarget, StorageTargetLock } from "../types.js";
+import { StorageLockError } from "../../core/errors.js";
+import type { StorageTarget, StorageTargetLock } from "../../core/types.js";
 
 export interface SqlStorageTargetOptions {
   client: SqlStorageClient;

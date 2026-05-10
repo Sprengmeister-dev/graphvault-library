@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { clausesByName, splitGvqlClauses } from "../dist/gvql-clause-scanner.js";
+import { clausesByName, splitGvqlClauses } from "../dist/gvql/gvql-clause-scanner.js";
 
 const baseQuery = `
   MATCH (doc:Document)

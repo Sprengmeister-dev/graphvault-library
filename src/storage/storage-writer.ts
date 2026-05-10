@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { encodeBinaryRecord } from "./binary-codec.js";
+import { encodeBinaryRecord } from "../core/binary-codec.js";
 import { buildParentIndexRecord } from "./storage-parent-index.js";
 import type { StorageLayout } from "./storage-layout.js";
 import type {
@@ -10,7 +10,7 @@ import type {
   StorageTarget,
   TransactionRecord,
   TypeDictionaryEntry,
-} from "./types.js";
+} from "../core/types.js";
 
 const OBJECT_RECORD_WRITE_CONCURRENCY = 32;
 
