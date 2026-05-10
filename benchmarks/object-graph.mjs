@@ -91,6 +91,20 @@ async function benchmarkMemory(count) {
   const gvqlIndexedOr = await time(() =>
     storage.gvql('MATCH (doc:Document) WHERE doc.id = 1 OR doc.status = "review" RETURN doc.id AS id ORDER BY doc.id ASC LIMIT 25'),
   );
+  const gvqlComputedReturn = await time(() =>
+    storage.gvql("MATCH (doc:Document) RETURN doc.id AS id, (doc.views + $bonus) * 2 AS score ORDER BY score DESC LIMIT 25", {
+      parameters: { bonus: 3 },
+    }),
+  );
+  const gvqlCreatePreview = await time(() =>
+    storage.previewGvql(
+      'MATCH (doc:Document) WHERE doc.id = 1 CREATE (created:Document { id: 1000001, title: "Benchmark create", status: "draft", views: $views }) INTO doc.related RETURN created.id AS id',
+      { parameters: { views: 42 } },
+    ),
+  );
+  const gvqlDeletePreview = await time(() =>
+    storage.previewGvql('MATCH (doc:Document) WHERE doc.id = 1 DELETE doc RETURN doc.id AS id'),
+  );
   await storage.shutdown();
   const load = await time(async () => {
     const loaded = await EmbeddedStorage.start({ storageDirectory: directory, storageTarget: target, rootFactory: () => ({}), types: typeRegistrations() });
@@ -105,6 +119,9 @@ async function benchmarkMemory(count) {
     gvqlMultiIndexMs: gvqlMultiIndex.ms,
     gvqlIndexedInMs: gvqlIndexedIn.ms,
     gvqlIndexedOrMs: gvqlIndexedOr.ms,
+    gvqlComputedReturnMs: gvqlComputedReturn.ms,
+    gvqlCreatePreviewMs: gvqlCreatePreview.ms,
+    gvqlDeletePreviewMs: gvqlDeletePreview.ms,
     loadMs: load.ms,
     bytes: undefined,
   };
@@ -133,6 +150,20 @@ async function benchmarkFilesystem(count) {
     const gvqlIndexedOr = await time(() =>
       storage.gvql('MATCH (doc:Document) WHERE doc.id = 1 OR doc.status = "review" RETURN doc.id AS id ORDER BY doc.id ASC LIMIT 25'),
     );
+    const gvqlComputedReturn = await time(() =>
+      storage.gvql("MATCH (doc:Document) RETURN doc.id AS id, (doc.views + $bonus) * 2 AS score ORDER BY score DESC LIMIT 25", {
+        parameters: { bonus: 3 },
+      }),
+    );
+    const gvqlCreatePreview = await time(() =>
+      storage.previewGvql(
+        'MATCH (doc:Document) WHERE doc.id = 1 CREATE (created:Document { id: 1000001, title: "Benchmark create", status: "draft", views: $views }) INTO doc.related RETURN created.id AS id',
+        { parameters: { views: 42 } },
+      ),
+    );
+    const gvqlDeletePreview = await time(() =>
+      storage.previewGvql('MATCH (doc:Document) WHERE doc.id = 1 DELETE doc RETURN doc.id AS id'),
+    );
     await storage.shutdown();
     const load = await time(async () => {
       const loaded = await EmbeddedStorage.start({ storageDirectory: directory, rootFactory: () => ({}), types: typeRegistrations() });
@@ -147,6 +178,9 @@ async function benchmarkFilesystem(count) {
       gvqlMultiIndexMs: gvqlMultiIndex.ms,
       gvqlIndexedInMs: gvqlIndexedIn.ms,
       gvqlIndexedOrMs: gvqlIndexedOr.ms,
+      gvqlComputedReturnMs: gvqlComputedReturn.ms,
+      gvqlCreatePreviewMs: gvqlCreatePreview.ms,
+      gvqlDeletePreviewMs: gvqlDeletePreview.ms,
       loadMs: load.ms,
       bytes: await directorySize(directory),
     };
@@ -198,10 +232,10 @@ console.log(`Runtime: ${process.version}`);
 console.log(`Platform: ${process.platform} ${process.arch}`);
 console.log(`Date: ${new Date().toISOString()}`);
 console.log();
-console.log(`| target | documents | storeRoot | GVQL traversal | GVQL indexed aggregate | GVQL multi-index lookup | GVQL indexed IN lookup | GVQL indexed OR lookup | reload | storage size |`);
-console.log(`| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |`);
+console.log(`| target | documents | storeRoot | GVQL traversal | GVQL indexed aggregate | GVQL multi-index lookup | GVQL indexed IN lookup | GVQL indexed OR lookup | GVQL computed return | GVQL CREATE preview | GVQL DELETE preview | reload | storage size |`);
+console.log(`| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |`);
 for (const row of rows) {
   console.log(
-    `| ${row.target} | ${row.count.toLocaleString("en-US")} | ${formatMs(row.storeMs)} | ${formatMs(row.gvqlMs)} | ${formatMs(row.gvqlIndexedMs)} | ${formatMs(row.gvqlMultiIndexMs)} | ${formatMs(row.gvqlIndexedInMs)} | ${formatMs(row.gvqlIndexedOrMs)} | ${formatMs(row.loadMs)} | ${formatBytes(row.bytes)} |`,
+    `| ${row.target} | ${row.count.toLocaleString("en-US")} | ${formatMs(row.storeMs)} | ${formatMs(row.gvqlMs)} | ${formatMs(row.gvqlIndexedMs)} | ${formatMs(row.gvqlMultiIndexMs)} | ${formatMs(row.gvqlIndexedInMs)} | ${formatMs(row.gvqlIndexedOrMs)} | ${formatMs(row.gvqlComputedReturnMs)} | ${formatMs(row.gvqlCreatePreviewMs)} | ${formatMs(row.gvqlDeletePreviewMs)} | ${formatMs(row.loadMs)} | ${formatBytes(row.bytes)} |`,
   );
 }
