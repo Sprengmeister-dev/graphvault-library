@@ -1,6 +1,7 @@
 import type {
   GvqlCompareOperator,
   GvqlBooleanExpression,
+  GvqlCreateExpression,
   GvqlDeleteExpression,
   GvqlEdgePattern,
   GvqlHavingClause,
@@ -20,7 +21,7 @@ import type {
   GvqlAggregateFunction,
 } from "./gvql-types.js";
 
-type ClauseName = "MATCH" | "WHERE" | "SET" | "REMOVE" | "DELETE" | "RETURN" | "GROUP BY" | "HAVING" | "ORDER BY" | "LIMIT" | "OFFSET";
+type ClauseName = "MATCH" | "WHERE" | "SET" | "REMOVE" | "DELETE" | "CREATE" | "RETURN" | "GROUP BY" | "HAVING" | "ORDER BY" | "LIMIT" | "OFFSET";
 
 export function parseGvql(source: string): GvqlStatement {
   const clauses = splitClauses(source);
@@ -31,11 +32,12 @@ export function parseGvql(source: string): GvqlStatement {
   const set = clauses.get("SET") ? parseSetList(clauses.get("SET") as string) : [];
   const remove = clauses.get("REMOVE") ? parseRemoveList(clauses.get("REMOVE") as string) : [];
   const deleteItems = clauses.get("DELETE") ? parseDeleteList(clauses.get("DELETE") as string) : [];
+  const create = clauses.get("CREATE") ? parseCreateList(clauses.get("CREATE") as string) : [];
   const returnClause = clauses.get("RETURN")
     ? parseReturnClause(clauses.get("RETURN") as string)
-    : { returns: defaultReturns(set, remove, deleteItems), distinct: false };
+    : { returns: defaultReturns(set, remove, deleteItems, create), distinct: false };
   return {
-    kind: set.length > 0 || remove.length > 0 || deleteItems.length > 0 ? "update" : "select",
+    kind: set.length > 0 || remove.length > 0 || deleteItems.length > 0 || create.length > 0 ? "update" : "select",
     match: parseMatch(match),
     ...(clauses.get("WHERE") ? { where: parseWhere(clauses.get("WHERE") as string) } : {}),
     returns: returnClause.returns,
@@ -43,6 +45,7 @@ export function parseGvql(source: string): GvqlStatement {
     set,
     remove,
     delete: deleteItems,
+    create,
     ...(clauses.get("ORDER BY") ? { orderBy: parseOrderBy(clauses.get("ORDER BY") as string) } : {}),
     ...(clauses.get("GROUP BY") ? { groupBy: parseGroupBy(clauses.get("GROUP BY") as string) } : {}),
     ...(clauses.get("HAVING") ? { having: parseHaving(clauses.get("HAVING") as string) } : {}),
@@ -54,7 +57,7 @@ export function parseGvql(source: string): GvqlStatement {
 function splitClauses(source: string): Map<ClauseName, string> {
   const normalized = source.trim().replace(/;$/, "");
   const matches: Array<{ name: ClauseName; index: number; end: number }> = [];
-  for (const name of ["MATCH", "WHERE", "SET", "REMOVE", "DELETE", "RETURN", "GROUP BY", "HAVING", "ORDER BY", "LIMIT", "OFFSET"] as ClauseName[]) {
+  for (const name of ["MATCH", "WHERE", "SET", "REMOVE", "DELETE", "CREATE", "RETURN", "GROUP BY", "HAVING", "ORDER BY", "LIMIT", "OFFSET"] as ClauseName[]) {
     const found = findKeyword(normalized, name);
     if (found >= 0) {
       matches.push({ name, index: found, end: found + name.length });
@@ -249,6 +252,50 @@ function parseDeleteList(input: string): GvqlDeleteExpression[] {
   });
 }
 
+function parseCreateList(input: string): GvqlCreateExpression[] {
+  return splitComma(input).map(parseCreateItem);
+}
+
+function parseCreateItem(input: string): GvqlCreateExpression {
+  const intoIndex = findKeyword(input, "INTO");
+  if (intoIndex < 0) {
+    throw new Error("GVQL CREATE requires INTO parent.collection so created objects stay reachable.");
+  }
+  const pattern = input.slice(0, intoIndex).trim();
+  const into = parsePathExpression(input.slice(intoIndex + "INTO".length).trim());
+  const match = /^\(\s*([A-Za-z_][\w]*)(?:\s*:\s*([A-Za-z_][\w]*))?\s*(?:\{(.*)\})?\s*\)$/s.exec(pattern);
+  if (!match) {
+    throw new Error(`Invalid GVQL CREATE pattern "${pattern}". Use CREATE (alias:Type { field: value }) INTO parent.collection.`);
+  }
+  return {
+    alias: match[1] as string,
+    ...(match[2] ? { type: match[2] } : {}),
+    props: parseObjectProperties(match[3] ?? ""),
+    into,
+  };
+}
+
+function parseObjectProperties(input: string): Record<string, GvqlValueExpression> {
+  const props: Record<string, GvqlValueExpression> = {};
+  const body = input.trim();
+  if (!body) return props;
+  for (const item of splitComma(body)) {
+    const index = findTopLevelColon(item);
+    if (index < 0) {
+      throw new Error(`GVQL CREATE property needs ":": ${item}`);
+    }
+    const key = parseObjectPropertyName(item.slice(0, index).trim());
+    props[key] = parseValueExpression(item.slice(index + 1).trim());
+  }
+  return props;
+}
+
+function parseObjectPropertyName(input: string): string {
+  if (/^[A-Za-z_][\w]*$/.test(input)) return input;
+  if ((input.startsWith('"') && input.endsWith('"')) || (input.startsWith("'") && input.endsWith("'"))) return unquote(input);
+  throw new Error(`Invalid GVQL CREATE property name "${input}".`);
+}
+
 function parseReturnClause(input: string): { returns: GvqlReturnExpression[]; distinct: boolean } {
   const trimmed = input.trim();
   const distinct = keywordAt(trimmed, 0, "DISTINCT");
@@ -327,8 +374,13 @@ function parseOffset(input: string): number {
   return value;
 }
 
-function defaultReturns(set: GvqlSetExpression[], remove: GvqlRemoveExpression[] = [], deleteItems: GvqlDeleteExpression[] = []): GvqlReturnExpression[] {
-  return set.length > 0 || remove.length > 0 || deleteItems.length > 0 ? [{ kind: "count", aliasName: "changed" }] : [{ kind: "all" }];
+function defaultReturns(
+  set: GvqlSetExpression[],
+  remove: GvqlRemoveExpression[] = [],
+  deleteItems: GvqlDeleteExpression[] = [],
+  create: GvqlCreateExpression[] = [],
+): GvqlReturnExpression[] {
+  return set.length > 0 || remove.length > 0 || deleteItems.length > 0 || create.length > 0 ? [{ kind: "count", aliasName: "changed" }] : [{ kind: "all" }];
 }
 
 function parsePathExpression(input: string): GvqlPathExpression {
@@ -436,6 +488,18 @@ function splitComma(input: string): string[] {
   }
   parts.push(input.slice(cursor).trim());
   return parts.filter(Boolean);
+}
+
+function findTopLevelColon(input: string): number {
+  let depth = 0;
+  for (let index = 0; index < input.length; index++) {
+    if (isQuoted(input, index)) continue;
+    const char = input[index];
+    if (char === "[" || char === "(" || char === "{") depth++;
+    if (char === "]" || char === ")" || char === "}") depth--;
+    if (char === ":" && depth === 0) return index;
+  }
+  return -1;
 }
 
 function stripOuterParentheses(input: string): string {

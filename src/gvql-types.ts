@@ -99,6 +99,13 @@ export interface GvqlDeleteExpression {
   alias: string;
 }
 
+export interface GvqlCreateExpression {
+  alias: string;
+  type?: string;
+  props: Record<string, GvqlValueExpression>;
+  into: GvqlPathExpression;
+}
+
 export type GvqlOrderExpression =
   | { kind: "path"; expression: GvqlPathExpression }
   | { kind: "alias"; aliasName: string };
@@ -117,6 +124,7 @@ export interface GvqlStatement {
   set: GvqlSetExpression[];
   remove: GvqlRemoveExpression[];
   delete: GvqlDeleteExpression[];
+  create: GvqlCreateExpression[];
   orderBy?: GvqlOrderBy[];
   groupBy?: GvqlPathExpression[];
   having?: GvqlHavingClause;
@@ -199,7 +207,7 @@ export interface GvqlMutationPreview {
   path: string;
   before: unknown;
   after: unknown;
-  operation?: "set" | "remove" | "detach" | "delete";
+  operation?: "set" | "remove" | "detach" | "delete" | "create" | "attach";
 }
 
 export interface GvqlMutationResult {

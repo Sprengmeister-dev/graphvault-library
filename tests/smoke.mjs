@@ -413,6 +413,41 @@ try {
   assert.equal(deletedQuery.kind, "select");
   assert.deepEqual(deletedQuery.rows, []);
 
+  const createPreview = await reloaded.previewGvql(
+    `
+      MATCH (root)
+      WHERE root.documents IS NOT NULL
+      CREATE (doc:Document { id: "doc-4", title: "Release checklist", status: "draft", views: $views }) INTO root.documents
+      RETURN doc.id AS id, doc.title AS title
+    `,
+    { parameters: { views: 7 } },
+  );
+  assert.equal(createPreview.kind, "update");
+  assert.equal(createPreview.dryRun, true);
+  assert.deepEqual(createPreview.rows, [{ id: "doc-4", title: "Release checklist" }]);
+  assert.equal(createPreview.changes.some((change) => change.operation === "create" && change.alias === "doc"), true);
+  assert.equal(createPreview.changes.some((change) => change.operation === "attach" && change.path === "documents"), true);
+  assert.equal(reloaded.root.documents.length, 2);
+
+  const created = await reloaded.gvql(
+    `
+      MATCH (root)
+      WHERE root.documents IS NOT NULL
+      CREATE (doc:Document { id: "doc-4", title: "Release checklist", status: "draft", views: $views }) INTO root.documents
+      RETURN doc.id AS id, doc.views AS views
+    `,
+    { parameters: { views: 7 } },
+  );
+  assert.equal(created.kind, "update");
+  assert.deepEqual(created.rows, [{ id: "doc-4", views: 7 }]);
+  assert.equal(reloaded.root.documents.length, 3);
+  assert.ok(reloaded.root.documents[2] instanceof Document);
+  assert.equal(reloaded.root.documents[2].title, "Release checklist");
+
+  const createdQuery = await reloaded.gvql('MATCH (doc:Document) WHERE doc.id = "doc-4" RETURN doc.title AS title, doc.views AS views');
+  assert.equal(createdQuery.kind, "select");
+  assert.deepEqual(createdQuery.rows, [{ title: "Release checklist", views: 7 }]);
+
   const verification = await reloaded.verify();
   assert.equal(verification.ok, true);
   await reloaded.shutdown();
