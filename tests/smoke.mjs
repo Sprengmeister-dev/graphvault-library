@@ -380,6 +380,27 @@ try {
   assert.equal(removedFieldQuery.kind, "select");
   assert.deepEqual(removedFieldQuery.rows, [{ id: "doc-2" }]);
 
+  const deletePreview = await reloaded.previewGvql('MATCH (doc:Document) WHERE doc.id = "doc-2" DELETE doc RETURN doc.id AS id');
+  assert.equal(deletePreview.kind, "update");
+  assert.equal(deletePreview.dryRun, true);
+  assert.deepEqual(deletePreview.rows, [{ id: "doc-2" }]);
+  assert.equal(deletePreview.changes.some((change) => change.operation === "delete" && change.alias === "doc"), true);
+  assert.equal(deletePreview.changes.filter((change) => change.operation === "detach").length, 2);
+  assert.equal(reloaded.root.documents.length, 3);
+  assert.equal(reloaded.root.documents[0].related.length, 1);
+
+  const deleted = await reloaded.gvql('MATCH (doc:Document) WHERE doc.id = "doc-2" DELETE doc RETURN doc.id AS id');
+  assert.equal(deleted.kind, "update");
+  assert.deepEqual(deleted.rows, [{ id: "doc-2" }]);
+  assert.equal(reloaded.root.documents.length, 2);
+  assert.deepEqual(reloaded.root.documents.map((doc) => doc.id), ["doc-1", "doc-3"]);
+  assert.equal(reloaded.root.documents[0].related.length, 0);
+  assert.equal(deleted.changes.some((change) => change.operation === "delete" && change.alias === "doc"), true);
+
+  const deletedQuery = await reloaded.gvql('MATCH (doc:Document) WHERE doc.id = "doc-2" RETURN doc.id AS id');
+  assert.equal(deletedQuery.kind, "select");
+  assert.deepEqual(deletedQuery.rows, []);
+
   const verification = await reloaded.verify();
   assert.equal(verification.ok, true);
   await reloaded.shutdown();

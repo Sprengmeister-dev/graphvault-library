@@ -37,7 +37,7 @@ const result = await storage.gvql(`
 });
 ```
 
-GVQL supports graph traversal, indexed metadata and property filters, indexed equality/`IN` intersections and `OR` unions, parenthesized `WHERE`/`HAVING` logic with `NOT` and SQL-style `AND` precedence, grouping, aggregates, `RETURN DISTINCT`, `count(DISTINCT path)`, pagination, execution plans, and preview-first batch updates with `SET`, arithmetic `SET` expressions, and `REMOVE`. It is also what powers GraphVault Studio's search, inspection, and manipulation workflows.
+GVQL supports graph traversal, indexed metadata and property filters, indexed equality/`IN` intersections and `OR` unions, parenthesized `WHERE`/`HAVING` logic with `NOT` and SQL-style `AND` precedence, grouping, aggregates, `RETURN DISTINCT`, `count(DISTINCT path)`, pagination, execution plans, and preview-first batch updates with `SET`, arithmetic `SET` expressions, `REMOVE`, and `DELETE`. It is also what powers GraphVault Studio's search, inspection, and manipulation workflows.
 
 ## Why Use This Instead Of A Normal Database?
 
@@ -309,7 +309,7 @@ await storage.shutdown();
 
 ## GVQL Query And Batch Update
 
-GVQL is GraphVault's graph query language. It follows the shape of modern property-graph languages: `MATCH` object patterns, filter with `WHERE`, project with `RETURN`, and use `SET` for controlled batch updates.
+GVQL is GraphVault's graph query language. It follows the shape of modern property-graph languages: `MATCH` object patterns, filter with `WHERE`, project with `RETURN`, and use `SET`, `REMOVE`, or `DELETE` for controlled batch updates.
 
 ```ts
 const result = await storage.gvql(`
@@ -365,6 +365,19 @@ const cleanup = await storage.previewGvql(`
 `);
 ```
 
+Delete matched objects with parent-aware detach semantics:
+
+```ts
+const deletePreview = await storage.previewGvql(`
+  MATCH (doc:Document)
+  WHERE doc.status = "archived"
+  DELETE doc
+  RETURN doc.id AS id
+`);
+```
+
+`DELETE` removes every direct parent reference to the matched alias before deleting the object node. If an object has multiple parents, all direct parents are detached in the same transaction. Deleting the root object is blocked.
+
 Current GVQL supports:
 
 - node patterns: `(doc:Document)` or `(node)`
@@ -375,7 +388,7 @@ Current GVQL supports:
 - `GROUP BY` with `count`, `sum`, `avg`, `min`, `max`
 - `HAVING` over returned aliases for aggregate filtering, with `AND`, `OR`, `NOT`, and parentheses
 - `ORDER BY` paths and returned aliases, with multiple criteria plus `LIMIT` and `OFFSET`
-- `SET` for primitive field updates, arithmetic `SET` expressions over numeric values, and `REMOVE` for object-field cleanup
+- `SET` for primitive field updates, arithmetic `SET` expressions over numeric values, `REMOVE` for object-field cleanup, and parent-aware `DELETE alias`
 - type indexes, primitive-property index intersections, indexed `IN` unions, and indexed `OR` unions for common filters on the first matched node
 - indexed virtual metadata filters for `$id` and `$type`
 

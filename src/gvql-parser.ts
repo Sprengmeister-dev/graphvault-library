@@ -1,6 +1,7 @@
 import type {
   GvqlCompareOperator,
   GvqlBooleanExpression,
+  GvqlDeleteExpression,
   GvqlEdgePattern,
   GvqlHavingClause,
   GvqlLiteral,
@@ -19,7 +20,7 @@ import type {
   GvqlAggregateFunction,
 } from "./gvql-types.js";
 
-type ClauseName = "MATCH" | "WHERE" | "SET" | "REMOVE" | "RETURN" | "GROUP BY" | "HAVING" | "ORDER BY" | "LIMIT" | "OFFSET";
+type ClauseName = "MATCH" | "WHERE" | "SET" | "REMOVE" | "DELETE" | "RETURN" | "GROUP BY" | "HAVING" | "ORDER BY" | "LIMIT" | "OFFSET";
 
 export function parseGvql(source: string): GvqlStatement {
   const clauses = splitClauses(source);
@@ -29,17 +30,19 @@ export function parseGvql(source: string): GvqlStatement {
   }
   const set = clauses.get("SET") ? parseSetList(clauses.get("SET") as string) : [];
   const remove = clauses.get("REMOVE") ? parseRemoveList(clauses.get("REMOVE") as string) : [];
+  const deleteItems = clauses.get("DELETE") ? parseDeleteList(clauses.get("DELETE") as string) : [];
   const returnClause = clauses.get("RETURN")
     ? parseReturnClause(clauses.get("RETURN") as string)
-    : { returns: defaultReturns(set, remove), distinct: false };
+    : { returns: defaultReturns(set, remove, deleteItems), distinct: false };
   return {
-    kind: set.length > 0 || remove.length > 0 ? "update" : "select",
+    kind: set.length > 0 || remove.length > 0 || deleteItems.length > 0 ? "update" : "select",
     match: parseMatch(match),
     ...(clauses.get("WHERE") ? { where: parseWhere(clauses.get("WHERE") as string) } : {}),
     returns: returnClause.returns,
     distinct: returnClause.distinct,
     set,
     remove,
+    delete: deleteItems,
     ...(clauses.get("ORDER BY") ? { orderBy: parseOrderBy(clauses.get("ORDER BY") as string) } : {}),
     ...(clauses.get("GROUP BY") ? { groupBy: parseGroupBy(clauses.get("GROUP BY") as string) } : {}),
     ...(clauses.get("HAVING") ? { having: parseHaving(clauses.get("HAVING") as string) } : {}),
@@ -51,7 +54,7 @@ export function parseGvql(source: string): GvqlStatement {
 function splitClauses(source: string): Map<ClauseName, string> {
   const normalized = source.trim().replace(/;$/, "");
   const matches: Array<{ name: ClauseName; index: number; end: number }> = [];
-  for (const name of ["MATCH", "WHERE", "SET", "REMOVE", "RETURN", "GROUP BY", "HAVING", "ORDER BY", "LIMIT", "OFFSET"] as ClauseName[]) {
+  for (const name of ["MATCH", "WHERE", "SET", "REMOVE", "DELETE", "RETURN", "GROUP BY", "HAVING", "ORDER BY", "LIMIT", "OFFSET"] as ClauseName[]) {
     const found = findKeyword(normalized, name);
     if (found >= 0) {
       matches.push({ name, index: found, end: found + name.length });
@@ -236,6 +239,16 @@ function parseRemoveList(input: string): GvqlRemoveExpression[] {
   return splitComma(input).map((item) => ({ target: parsePathExpression(item) }));
 }
 
+function parseDeleteList(input: string): GvqlDeleteExpression[] {
+  return splitComma(input).map((item) => {
+    const alias = item.trim();
+    if (!/^[A-Za-z_][\w]*$/.test(alias)) {
+      throw new Error(`GVQL DELETE expects aliases, for example DELETE doc. Invalid item: "${item}".`);
+    }
+    return { alias };
+  });
+}
+
 function parseReturnClause(input: string): { returns: GvqlReturnExpression[]; distinct: boolean } {
   const trimmed = input.trim();
   const distinct = keywordAt(trimmed, 0, "DISTINCT");
@@ -308,8 +321,8 @@ function parseOffset(input: string): number {
   return value;
 }
 
-function defaultReturns(set: GvqlSetExpression[], remove: GvqlRemoveExpression[] = []): GvqlReturnExpression[] {
-  return set.length > 0 || remove.length > 0 ? [{ kind: "count", aliasName: "changed" }] : [{ kind: "all" }];
+function defaultReturns(set: GvqlSetExpression[], remove: GvqlRemoveExpression[] = [], deleteItems: GvqlDeleteExpression[] = []): GvqlReturnExpression[] {
+  return set.length > 0 || remove.length > 0 || deleteItems.length > 0 ? [{ kind: "count", aliasName: "changed" }] : [{ kind: "all" }];
 }
 
 function parsePathExpression(input: string): GvqlPathExpression {

@@ -1,8 +1,9 @@
 import { performance } from "node:perf_hooks";
 import { projectGvqlRows } from "./gvql-aggregation.js";
 import { buildGvqlGraphIndex, propertyIndexKey } from "./gvql-index.js";
-import { encodedValueToJs, getNodePath, jsValueToEncoded, literalToJs, nodeSummary, removeNodePath, setNodePath } from "./gvql-values.js";
-import type { EncodedNode, EncodedValue, SerializedEnvelope } from "./types.js";
+import { applyGvqlMutations } from "./gvql-mutations.js";
+import { encodedValueToJs, getNodePath, literalToJs, nodeSummary } from "./gvql-values.js";
+import type { EncodedNode, SerializedEnvelope } from "./types.js";
 import type {
   GvqlBinding,
   GvqlBooleanExpression,
@@ -10,11 +11,9 @@ import type {
   GvqlExecutionPlan,
   GvqlGraphEdge,
   GvqlGraphIndex,
-  GvqlMutationPreview,
   GvqlPredicate,
   GvqlResult,
   GvqlRowPredicate,
-  GvqlSetValueExpression,
   GvqlStatement,
 } from "./gvql-types.js";
 
@@ -59,8 +58,9 @@ export function executeGvqlStatement(envelope: SerializedEnvelope, statement: Gv
     throw new Error("GVQL update statements require allowMutations.");
   }
   const limitedBindings = applyBindingOrderingAndLimit(index, bindings, statement);
-  const changes = applyMutations(index, limitedBindings, statement, options);
-  const rows = projectGvqlRows(index, limitedBindings, statement, readPath, readNode);
+  const deleteRows = statement.delete.length > 0 ? projectGvqlRows(index, limitedBindings, statement, readPath, readNode) : undefined;
+  const changes = applyGvqlMutations(index, limitedBindings, statement, options, readPath);
+  const rows = deleteRows ?? projectGvqlRows(index, limitedBindings, statement, readPath, readNode);
   const plan = completePlan(matched.plan, bindings, rows.length);
   return {
     kind: "update",
@@ -419,95 +419,6 @@ function evaluateRowPredicate(row: Record<string, unknown>, predicate: GvqlRowPr
   return false;
 }
 
-function applyMutations(index: GvqlGraphIndex, bindings: GvqlBinding[], statement: GvqlStatement, options: GvqlExecutionOptions): GvqlMutationPreview[] {
-  const changes: GvqlMutationPreview[] = [];
-  changes.push(...applySet(index, bindings, statement, options));
-  changes.push(...applyRemove(index, bindings, statement, options));
-  return changes;
-}
-
-function applySet(index: GvqlGraphIndex, bindings: GvqlBinding[], statement: GvqlStatement, options: GvqlExecutionOptions): GvqlMutationPreview[] {
-  const changes: GvqlMutationPreview[] = [];
-  for (const binding of bindings) {
-    for (const item of statement.set) {
-      const objectId = binding[item.target.alias];
-      if (!objectId) continue;
-      const node = objectId ? index.envelope.nodes[objectId] : undefined;
-      if (!node) continue;
-      const beforeEncoded = getNodePath(node, item.target.path);
-      const next = evaluateSetValue(index, binding, item.value, options.parameters ?? {});
-      const afterEncoded = jsValueToEncoded(next);
-      changes.push({
-        objectId: objectId,
-        alias: item.target.alias,
-        path: item.target.path ?? "",
-        before: encodedValueToJs(beforeEncoded),
-        after: encodedValueToJs(afterEncoded),
-      });
-      if (!options.dryRun) {
-        setNodePath(node, item.target.path, afterEncoded);
-      }
-    }
-  }
-  return changes;
-}
-
-function evaluateSetValue(
-  index: GvqlGraphIndex,
-  binding: GvqlBinding,
-  expression: GvqlSetValueExpression,
-  parameters: Record<string, unknown>,
-): unknown {
-  if (isBinarySetExpression(expression)) {
-    const left = evaluateSetValue(index, binding, expression.left, parameters);
-    const right = evaluateSetValue(index, binding, expression.right, parameters);
-    if (typeof left !== "number" || typeof right !== "number") {
-      throw new Error("GVQL arithmetic SET expressions require numeric operands.");
-    }
-    switch (expression.operator) {
-      case "+":
-        return left + right;
-      case "-":
-        return left - right;
-      case "*":
-        return left * right;
-      case "/":
-        return left / right;
-    }
-  }
-  return isPathExpression(expression) ? readPath(index, binding, expression) : literalToJs(expression, parameters);
-}
-
-function applyRemove(index: GvqlGraphIndex, bindings: GvqlBinding[], statement: GvqlStatement, options: GvqlExecutionOptions): GvqlMutationPreview[] {
-  const changes: GvqlMutationPreview[] = [];
-  for (const binding of bindings) {
-    for (const item of statement.remove) {
-      const objectId = binding[item.target.alias];
-      if (!objectId) continue;
-      const node = index.envelope.nodes[objectId];
-      if (!node) continue;
-      if (node.kind !== "object") {
-        throw new Error(`GVQL REMOVE currently supports object fields, not ${node.kind} nodes.`);
-      }
-      const beforeEncoded = getNodePath(node, item.target.path);
-      const preview = {
-        objectId,
-        alias: item.target.alias,
-        path: item.target.path ?? "",
-        before: encodedValueToJs(beforeEncoded),
-        after: undefined,
-      };
-      if (options.dryRun) {
-        if (typeof beforeEncoded !== "undefined") changes.push(preview);
-        continue;
-      }
-      const removed = removeNodePath(node, item.target.path);
-      if (removed.removed) changes.push(preview);
-    }
-  }
-  return changes;
-}
-
 function readPath(index: GvqlGraphIndex, binding: GvqlBinding, expression: { alias: string; path?: string }): unknown {
   const objectId = binding[expression.alias];
   if (!objectId) return undefined;
@@ -537,10 +448,6 @@ function readNode(index: GvqlGraphIndex, objectId: string | undefined): unknown 
 
 function isPathExpression(value: unknown): value is { alias: string; path?: string } {
   return Boolean(value && typeof value === "object" && "alias" in value);
-}
-
-function isBinarySetExpression(value: unknown): value is Extract<GvqlSetValueExpression, { kind: "binary" }> {
-  return Boolean(value && typeof value === "object" && "kind" in value && value.kind === "binary");
 }
 
 function isRowReference(value: unknown): value is { aliasName: string } {
