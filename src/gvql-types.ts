@@ -139,7 +139,7 @@ export interface GvqlExecutionOptions {
   dryRun?: boolean;
 }
 
-export type GvqlCandidateSource = "property-index" | "type-index" | "full-scan";
+export type GvqlCandidateSource = "property-index" | "type-index" | "id-index" | "full-scan";
 
 export interface GvqlExecutionPlan {
   nodeCount: number;

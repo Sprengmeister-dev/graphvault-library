@@ -18,8 +18,7 @@ import type {
 
 interface IndexedCandidateSelection {
   path: string;
-  key: string;
-  value: unknown;
+  source: Extract<GvqlExecutionPlan["candidateSource"], "property-index" | "type-index" | "id-index">;
   objectIds: string[];
   propertyIndexes: NonNullable<GvqlExecutionPlan["propertyIndexes"]>;
   operation: string;
@@ -174,9 +173,10 @@ function candidates(
     .sort((a, b) => a.objectIds.length - b.objectIds.length);
   const allowed = intersectCandidates(indexedCandidates.map((item) => item.objectIds));
   const propertyIndexes = indexedCandidates.flatMap((item) => item.propertyIndexes);
+  const source = indexedCandidates.find((item) => item.source === "property-index")?.source ?? indexedCandidates[0]?.source ?? (type ? "type-index" : "full-scan");
   return {
     objectIds: typeCandidates.filter((objectId) => allowed.has(objectId)),
-    source: "property-index",
+    source,
     ...(propertyIndexes[0] ? { propertyIndex: { path: propertyIndexes[0].path, key: propertyIndexes[0].key, value: propertyIndexes[0].value } } : {}),
     propertyIndexes,
     operations: [
@@ -191,13 +191,18 @@ function indexedCandidateSelection(
   index: GvqlGraphIndex,
   item: { path: string; keyValues: Array<{ key: string; value: unknown }> },
 ): IndexedCandidateSelection {
+  if (item.path === "$id") {
+    return metadataCandidateSelection(index, item, "id-index");
+  }
+  if (item.path === "$type") {
+    return metadataCandidateSelection(index, item, "type-index");
+  }
   const keyedCandidates = item.keyValues.map(({ key, value }) => ({ key, value, objectIds: index.byProperty.get(key) ?? [] }));
   if (keyedCandidates.length === 1) {
     const only = keyedCandidates[0] as { key: string; value: unknown; objectIds: string[] };
     return {
       path: item.path,
-      key: only.key,
-      value: only.value,
+      source: "property-index",
       objectIds: only.objectIds,
       propertyIndexes: [{ path: item.path, key: only.key, value: only.value, candidates: only.objectIds.length }],
       operation: `property-index:${item.path}`,
@@ -214,8 +219,7 @@ function indexedCandidateSelection(
   }
   return {
     path: item.path,
-    key: keyedCandidates.map((candidate) => candidate.key).join("|"),
-    value: keyedCandidates.map((candidate) => candidate.value),
+    source: "property-index",
     objectIds: union,
     propertyIndexes: keyedCandidates.map((candidate) => ({
       path: item.path,
@@ -225,6 +229,40 @@ function indexedCandidateSelection(
     })),
     operation: `property-index-union:${item.path}:${keyedCandidates.length}`,
   };
+}
+
+function metadataCandidateSelection(
+  index: GvqlGraphIndex,
+  item: { path: string; keyValues: Array<{ key: string; value: unknown }> },
+  source: Extract<GvqlExecutionPlan["candidateSource"], "type-index" | "id-index">,
+): IndexedCandidateSelection {
+  const lists = item.keyValues.map(({ value }) => {
+    if (source === "id-index") {
+      return typeof value === "string" && index.nodes.has(value) ? [value] : [];
+    }
+    return typeof value === "string" ? index.byType.get(value) ?? [] : [];
+  });
+  const objectIds = unionCandidates(lists);
+  return {
+    path: item.path,
+    source,
+    objectIds,
+    propertyIndexes: [],
+    operation: item.keyValues.length > 1 ? `${source}-union:${item.path}:${item.keyValues.length}` : `${source}:${String(item.keyValues[0]?.value ?? "unknown")}`,
+  };
+}
+
+function unionCandidates(candidateLists: string[][]): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const candidates of candidateLists) {
+    for (const objectId of candidates) {
+      if (seen.has(objectId)) continue;
+      seen.add(objectId);
+      result.push(objectId);
+    }
+  }
+  return result;
 }
 
 function matchesType(index: GvqlGraphIndex, objectId: string, type: string | undefined): boolean {

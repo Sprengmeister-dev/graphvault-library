@@ -116,6 +116,29 @@ try {
     },
     { type: "Document", kind: "object" },
   );
+  const firstDocumentObjectId = metadataQuery.rows[0].objectId;
+
+  const metadataTypeFilter = await reloaded.gvql(`
+    MATCH (node)
+    WHERE node.$type IN ["Document"]
+    RETURN count(*) AS count
+  `);
+  assert.equal(metadataTypeFilter.kind, "select");
+  assert.deepEqual(metadataTypeFilter.rows, [{ count: 3 }]);
+  assert.equal(metadataTypeFilter.plan.candidateSource, "type-index");
+  assert.equal(metadataTypeFilter.plan.operations.includes("type-index:Document"), true);
+
+  const metadataIdFilter = await reloaded.gvql(
+    `
+      MATCH (node)
+      WHERE node.$id = $objectId
+      RETURN node.$id AS objectId
+    `,
+    { parameters: { objectId: firstDocumentObjectId } },
+  );
+  assert.equal(metadataIdFilter.kind, "select");
+  assert.deepEqual(metadataIdFilter.rows, [{ objectId: firstDocumentObjectId }]);
+  assert.equal(metadataIdFilter.plan.candidateSource, "id-index");
 
   const distinct = await reloaded.gvql(`
     MATCH (doc:Document)
