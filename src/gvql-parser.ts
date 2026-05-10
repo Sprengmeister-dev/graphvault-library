@@ -449,6 +449,8 @@ function parseValueOrPath(input: string): GvqlLiteral | GvqlPathExpression {
 
 function parseValueExpression(input: string): GvqlValueExpression {
   const trimmed = stripOuterParentheses(input.trim());
+  const caseExpression = parseCaseExpression(trimmed);
+  if (caseExpression) return caseExpression;
   const additive = findTopLevelArithmeticOperator(trimmed, ["+", "-"]);
   if (additive) {
     return {
@@ -470,6 +472,38 @@ function parseValueExpression(input: string): GvqlValueExpression {
   const call = parseFunctionCall(trimmed);
   if (call) return call;
   return parseValueOrPath(trimmed);
+}
+
+function parseCaseExpression(input: string): Extract<GvqlValueExpression, { kind: "case" }> | undefined {
+  if (!keywordAt(input, 0, "CASE")) return undefined;
+  const endIndex = lastTopLevelCaseEnd(input);
+  if (endIndex < 0 || input.slice(endIndex + "END".length).trim()) {
+    throw new Error('GVQL CASE expressions must end with "END".');
+  }
+  const body = input.slice("CASE".length, endIndex).trim();
+  if (!keywordAt(body, 0, "WHEN")) {
+    throw new Error('GVQL CASE expressions require at least one "WHEN ... THEN ..." branch.');
+  }
+  const branches: Array<{ when: GvqlWhereClause; then: GvqlValueExpression }> = [];
+  let cursor = 0;
+  while (keywordAt(body, cursor, "WHEN")) {
+    const thenIndex = findTopLevelCaseKeyword(body, "THEN", cursor + "WHEN".length);
+    if (thenIndex < 0) throw new Error('GVQL CASE branch requires "THEN".');
+    const condition = body.slice(cursor + "WHEN".length, thenIndex).trim();
+    const valueStart = thenIndex + "THEN".length;
+    const nextWhen = findTopLevelCaseKeyword(body, "WHEN", valueStart);
+    const elseIndex = findTopLevelCaseKeyword(body, "ELSE", valueStart);
+    const valueEnd = elseIndex >= 0 && (nextWhen < 0 || elseIndex < nextWhen) ? elseIndex : nextWhen >= 0 ? nextWhen : body.length;
+    branches.push({ when: parseWhere(condition), then: parseValueExpression(body.slice(valueStart, valueEnd).trim()) });
+    if (elseIndex >= 0 && elseIndex === valueEnd) {
+      const fallback = body.slice(elseIndex + "ELSE".length).trim();
+      if (!fallback) throw new Error("GVQL CASE ELSE requires a value expression.");
+      return { kind: "case", branches, else: parseValueExpression(fallback) };
+    }
+    if (nextWhen < 0) return { kind: "case", branches };
+    cursor = nextWhen;
+  }
+  throw new Error("Invalid GVQL CASE expression.");
 }
 
 function parseFunctionCall(input: string): GvqlValueExpression | undefined {
@@ -533,10 +567,15 @@ function isValueExpression(input: string): boolean {
       trimmed === "true" ||
       trimmed === "false" ||
       /^-?\d+(?:\.\d+)?$/.test(trimmed) ||
+      isCaseExpressionSource(trimmed) ||
       isFunctionExpressionSource(trimmed) ||
       (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
       (trimmed.startsWith("'") && trimmed.endsWith("'")),
   );
+}
+
+function isCaseExpressionSource(input: string): boolean {
+  return keywordAt(input, 0, "CASE") && lastTopLevelCaseEnd(input) >= 0;
 }
 
 function isFunctionExpressionSource(input: string): boolean {
@@ -546,6 +585,66 @@ function isFunctionExpressionSource(input: string): boolean {
 
 function isPathExpressionSource(input: string): boolean {
   return /^[A-Za-z_][\w]*(?:\.[A-Za-z_$][\w$]*)+$/.test(input.trim());
+}
+
+function lastTopLevelCaseEnd(input: string): number {
+  let depth = 0;
+  let nestedCases = 0;
+  let last = -1;
+  for (let index = "CASE".length; index < input.length; index++) {
+    if (isQuoted(input, index)) continue;
+    const char = input[index];
+    if (char === "(" || char === "[") {
+      depth++;
+      continue;
+    }
+    if (char === ")" || char === "]") {
+      depth--;
+      continue;
+    }
+    if (depth !== 0) continue;
+    if (keywordAt(input, index, "CASE")) {
+      nestedCases++;
+      index += "CASE".length - 1;
+      continue;
+    }
+    if (keywordAt(input, index, "END")) {
+      if (nestedCases > 0) nestedCases--;
+      else last = index;
+      index += "END".length - 1;
+    }
+  }
+  return last;
+}
+
+function findTopLevelCaseKeyword(input: string, keyword: "WHEN" | "THEN" | "ELSE", start = 0): number {
+  let depth = 0;
+  let nestedCases = 0;
+  for (let index = start; index < input.length; index++) {
+    if (isQuoted(input, index)) continue;
+    const char = input[index];
+    if (char === "(" || char === "[") {
+      depth++;
+      continue;
+    }
+    if (char === ")" || char === "]") {
+      depth--;
+      continue;
+    }
+    if (depth !== 0) continue;
+    if (keywordAt(input, index, "CASE")) {
+      nestedCases++;
+      index += "CASE".length - 1;
+      continue;
+    }
+    if (keywordAt(input, index, "END") && nestedCases > 0) {
+      nestedCases--;
+      index += "END".length - 1;
+      continue;
+    }
+    if (nestedCases === 0 && keywordAt(input, index, keyword)) return index;
+  }
+  return -1;
 }
 
 function splitComma(input: string): string[] {

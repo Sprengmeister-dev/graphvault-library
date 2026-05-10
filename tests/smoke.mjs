@@ -292,6 +292,23 @@ try {
     },
   ]);
 
+  const caseExpression = await reloaded.gvql(`
+    MATCH (doc:Document)
+    RETURN doc.id AS id,
+      CASE
+        WHEN doc.views >= 100 THEN "hot"
+        WHEN doc.archivedAt IS NOT NULL THEN "archived"
+        ELSE "active"
+      END AS bucket
+    ORDER BY id ASC
+  `);
+  assert.equal(caseExpression.kind, "select");
+  assert.deepEqual(caseExpression.rows, [
+    { id: "doc-1", bucket: "active" },
+    { id: "doc-2", bucket: "archived" },
+    { id: "doc-3", bucket: "hot" },
+  ]);
+
   const aggregate = await reloaded.gvql(`
     MATCH (doc:Document)
     RETURN doc.status AS status, count(*) AS count, count(doc.views) AS viewed, sum(doc.views) AS views, avg(doc.views) AS avgViews
@@ -427,6 +444,30 @@ try {
   assert.equal(arithmeticPreview.changes[0].before, 15);
   assert.equal(arithmeticPreview.changes[0].after, 40);
   assert.equal(reloaded.root.documents[1].views, 15);
+
+  const caseUpdatePreview = await reloaded.previewGvql(`
+    MATCH (doc:Document)
+    SET doc.status =
+      CASE
+        WHEN doc.views >= 100 THEN "featured"
+        WHEN doc.archivedAt IS NOT NULL THEN "archived"
+        ELSE doc.status
+      END
+    RETURN doc.id AS id, doc.status AS status
+  `);
+  assert.equal(caseUpdatePreview.kind, "update");
+  assert.equal(caseUpdatePreview.dryRun, true);
+  assert.equal(caseUpdatePreview.changed, 3);
+  assert.deepEqual(
+    caseUpdatePreview.changes.map((change) => ({ before: change.before, after: change.after })).sort((a, b) => String(a.after).localeCompare(String(b.after))),
+    [
+      { before: "draft", after: "archived" },
+      { before: "draft", after: "draft" },
+      { before: "published", after: "featured" },
+    ],
+  );
+  assert.equal(reloaded.root.documents[1].status, "draft");
+  assert.equal(reloaded.root.documents[2].status, "published");
 
   const functionSetPreview = await reloaded.previewGvql(
     'MATCH (doc:Document) WHERE doc.id = "doc-1" SET doc.status = lower(trim($status)) RETURN doc.id AS id',

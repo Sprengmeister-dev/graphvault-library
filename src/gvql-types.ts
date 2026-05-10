@@ -84,7 +84,8 @@ export type GvqlValueExpression =
   | GvqlLiteral
   | GvqlPathExpression
   | { kind: "binary"; operator: GvqlArithmeticOperator; left: GvqlValueExpression; right: GvqlValueExpression }
-  | { kind: "function"; fn: GvqlScalarFunction; args: GvqlValueExpression[] };
+  | { kind: "function"; fn: GvqlScalarFunction; args: GvqlValueExpression[] }
+  | { kind: "case"; branches: Array<{ when: GvqlWhereClause; then: GvqlValueExpression }>; else?: GvqlValueExpression };
 
 export type GvqlSetValueExpression = GvqlValueExpression;
 

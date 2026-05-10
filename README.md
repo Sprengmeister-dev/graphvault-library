@@ -37,7 +37,7 @@ const result = await storage.gvql(`
 });
 ```
 
-GVQL supports graph traversal, comma-separated `MATCH` patterns for joins, `OPTIONAL MATCH` for left-join style graph expansion, indexed metadata and property filters, indexed equality/`IN` intersections and `OR` unions, parenthesized `WHERE`/`HAVING` logic with `NOT` and SQL-style `AND` precedence, computed `RETURN` expressions and scalar functions, grouping, aggregates, `RETURN DISTINCT`, `count(DISTINCT path)`, pagination, execution plans, and preview-first batch updates with `CREATE`, `SET`, arithmetic `SET` expressions, `REMOVE`, and `DELETE`. It is also what powers GraphVault Studio's search, inspection, and manipulation workflows.
+GVQL supports graph traversal, comma-separated `MATCH` patterns for joins, `OPTIONAL MATCH` for left-join style graph expansion, indexed metadata and property filters, indexed equality/`IN` intersections and `OR` unions, parenthesized `WHERE`/`HAVING` logic with `NOT` and SQL-style `AND` precedence, computed `RETURN` expressions, scalar functions, conditional `CASE` expressions, grouping, aggregates, `RETURN DISTINCT`, `count(DISTINCT path)`, pagination, execution plans, and preview-first batch updates with `CREATE`, `SET`, arithmetic/conditional `SET` expressions, `REMOVE`, and `DELETE`. It is also what powers GraphVault Studio's search, inspection, and manipulation workflows.
 
 ## Why Use This Instead Of A Normal Database?
 
@@ -347,7 +347,7 @@ const withOptionalLinks = await storage.gvql(`
 `);
 ```
 
-Normalize values inline with scalar functions in `WHERE`, `RETURN`, `SET`, and `CREATE` expressions:
+Normalize values inline with scalar functions in `WHERE`, `RETURN`, `SET`, and `CREATE` expressions, and use `CASE` for conditional projections or batch updates:
 
 ```ts
 const normalized = await storage.gvql(`
@@ -357,6 +357,16 @@ const normalized = await storage.gvql(`
 `, {
   parameters: { needle: "storage" },
 });
+
+const buckets = await storage.gvql(`
+  MATCH (doc:Document)
+  RETURN doc.id AS id,
+    CASE
+      WHEN doc.views >= 1000 THEN "hot"
+      WHEN doc.archivedAt IS NOT NULL THEN "archived"
+      ELSE "active"
+    END AS bucket
+`);
 ```
 
 Batch updates are explicit and can be previewed first:
@@ -435,11 +445,11 @@ Current GVQL supports:
 - `OPTIONAL MATCH` for left-join style relationship expansion
 - `WHERE` predicates with `=`, `!=`, `<`, `<=`, `>`, `>=`, `CONTAINS`, `STARTS WITH`, `ENDS WITH`, `IN`, `IS NULL`, `IS NOT NULL`, `AND`, `OR`, `NOT`, and parentheses
 - `$parameters`
-- `RETURN`, `RETURN DISTINCT`, aliases with `AS`, arithmetic computed expressions such as `(doc.views + $bonus) * 2 AS score`, scalar functions `lower`, `upper`, `trim`, `length`, `coalesce`, `count(*)`, `count(DISTINCT path)`, and virtual metadata paths `$id`, `$type`, `$kind`
+- `RETURN`, `RETURN DISTINCT`, aliases with `AS`, arithmetic computed expressions such as `(doc.views + $bonus) * 2 AS score`, conditional `CASE WHEN ... THEN ... ELSE ... END` expressions, scalar functions `lower`, `upper`, `trim`, `length`, `coalesce`, `count(*)`, `count(DISTINCT path)`, and virtual metadata paths `$id`, `$type`, `$kind`
 - `GROUP BY` with `count`, `sum`, `avg`, `min`, `max`
 - `HAVING` over returned aliases for aggregate filtering, with `AND`, `OR`, `NOT`, and parentheses
 - `ORDER BY` paths and returned aliases, with multiple criteria plus `LIMIT` and `OFFSET`
-- `CREATE (alias:Type { ... }) INTO parent.collection`, `SET` for primitive field updates, arithmetic `SET` expressions over numeric values, `REMOVE` for object-field cleanup, and parent-aware `DELETE alias`
+- `CREATE (alias:Type { ... }) INTO parent.collection`, `SET` for primitive field updates, arithmetic and `CASE`-based `SET` expressions, `REMOVE` for object-field cleanup, and parent-aware `DELETE alias`
 - type indexes, primitive-property index intersections, indexed `IN` unions, and indexed `OR` unions for common filters on the first matched node
 - indexed virtual metadata filters for `$id` and `$type`
 

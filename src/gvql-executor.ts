@@ -12,6 +12,7 @@ import type {
   GvqlExecutionPlan,
   GvqlGraphEdge,
   GvqlGraphIndex,
+  GvqlLiteral,
   GvqlMatchPattern,
   GvqlPathExpression,
   GvqlValueExpression,
@@ -617,7 +618,7 @@ function flattenLogicalPredicates(expression: GvqlBooleanExpression<GvqlPredicat
   return [...left, ...right];
 }
 
-function isLiteralExpression(value: GvqlValueExpression): value is Exclude<GvqlValueExpression, { alias: string; path?: string } | { kind: "binary" } | { kind: "function" }> {
+function isLiteralExpression(value: GvqlValueExpression): value is GvqlLiteral {
   return !isPathExpression(value) && !(value && typeof value === "object" && "kind" in value);
 }
 
