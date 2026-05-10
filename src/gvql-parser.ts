@@ -21,7 +21,20 @@ import type {
   GvqlAggregateFunction,
 } from "./gvql-types.js";
 
-type ClauseName = "MATCH" | "WHERE" | "SET" | "REMOVE" | "DELETE" | "CREATE" | "RETURN" | "GROUP BY" | "HAVING" | "ORDER BY" | "LIMIT" | "OFFSET";
+type ClauseName =
+  | "MATCH"
+  | "OPTIONAL MATCH"
+  | "WHERE"
+  | "SET"
+  | "REMOVE"
+  | "DELETE"
+  | "CREATE"
+  | "RETURN"
+  | "GROUP BY"
+  | "HAVING"
+  | "ORDER BY"
+  | "LIMIT"
+  | "OFFSET";
 
 export function parseGvql(source: string): GvqlStatement {
   const clauses = splitClauses(source);
@@ -41,6 +54,7 @@ export function parseGvql(source: string): GvqlStatement {
     kind: set.length > 0 || remove.length > 0 || deleteItems.length > 0 || create.length > 0 ? "update" : "select",
     match: matches[0] as GvqlMatchPattern,
     matches,
+    optionalMatches: clauses.get("OPTIONAL MATCH") ? parseMatchList(clauses.get("OPTIONAL MATCH") as string) : [],
     ...(clauses.get("WHERE") ? { where: parseWhere(clauses.get("WHERE") as string) } : {}),
     returns: returnClause.returns,
     distinct: returnClause.distinct,
@@ -59,7 +73,21 @@ export function parseGvql(source: string): GvqlStatement {
 function splitClauses(source: string): Map<ClauseName, string> {
   const normalized = source.trim().replace(/;$/, "");
   const matches: Array<{ name: ClauseName; index: number; end: number }> = [];
-  for (const name of ["MATCH", "WHERE", "SET", "REMOVE", "DELETE", "CREATE", "RETURN", "GROUP BY", "HAVING", "ORDER BY", "LIMIT", "OFFSET"] as ClauseName[]) {
+  for (const name of [
+    "MATCH",
+    "OPTIONAL MATCH",
+    "WHERE",
+    "SET",
+    "REMOVE",
+    "DELETE",
+    "CREATE",
+    "RETURN",
+    "GROUP BY",
+    "HAVING",
+    "ORDER BY",
+    "LIMIT",
+    "OFFSET",
+  ] as ClauseName[]) {
     const found = findKeyword(normalized, name);
     if (found >= 0) {
       matches.push({ name, index: found, end: found + name.length });

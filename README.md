@@ -37,7 +37,7 @@ const result = await storage.gvql(`
 });
 ```
 
-GVQL supports graph traversal, comma-separated `MATCH` patterns for joins, indexed metadata and property filters, indexed equality/`IN` intersections and `OR` unions, parenthesized `WHERE`/`HAVING` logic with `NOT` and SQL-style `AND` precedence, computed `RETURN` expressions, grouping, aggregates, `RETURN DISTINCT`, `count(DISTINCT path)`, pagination, execution plans, and preview-first batch updates with `CREATE`, `SET`, arithmetic `SET` expressions, `REMOVE`, and `DELETE`. It is also what powers GraphVault Studio's search, inspection, and manipulation workflows.
+GVQL supports graph traversal, comma-separated `MATCH` patterns for joins, `OPTIONAL MATCH` for left-join style graph expansion, indexed metadata and property filters, indexed equality/`IN` intersections and `OR` unions, parenthesized `WHERE`/`HAVING` logic with `NOT` and SQL-style `AND` precedence, computed `RETURN` expressions, grouping, aggregates, `RETURN DISTINCT`, `count(DISTINCT path)`, pagination, execution plans, and preview-first batch updates with `CREATE`, `SET`, arithmetic `SET` expressions, `REMOVE`, and `DELETE`. It is also what powers GraphVault Studio's search, inspection, and manipulation workflows.
 
 ## Why Use This Instead Of A Normal Database?
 
@@ -336,6 +336,17 @@ const joined = await storage.gvql(`
 });
 ```
 
+Use `OPTIONAL MATCH` when a relationship may be missing but the primary row should remain visible:
+
+```ts
+const withOptionalLinks = await storage.gvql(`
+  MATCH (doc:Document)
+  OPTIONAL MATCH (doc)-[:related]->(items)-[:*]->(related:Document)
+  RETURN doc.id AS id, related.id AS relatedId
+  ORDER BY doc.id ASC
+`);
+```
+
 Batch updates are explicit and can be previewed first:
 
 ```ts
@@ -409,6 +420,7 @@ Current GVQL supports:
 - node patterns: `(doc:Document)` or `(node)`
 - reference traversal: `-[:owner]->` and inverse traversal: `<-[:owner]-`
 - multiple comma-separated `MATCH` patterns where shared aliases act as join keys
+- `OPTIONAL MATCH` for left-join style relationship expansion
 - `WHERE` predicates with `=`, `!=`, `<`, `<=`, `>`, `>=`, `CONTAINS`, `STARTS WITH`, `ENDS WITH`, `IN`, `IS NULL`, `IS NOT NULL`, `AND`, `OR`, `NOT`, and parentheses
 - `$parameters`
 - `RETURN`, `RETURN DISTINCT`, aliases with `AS`, arithmetic computed expressions such as `(doc.views + $bonus) * 2 AS score`, `count(*)`, `count(DISTINCT path)`, and virtual metadata paths `$id`, `$type`, `$kind`

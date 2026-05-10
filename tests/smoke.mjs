@@ -109,6 +109,32 @@ try {
   assert.equal(multiMatchCrossJoin.statement.matches.length, 2);
   assert.equal(multiMatchCrossJoin.plan.operations.includes("property-index:status"), true);
 
+  const optionalMatch = await reloaded.gvql(`
+    MATCH (doc:Document)
+    OPTIONAL MATCH (doc)-[:related]->(items)-[:*]->(related:Document)
+    RETURN doc.id AS id, related.id AS relatedId
+    ORDER BY doc.id ASC
+  `);
+  assert.equal(optionalMatch.kind, "select");
+  assert.deepEqual(optionalMatch.rows, [
+    { id: "doc-1", relatedId: "doc-2" },
+    { id: "doc-2", relatedId: undefined },
+    { id: "doc-3", relatedId: undefined },
+  ]);
+  assert.equal(optionalMatch.statement.optionalMatches.length, 1);
+  assert.equal(optionalMatch.plan.operations.includes("optional-match:doc"), true);
+  assert.equal(optionalMatch.plan.operations.includes("optional-unmatched:2"), true);
+
+  const optionalMissing = await reloaded.gvql(`
+    MATCH (doc:Document)
+    OPTIONAL MATCH (doc)-[:related]->(items)-[:*]->(related:Document)
+    WHERE related.$id IS NULL
+    RETURN doc.id AS id
+    ORDER BY doc.id ASC
+  `);
+  assert.equal(optionalMissing.kind, "select");
+  assert.deepEqual(optionalMissing.rows, [{ id: "doc-2" }, { id: "doc-3" }]);
+
   const paged = await reloaded.gvql(`
     MATCH (doc:Document)
     RETURN doc.id AS id

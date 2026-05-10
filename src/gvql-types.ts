@@ -119,6 +119,7 @@ export interface GvqlStatement {
   kind: GvqlStatementKind;
   match: GvqlMatchPattern;
   matches: GvqlMatchPattern[];
+  optionalMatches: GvqlMatchPattern[];
   where?: GvqlWhereClause;
   returns: GvqlReturnExpression[];
   distinct: boolean;

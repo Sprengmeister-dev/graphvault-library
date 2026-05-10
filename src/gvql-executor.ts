@@ -106,6 +106,7 @@ function matchBindingsWithPlan(
   parameters: Record<string, unknown> = {},
 ): { bindings: GvqlBinding[]; plan: GvqlExecutionPlan } {
   const patterns = statement.matches.length ? statement.matches : [statement.match];
+  const optionalPatterns = statement.optionalMatches ?? [];
   let bindings: GvqlBinding[] = [{}];
   let firstSelection: ReturnType<typeof candidates> | undefined;
   const operations: string[] = patterns.length > 1 ? [`multi-match:${patterns.length}`] : [];
@@ -114,6 +115,11 @@ function matchBindingsWithPlan(
     const selection = candidates(index, statement, pattern, parameters);
     firstSelection ??= selection;
     bindings = matchPattern(index, pattern, bindings, selection, operations);
+    edgeSteps += pattern.chain.length;
+  }
+  for (const pattern of optionalPatterns) {
+    const selection = candidates(index, statement, pattern, parameters);
+    bindings = matchPattern(index, pattern, bindings, selection, operations, { optional: true });
     edgeSteps += pattern.chain.length;
   }
   const selection = firstSelection ?? {
@@ -151,20 +157,41 @@ function matchPattern(
   inputBindings: GvqlBinding[],
   selection: ReturnType<typeof candidates>,
   operations: string[],
+  options: { optional?: boolean } = {},
 ): GvqlBinding[] {
   const startCandidates = new Set(selection.objectIds);
-  let bindings: GvqlBinding[] = [];
   operations.push(...selection.operations);
+  if (options.optional) operations.push(`optional-match:${pattern.start.alias}`);
+  const matchedBindings: GvqlBinding[] = [];
+  let unmatched = 0;
+  recordPatternTraversals(pattern, operations);
   for (const binding of inputBindings) {
     const boundStart = binding[pattern.start.alias];
     const objectIds = boundStart ? [boundStart] : selection.objectIds;
+    let bindings: GvqlBinding[] = [];
     for (const objectId of objectIds) {
       if (!startCandidates.has(objectId) || !matchesType(index, objectId, pattern.start.type)) continue;
       bindings.push({ ...binding, [pattern.start.alias]: objectId });
     }
+    bindings = traversePatternChain(index, pattern, bindings);
+    if (bindings.length > 0) {
+      matchedBindings.push(...bindings);
+    } else if (options.optional) {
+      matchedBindings.push(binding);
+      unmatched++;
+    }
   }
+  if (unmatched > 0) operations.push(`optional-unmatched:${unmatched}`);
+  return matchedBindings;
+}
+
+function traversePatternChain(
+  index: GvqlGraphIndex,
+  pattern: GvqlMatchPattern,
+  inputBindings: GvqlBinding[],
+): GvqlBinding[] {
+  let bindings = inputBindings;
   for (const link of pattern.chain) {
-    operations.push(`${link.edge.direction === "out" ? "traverse" : "reverse-traverse"}:${link.edge.label ?? "*"}`);
     const nextBindings: GvqlBinding[] = [];
     for (const binding of bindings) {
       const fromId = binding[previousAlias(pattern, link)];
@@ -182,6 +209,12 @@ function matchPattern(
     bindings = nextBindings;
   }
   return bindings;
+}
+
+function recordPatternTraversals(pattern: GvqlMatchPattern, operations: string[]): void {
+  for (const link of pattern.chain) {
+    operations.push(`${link.edge.direction === "out" ? "traverse" : "reverse-traverse"}:${link.edge.label ?? "*"}`);
+  }
 }
 
 function previousAlias(pattern: GvqlMatchPattern, target: GvqlMatchPattern["chain"][number]): string {
