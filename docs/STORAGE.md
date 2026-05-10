@@ -18,7 +18,7 @@ const storage = await EmbeddedStorage.start({
 You can pass the target explicitly if you want to make the configuration obvious:
 
 ```ts
-import { EmbeddedStorage, LocalFilesystemTarget } from "graphvault";
+import { EmbeddedStorage, LocalFilesystemTarget } from "@sprengmeister/graphvault";
 
 const storage = await EmbeddedStorage.start({
   storageDirectory: "./data",
@@ -50,7 +50,7 @@ You can override the profile details with `objectRecordFormat`, `objectRecordWri
 Useful for tests and short-lived tools. Data disappears with the process.
 
 ```ts
-import { EmbeddedStorage, MemoryStorageTarget } from "graphvault";
+import { EmbeddedStorage, MemoryStorageTarget } from "@sprengmeister/graphvault";
 
 const target = new MemoryStorageTarget();
 
@@ -66,7 +66,7 @@ const storage = await EmbeddedStorage.start({
 `HttpStorageTarget` expects a storage service that exposes GraphVault-style object operations. Use this when your storage is behind an internal service or gateway.
 
 ```ts
-import { EmbeddedStorage, HttpStorageTarget } from "graphvault";
+import { EmbeddedStorage, HttpStorageTarget } from "@sprengmeister/graphvault";
 
 const storage = await EmbeddedStorage.start({
   storageDirectory: "main",
@@ -83,7 +83,7 @@ const storage = await EmbeddedStorage.start({
 Use `S3StorageTarget` with an adapter for AWS S3, MinIO, Cloudflare R2, or another compatible object store.
 
 ```ts
-import { EmbeddedStorage, S3StorageTarget } from "graphvault";
+import { EmbeddedStorage, S3StorageTarget } from "@sprengmeister/graphvault";
 
 const storage = await EmbeddedStorage.start({
   storageDirectory: "prod/app-store",
@@ -101,7 +101,7 @@ const storage = await EmbeddedStorage.start({
 `SqlStorageTarget` stores each GraphVault storage path as a row and uses a separate lock table for single-writer coordination. The adapter only needs to expose parameterized `execute(...)` calls, so you can wrap your preferred PostgreSQL, MySQL, SQLite, or other SQL client.
 
 ```ts
-import { EmbeddedStorage, SqlStorageTarget } from "graphvault";
+import { EmbeddedStorage, SqlStorageTarget } from "@sprengmeister/graphvault";
 
 const storage = await EmbeddedStorage.start({
   storageDirectory: "main",

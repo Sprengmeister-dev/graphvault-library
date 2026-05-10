@@ -12,11 +12,11 @@ GraphVault is an embedded TypeScript object-graph database for applications whos
 It is embedded, explicit, and TypeScript-first: you keep your domain model in memory, call `storeRoot()` or `store(object)` when you want durability, and GraphVault writes a verifiable object graph store.
 
 ```bash
-npm install graphvault@github:Sprengmeister-dev/graphvault-library
+npm install @sprengmeister/graphvault
 ```
 
 ```ts
-import { EmbeddedStorage } from "graphvault";
+import { EmbeddedStorage } from "@sprengmeister/graphvault";
 
 const storage = await EmbeddedStorage.start({
   storageDirectory: "./data",
@@ -94,32 +94,20 @@ GraphVault is not trying to replace Postgres, SQLite, MongoDB, or Redis. It is f
 
 ## Install
 
-From GitHub today:
+From npm:
 
 ```bash
-npm install github:Sprengmeister-dev/graphvault-library
+npm install @sprengmeister/graphvault
 ```
 
-Or pin the package name locally with an npm alias:
-
-```bash
-npm install graphvault@github:Sprengmeister-dev/graphvault-library
-```
-
-Registry publishing is planned. The unscoped npm name `graphvault` currently appears to be blocked by a previous unpublished package, so the first registry release may use `graphvault-library` or a scoped package name.
-
-Once published to the npm registry:
-
-```bash
-npm install graphvault
-```
+GraphVault requires Node.js 20 or newer and ships ESM JavaScript plus TypeScript declarations.
 
 ## Basic Usage
 
 GraphVault has one central concept: your application owns a root object. Everything reachable from that root can be stored as an object graph.
 
 ```ts
-import { EmbeddedStorage } from "graphvault";
+import { EmbeddedStorage } from "@sprengmeister/graphvault";
 
 interface AppRoot {
   documents: Array<{ id: string; title: string; tags: string[] }>;
@@ -150,7 +138,7 @@ node examples/basic.mjs
 Open the generated store with GraphVault Studio:
 
 ```bash
-npm install graphvault-studio@github:Sprengmeister-dev/graphvault-studio
+npm install @sprengmeister/graphvault-studio
 npx graphvault-studio --dir ./graphvault-example-store --port 4177
 ```
 

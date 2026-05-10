@@ -4,7 +4,7 @@ GraphVault can be registered once and injected as a normal Nest provider.
 
 ```ts
 import { Injectable, Module } from "@nestjs/common";
-import { GraphVaultModule, StorageManager } from "graphvault";
+import { GraphVaultModule, StorageManager } from "@sprengmeister/graphvault";
 
 class AppRoot {
   documents: Array<{ id: string; title: string }> = [];

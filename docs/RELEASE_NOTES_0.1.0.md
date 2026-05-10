@@ -16,13 +16,13 @@ GraphVault Library 0.1.0 is the first public TypeScript implementation of GraphV
 ## Install
 
 ```bash
-npm install graphvault@github:Sprengmeister-dev/graphvault-library
+npm install @sprengmeister/graphvault
 ```
 
 The package is ready for npm registry publishing. The intended import surface is:
 
 ```ts
-import { EmbeddedStorage, StorageManager } from "graphvault";
+import { EmbeddedStorage, StorageManager } from "@sprengmeister/graphvault";
 ```
 
 ## Quick Demo

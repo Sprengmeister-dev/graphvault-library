@@ -6,7 +6,7 @@ GraphVault is intentionally easy to wire into NestJS: import the module once, th
 
 ```ts
 import { Injectable, Module } from "@nestjs/common";
-import { GraphVaultModule, StorageManager } from "graphvault";
+import { GraphVaultModule, StorageManager } from "@sprengmeister/graphvault";
 
 interface AppRoot {
   documents: unknown[];
@@ -42,7 +42,7 @@ Use `forRootAsync(...)` when the directory, target, or options come from configu
 ```ts
 import { Module } from "@nestjs/common";
 import { ConfigModule, ConfigService } from "@nestjs/config";
-import { GraphVaultModule } from "graphvault";
+import { GraphVaultModule } from "@sprengmeister/graphvault";
 
 @Module({
   imports: [
@@ -67,7 +67,7 @@ For one store, direct `StorageManager<AppRoot>` injection is the cleanest option
 
 ```ts
 import { Inject, Injectable } from "@nestjs/common";
-import { GRAPHVAULT_MANAGER, StorageManager } from "graphvault";
+import { GRAPHVAULT_MANAGER, StorageManager } from "@sprengmeister/graphvault";
 
 @Injectable()
 export class GraphVaultRootService {

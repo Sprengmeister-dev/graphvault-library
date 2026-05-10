@@ -7,7 +7,7 @@
 Use one root object for the part of your application state that belongs together. Plain objects work, but classes are usually nicer for domain-heavy apps.
 
 ```ts
-import type { LazyRef } from "graphvault";
+import type { LazyRef } from "@sprengmeister/graphvault";
 
 class Workspace {
   documents: Document[] = [];
@@ -34,7 +34,7 @@ type AppRoot = Workspace;
 For a new store, `rootFactory` creates the initial root. For an existing store, GraphVault loads the persisted root and ignores the factory result.
 
 ```ts
-import { EmbeddedStorage } from "graphvault";
+import { EmbeddedStorage } from "@sprengmeister/graphvault";
 
 const storage = await EmbeddedStorage.start<AppRoot>({
   storageDirectory: "./data/graphvault",
