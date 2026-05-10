@@ -1,0 +1,181 @@
+# GraphVault Usage Guide
+
+## TypeScript Usage Guide
+
+### Model Your Root
+
+Use one root object for the part of your application state that belongs together. Plain objects work, but classes are usually nicer for domain-heavy apps.
+
+```ts
+import type { LazyRef } from "graphvault";
+
+class Workspace {
+  documents: Document[] = [];
+
+  constructor(readonly name: string) {}
+}
+
+class Document {
+  tags = new Set<string>();
+  related = new Map<string, Document>();
+  attachments = new Map<string, LazyRef<Buffer>>();
+
+  constructor(
+    readonly id: string,
+    public title: string,
+  ) {}
+}
+
+type AppRoot = Workspace;
+```
+
+### Start A Store
+
+For a new store, `rootFactory` creates the initial root. For an existing store, GraphVault loads the persisted root and ignores the factory result.
+
+```ts
+import { EmbeddedStorage } from "graphvault";
+
+const storage = await EmbeddedStorage.start<AppRoot>({
+  storageDirectory: "./data/graphvault",
+  rootFactory: () => new Workspace("Product"),
+});
+```
+
+For scripts, tests, and bootstrap code, passing a concrete root is often the shortest path:
+
+```ts
+const storage = await EmbeddedStorage.start({
+  storageDirectory: "./data/graphvault",
+  root: new Workspace("Product"),
+});
+```
+
+### Register Classes
+
+Register classes when you want loaded objects to keep their prototypes and methods.
+
+```ts
+const storage = await EmbeddedStorage.start<AppRoot>({
+  storageDirectory: "./data/graphvault",
+  rootFactory: () => new Workspace("Product"),
+  types: [
+    { name: "Workspace", ctor: Workspace },
+    { name: "Document", ctor: Document },
+  ],
+});
+```
+
+You can version and migrate classes:
+
+```ts
+{
+  name: "Document",
+  ctor: Document,
+  version: 2,
+  create: () => new Document("", ""),
+  migrate: (state, fromVersion) => {
+    if (fromVersion < 2) {
+      return { ...state, tags: [] };
+    }
+    return state;
+  },
+  hydrate: (target, state) => {
+    target.title = String(state.title ?? "");
+  },
+}
+```
+
+### Read And Write Data
+
+Mutate your root like normal TypeScript objects, then store explicitly.
+
+```ts
+const document = new Document("doc-1", "Storage design");
+document.tags.add("architecture");
+
+storage.root.documents.push(document);
+await storage.storeRoot();
+```
+
+For service methods, `update(...)` is the most convenient shape. It stores after the mutator succeeds and rolls the in-memory root back if the mutator throws.
+
+```ts
+await storage.update((root) => {
+  root.documents.push(new Document("doc-2", "Operational notes"));
+});
+```
+
+When you only want to mark specific objects as the write target, use `store(object)` or `storeAll(...)`.
+
+```ts
+document.title = "Storage design v2";
+await storage.store(document);
+
+await storage.storeAll(storage.root.documents);
+```
+
+### Batch Writes With A Storer
+
+Storers are useful when a workflow touches several objects and you want one commit at the end.
+
+```ts
+const storer = storage.createStorer();
+storer.store(storage.root);
+storer.storeAll(storage.root.documents);
+await storer.commit();
+```
+
+### Lazy Data
+
+Use `LazyRef` for large values that should live outside the main object graph until loaded.
+
+```ts
+const attachment = await storage.createLazyRef("attachments/doc-1", Buffer.from("content"));
+storage.root.documents[0].attachments.set("main", attachment);
+await storage.storeRoot();
+
+const bytes = await attachment.get();
+attachment.clear();
+```
+
+### Verification, Maintenance, And Backup
+
+```ts
+const verification = await storage.verify();
+if (!verification.ok) {
+  throw new Error(verification.errors.join("\n"));
+}
+
+await storage.maintain({ keepSnapshots: 2 });
+
+await storage.backup({
+  storageDirectory: "./backups/graphvault",
+});
+```
+
+### Read-Only Access
+
+Read-only mode is useful for admin jobs, export scripts, and safety checks. It does not acquire the writer lock and refuses mutations.
+
+```ts
+const storage = await EmbeddedStorage.start<AppRoot>({
+  storageDirectory: "./data/graphvault",
+  readOnly: true,
+  rootFactory: () => new Workspace("unused"),
+});
+```
+
+### Shutdown
+
+Always shut the manager down in CLIs, tests, and worker processes so locks and timers are released cleanly.
+
+```ts
+try {
+  await storage.update((root) => {
+    root.documents.push(new Document("doc-3", "Release checklist"));
+  });
+} finally {
+await storage.shutdown();
+}
+```

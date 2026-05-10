@@ -81,10 +81,15 @@
   },
   "keywords": [
     "graphvault",
+    "embedded-database",
+    "graph-database",
     "object-graph",
     "persistence",
+    "local-first",
     "typescript",
-    "nestjs"
+    "nestjs",
+    "gvql",
+    "storage"
   ],
   "license": "MIT",
   "engines": {
