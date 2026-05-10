@@ -165,6 +165,7 @@ Then open `http://127.0.0.1:4177`.
 - [API reference](./docs/API.md) - public entry points and important options.
 - [Benchmarks](./docs/BENCHMARKS.md) - reproducible performance numbers and write profiles.
 - [Release notes](./docs/RELEASE_NOTES_0.1.0.md) - package overview for the first public release.
+- [Publishing checklist](./docs/PUBLISHING.md) - local release checks, tagging, npm provenance, and GitHub topics.
 
 ## Performance
 
