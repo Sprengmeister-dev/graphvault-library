@@ -37,7 +37,7 @@ const result = await storage.gvql(`
 });
 ```
 
-GVQL supports graph traversal, comma-separated `MATCH` patterns for joins, `OPTIONAL MATCH` for left-join style graph expansion, indexed metadata and property filters, indexed equality/`IN` intersections and `OR` unions, parenthesized `WHERE`/`HAVING` logic with `NOT` and SQL-style `AND` precedence, `WITH` pipelines, computed `RETURN` expressions, scalar functions, conditional `CASE` expressions, grouping, aggregates, `RETURN DISTINCT`, `count(DISTINCT path)`, pagination, execution plans, and preview-first batch updates with `CREATE`, `SET`, arithmetic/conditional `SET` expressions, `REMOVE`, and `DELETE`. It is also what powers GraphVault Studio's search, inspection, and manipulation workflows.
+GVQL supports graph traversal, comma-separated `MATCH` patterns for joins, `OPTIONAL MATCH` for left-join style graph expansion, indexed metadata and property filters, indexed equality/`IN` intersections and `OR` unions, parenthesized `WHERE`/`HAVING` logic with `NOT` and SQL-style `AND` precedence, `WITH` pipelines, computed `RETURN` expressions, scalar functions, conditional `CASE` expressions, grouping, aggregates, `RETURN DISTINCT`, `count(DISTINCT path)`, pagination, execution plans, and preview-first batch updates with `CREATE`, idempotent `MERGE`, `SET`, arithmetic/conditional `SET` expressions, `REMOVE`, and `DELETE`. It is also what powers GraphVault Studio's search, inspection, and manipulation workflows.
 
 ## Why Use This Instead Of A Normal Database?
 
@@ -446,6 +446,17 @@ const createPreview = await storage.previewGvql(`
 
 `CREATE ... INTO` requires an array or set target, so the new object is reachable from the root graph immediately.
 
+Use `MERGE ... INTO ... ON alias.field` for idempotent imports. Existing objects in the target collection are bound and returned; missing objects are created and attached:
+
+```ts
+const importPreview = await storage.previewGvql(`
+  MATCH (workspace:Workspace)
+  WHERE workspace.name = "Developer docs"
+  MERGE (doc:Document { id: "doc-4", title: "Release checklist", status: "draft", views: 0 }) INTO workspace.documents ON doc.id
+  RETURN doc.id AS id, doc.title AS title
+`);
+```
+
 Current GVQL supports:
 
 - node patterns: `(doc:Document)` or `(node)`
@@ -459,7 +470,7 @@ Current GVQL supports:
 - `GROUP BY` with `count`, `sum`, `avg`, `min`, `max`
 - `HAVING` over returned aliases for aggregate filtering, with `AND`, `OR`, `NOT`, and parentheses
 - `ORDER BY` paths and returned aliases, with multiple criteria plus `LIMIT` and `OFFSET`
-- `CREATE (alias:Type { ... }) INTO parent.collection`, `SET` for primitive field updates, arithmetic and `CASE`-based `SET` expressions, `REMOVE` for object-field cleanup, and parent-aware `DELETE alias`
+- `CREATE (alias:Type { ... }) INTO parent.collection`, `MERGE (alias:Type { ... }) INTO parent.collection ON alias.field` for idempotent collection upserts, `SET` for primitive field updates, arithmetic and `CASE`-based `SET` expressions, `REMOVE` for object-field cleanup, and parent-aware `DELETE alias`
 - type indexes, primitive-property index intersections, indexed `IN` unions, and indexed `OR` unions for common filters on the first matched node
 - indexed virtual metadata filters for `$id` and `$type`
 

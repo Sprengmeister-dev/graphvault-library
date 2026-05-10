@@ -110,6 +110,10 @@ export interface GvqlCreateExpression {
   into: GvqlPathExpression;
 }
 
+export interface GvqlMergeExpression extends GvqlCreateExpression {
+  on: GvqlPathExpression;
+}
+
 export type GvqlOrderExpression =
   | { kind: "path"; expression: GvqlPathExpression }
   | { kind: "alias"; aliasName: string };
@@ -138,6 +142,7 @@ export interface GvqlStatement {
   remove: GvqlRemoveExpression[];
   delete: GvqlDeleteExpression[];
   create: GvqlCreateExpression[];
+  merge: GvqlMergeExpression[];
   orderBy?: GvqlOrderBy[];
   groupBy?: GvqlPathExpression[];
   having?: GvqlHavingClause;
@@ -220,7 +225,7 @@ export interface GvqlMutationPreview {
   path: string;
   before: unknown;
   after: unknown;
-  operation?: "set" | "remove" | "detach" | "delete" | "create" | "attach";
+  operation?: "set" | "remove" | "detach" | "delete" | "create" | "attach" | "merge";
 }
 
 export interface GvqlMutationResult {

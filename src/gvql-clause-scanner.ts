@@ -3,6 +3,7 @@ export type GvqlClauseName =
   | "OPTIONAL MATCH"
   | "WHERE"
   | "WITH"
+  | "MERGE"
   | "SET"
   | "REMOVE"
   | "DELETE"
@@ -27,6 +28,7 @@ const CLAUSE_NAMES: GvqlClauseName[] = [
   "MATCH",
   "WHERE",
   "WITH",
+  "MERGE",
   "REMOVE",
   "DELETE",
   "CREATE",

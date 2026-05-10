@@ -9,6 +9,7 @@ import type {
   GvqlLiteral,
   GvqlLogicalOperator,
   GvqlMatchPattern,
+  GvqlMergeExpression,
   GvqlOrderExpression,
   GvqlPathExpression,
   GvqlPredicate,
@@ -35,17 +36,18 @@ export function parseGvql(source: string): GvqlStatement {
   const remove = clauses.get("REMOVE") ? parseRemoveList(clauses.get("REMOVE") as string) : [];
   const deleteItems = clauses.get("DELETE") ? parseDeleteList(clauses.get("DELETE") as string) : [];
   const create = clauses.get("CREATE") ? parseCreateList(clauses.get("CREATE") as string) : [];
+  const merge = clauses.get("MERGE") ? parseMergeList(clauses.get("MERGE") as string) : [];
   const withClause = parseWithFromClauses(clauseList);
-  if (withClause && (set.length > 0 || remove.length > 0 || deleteItems.length > 0 || create.length > 0)) {
+  if (withClause && (set.length > 0 || remove.length > 0 || deleteItems.length > 0 || create.length > 0 || merge.length > 0)) {
     throw new Error("GVQL WITH is currently supported for read queries. Use RETURN directly for mutation previews.");
   }
   const rowAliases = withClause ? new Set(withClause.returns.map(returnExpressionOutputName).filter(Boolean) as string[]) : undefined;
   const returnClause = clauses.get("RETURN")
     ? parseReturnClause(clauses.get("RETURN") as string, rowAliases ? { rowAliases } : {})
-    : { returns: defaultReturns(set, remove, deleteItems, create), distinct: false };
+    : { returns: defaultReturns(set, remove, deleteItems, create, merge), distinct: false };
   const matches = parseMatchList(match);
   return {
-    kind: set.length > 0 || remove.length > 0 || deleteItems.length > 0 || create.length > 0 ? "update" : "select",
+    kind: set.length > 0 || remove.length > 0 || deleteItems.length > 0 || create.length > 0 || merge.length > 0 ? "update" : "select",
     match: matches[0] as GvqlMatchPattern,
     matches,
     optionalMatches: clauses.get("OPTIONAL MATCH") ? parseMatchList(clauses.get("OPTIONAL MATCH") as string) : [],
@@ -57,6 +59,7 @@ export function parseGvql(source: string): GvqlStatement {
     remove,
     delete: deleteItems,
     create,
+    merge,
     ...(clauses.get("ORDER BY") ? { orderBy: parseOrderBy(clauses.get("ORDER BY") as string) } : {}),
     ...(clauses.get("GROUP BY") ? { groupBy: parseGroupBy(clauses.get("GROUP BY") as string) } : {}),
     ...(clauses.get("HAVING") ? { having: parseHaving(clauses.get("HAVING") as string) } : {}),
@@ -271,6 +274,10 @@ function parseCreateList(input: string): GvqlCreateExpression[] {
   return splitComma(input).map(parseCreateItem);
 }
 
+function parseMergeList(input: string): GvqlMergeExpression[] {
+  return splitComma(input).map(parseMergeItem);
+}
+
 function parseCreateItem(input: string): GvqlCreateExpression {
   const intoIndex = findKeyword(input, "INTO");
   if (intoIndex < 0) {
@@ -288,6 +295,19 @@ function parseCreateItem(input: string): GvqlCreateExpression {
     props: parseObjectProperties(match[3] ?? ""),
     into,
   };
+}
+
+function parseMergeItem(input: string): GvqlMergeExpression {
+  const onIndex = findKeyword(input, "ON");
+  if (onIndex < 0) {
+    throw new Error("GVQL MERGE requires ON alias.field so existing objects can be matched.");
+  }
+  const create = parseCreateItem(input.slice(0, onIndex).trim());
+  const on = parsePathExpression(input.slice(onIndex + "ON".length).trim());
+  if (on.alias !== create.alias || !on.path) {
+    throw new Error(`GVQL MERGE ON must reference the merged alias, for example ON ${create.alias}.id.`);
+  }
+  return { ...create, on };
 }
 
 function parseObjectProperties(input: string): Record<string, GvqlValueExpression> {
@@ -407,8 +427,11 @@ function defaultReturns(
   remove: GvqlRemoveExpression[] = [],
   deleteItems: GvqlDeleteExpression[] = [],
   create: GvqlCreateExpression[] = [],
+  merge: GvqlMergeExpression[] = [],
 ): GvqlReturnExpression[] {
-  return set.length > 0 || remove.length > 0 || deleteItems.length > 0 || create.length > 0 ? [{ kind: "count", aliasName: "changed" }] : [{ kind: "all" }];
+  return set.length > 0 || remove.length > 0 || deleteItems.length > 0 || create.length > 0 || merge.length > 0
+    ? [{ kind: "count", aliasName: "changed" }]
+    : [{ kind: "all" }];
 }
 
 function parsePathExpression(input: string): GvqlPathExpression {

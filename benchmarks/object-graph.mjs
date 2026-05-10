@@ -127,6 +127,12 @@ async function benchmarkMemory(count) {
       { parameters: { views: 42 } },
     ),
   );
+  const gvqlMergePreview = await time(() =>
+    storage.previewGvql(
+      'MATCH (doc:Document) WHERE doc.id = 1 MERGE (merged:Document { id: 1000002, title: "Benchmark merge", status: "draft", views: $views }) INTO doc.related ON merged.id RETURN merged.id AS id',
+      { parameters: { views: 43 } },
+    ),
+  );
   const gvqlDeletePreview = await time(() =>
     storage.previewGvql('MATCH (doc:Document) WHERE doc.id = 1 DELETE doc RETURN doc.id AS id'),
   );
@@ -151,6 +157,7 @@ async function benchmarkMemory(count) {
     gvqlCaseExpressionMs: gvqlCaseExpression.ms,
     gvqlWithPipelineMs: gvqlWithPipeline.ms,
     gvqlCreatePreviewMs: gvqlCreatePreview.ms,
+    gvqlMergePreviewMs: gvqlMergePreview.ms,
     gvqlDeletePreviewMs: gvqlDeletePreview.ms,
     loadMs: load.ms,
     bytes: undefined,
@@ -216,6 +223,12 @@ async function benchmarkFilesystem(count) {
         { parameters: { views: 42 } },
       ),
     );
+    const gvqlMergePreview = await time(() =>
+      storage.previewGvql(
+        'MATCH (doc:Document) WHERE doc.id = 1 MERGE (merged:Document { id: 1000002, title: "Benchmark merge", status: "draft", views: $views }) INTO doc.related ON merged.id RETURN merged.id AS id',
+        { parameters: { views: 43 } },
+      ),
+    );
     const gvqlDeletePreview = await time(() =>
       storage.previewGvql('MATCH (doc:Document) WHERE doc.id = 1 DELETE doc RETURN doc.id AS id'),
     );
@@ -240,6 +253,7 @@ async function benchmarkFilesystem(count) {
       gvqlCaseExpressionMs: gvqlCaseExpression.ms,
       gvqlWithPipelineMs: gvqlWithPipeline.ms,
       gvqlCreatePreviewMs: gvqlCreatePreview.ms,
+      gvqlMergePreviewMs: gvqlMergePreview.ms,
       gvqlDeletePreviewMs: gvqlDeletePreview.ms,
       loadMs: load.ms,
       bytes: await directorySize(directory),
@@ -292,10 +306,10 @@ console.log(`Runtime: ${process.version}`);
 console.log(`Platform: ${process.platform} ${process.arch}`);
 console.log(`Date: ${new Date().toISOString()}`);
 console.log();
-console.log(`| target | documents | storeRoot | GVQL traversal | GVQL multi-match join | GVQL optional match | GVQL indexed aggregate | GVQL multi-index lookup | GVQL indexed IN lookup | GVQL indexed OR lookup | GVQL computed return | GVQL scalar functions | GVQL CASE expression | GVQL WITH pipeline | GVQL CREATE preview | GVQL DELETE preview | reload | storage size |`);
-console.log(`| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |`);
+console.log(`| target | documents | storeRoot | GVQL traversal | GVQL multi-match join | GVQL optional match | GVQL indexed aggregate | GVQL multi-index lookup | GVQL indexed IN lookup | GVQL indexed OR lookup | GVQL computed return | GVQL scalar functions | GVQL CASE expression | GVQL WITH pipeline | GVQL CREATE preview | GVQL MERGE preview | GVQL DELETE preview | reload | storage size |`);
+console.log(`| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |`);
 for (const row of rows) {
   console.log(
-    `| ${row.target} | ${row.count.toLocaleString("en-US")} | ${formatMs(row.storeMs)} | ${formatMs(row.gvqlMs)} | ${formatMs(row.gvqlMultiMatchMs)} | ${formatMs(row.gvqlOptionalMatchMs)} | ${formatMs(row.gvqlIndexedMs)} | ${formatMs(row.gvqlMultiIndexMs)} | ${formatMs(row.gvqlIndexedInMs)} | ${formatMs(row.gvqlIndexedOrMs)} | ${formatMs(row.gvqlComputedReturnMs)} | ${formatMs(row.gvqlScalarFunctionsMs)} | ${formatMs(row.gvqlCaseExpressionMs)} | ${formatMs(row.gvqlWithPipelineMs)} | ${formatMs(row.gvqlCreatePreviewMs)} | ${formatMs(row.gvqlDeletePreviewMs)} | ${formatMs(row.loadMs)} | ${formatBytes(row.bytes)} |`,
+    `| ${row.target} | ${row.count.toLocaleString("en-US")} | ${formatMs(row.storeMs)} | ${formatMs(row.gvqlMs)} | ${formatMs(row.gvqlMultiMatchMs)} | ${formatMs(row.gvqlOptionalMatchMs)} | ${formatMs(row.gvqlIndexedMs)} | ${formatMs(row.gvqlMultiIndexMs)} | ${formatMs(row.gvqlIndexedInMs)} | ${formatMs(row.gvqlIndexedOrMs)} | ${formatMs(row.gvqlComputedReturnMs)} | ${formatMs(row.gvqlScalarFunctionsMs)} | ${formatMs(row.gvqlCaseExpressionMs)} | ${formatMs(row.gvqlWithPipelineMs)} | ${formatMs(row.gvqlCreatePreviewMs)} | ${formatMs(row.gvqlMergePreviewMs)} | ${formatMs(row.gvqlDeletePreviewMs)} | ${formatMs(row.loadMs)} | ${formatBytes(row.bytes)} |`,
   );
 }

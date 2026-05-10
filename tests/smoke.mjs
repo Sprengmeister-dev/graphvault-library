@@ -606,6 +606,40 @@ try {
   assert.equal(createdQuery.kind, "select");
   assert.deepEqual(createdQuery.rows, [{ title: "Release checklist", views: 7 }]);
 
+  const mergeExistingPreview = await reloaded.previewGvql(`
+    MATCH (root)
+    WHERE root.documents IS NOT NULL
+    MERGE (doc:Document { id: "doc-4", title: "Duplicate should not be created", status: "draft", views: 99 }) INTO root.documents ON doc.id
+    RETURN doc.id AS id, doc.title AS title, doc.views AS views
+  `);
+  assert.equal(mergeExistingPreview.kind, "update");
+  assert.equal(mergeExistingPreview.dryRun, true);
+  assert.deepEqual(mergeExistingPreview.rows, [{ id: "doc-4", title: "Release checklist", views: 7 }]);
+  assert.equal(mergeExistingPreview.changed, 0);
+  assert.equal(reloaded.root.documents.length, 3);
+
+  const mergedNew = await reloaded.gvql(`
+    MATCH (root)
+    WHERE root.documents IS NOT NULL
+    MERGE (doc:Document { id: "doc-6", title: "Idempotent import", status: "draft", views: $views }) INTO root.documents ON doc.id
+    RETURN doc.id AS id, doc.title AS title
+  `, { parameters: { views: 3 } });
+  assert.equal(mergedNew.kind, "update");
+  assert.deepEqual(mergedNew.rows, [{ id: "doc-6", title: "Idempotent import" }]);
+  assert.equal(mergedNew.changes.some((change) => change.operation === "merge" && change.alias === "doc"), true);
+  assert.equal(reloaded.root.documents.length, 4);
+
+  const mergedExisting = await reloaded.gvql(`
+    MATCH (root)
+    WHERE root.documents IS NOT NULL
+    MERGE (doc:Document { id: "doc-6", title: "Idempotent import duplicated", status: "draft", views: 999 }) INTO root.documents ON doc.id
+    RETURN doc.id AS id, doc.title AS title, doc.views AS views
+  `);
+  assert.equal(mergedExisting.kind, "update");
+  assert.deepEqual(mergedExisting.rows, [{ id: "doc-6", title: "Idempotent import", views: 3 }]);
+  assert.equal(mergedExisting.changed, 0);
+  assert.equal(reloaded.root.documents.length, 4);
+
   const createdMissingCollection = await reloaded.gvql(
     `
       MATCH (root)

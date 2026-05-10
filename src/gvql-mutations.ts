@@ -22,6 +22,7 @@ export function applyGvqlMutations(
   changes.push(...applyRemove(index, bindings, statement, options));
   changes.push(...applyDelete(index, bindings, statement, options));
   changes.push(...applyCreate(index, bindings, statement, options, readPath));
+  changes.push(...applyMerge(index, bindings, statement, options, readPath));
   return changes;
 }
 
@@ -183,6 +184,104 @@ function applyCreate(
     }
   }
   return changes;
+}
+
+function applyMerge(
+  index: GvqlGraphIndex,
+  bindings: GvqlBinding[],
+  statement: GvqlStatement,
+  options: GvqlExecutionOptions,
+  readPath: GvqlPathReader,
+): GvqlMutationPreview[] {
+  if (statement.merge.length === 0) return [];
+  const changes: GvqlMutationPreview[] = [];
+  for (const binding of bindings) {
+    for (const item of statement.merge) {
+      const onPath = item.on.path;
+      if (!onPath) throw new Error(`GVQL MERGE ON must include a property path for alias "${item.alias}".`);
+      const props = evaluateProps(index, binding, item.props, options, readPath);
+      const matchValue = encodedValueToJs(getNodePath({ kind: "object", props }, onPath));
+      if (typeof matchValue === "undefined") {
+        throw new Error(`GVQL MERGE ON path "${item.on.alias}.${onPath}" must be present in the MERGE properties.`);
+      }
+      const existing = findMergeTarget(index, binding, item.into, onPath, matchValue);
+      if (existing) {
+        binding[item.alias] = existing;
+        continue;
+      }
+      const objectId = nextObjectId(index.envelope);
+      const node: EncodedNode & { kind: "object" } = {
+        kind: "object",
+        ...(item.type ? { type: item.type, version: 1 } : {}),
+        props,
+      };
+      index.envelope.nodes[objectId] = node;
+      binding[item.alias] = objectId;
+      changes.push({
+        objectId,
+        alias: item.alias,
+        path: onPath,
+        before: undefined,
+        after: nodeSummary(node),
+        operation: "merge",
+      });
+      changes.push(...attachCreatedObject(index, binding, item.into, objectId));
+    }
+  }
+  return changes;
+}
+
+function evaluateProps(
+  index: GvqlGraphIndex,
+  binding: GvqlBinding,
+  props: Record<string, Parameters<typeof evaluateGvqlValueExpression>[2]>,
+  options: GvqlExecutionOptions,
+  readPath: GvqlPathReader,
+): Record<string, EncodedValue> {
+  return Object.fromEntries(
+    Object.entries(props).map(([key, expression]) => [
+      key,
+      jsValueToEncoded(evaluateGvqlValueExpression(index, binding, expression, options.parameters ?? {}, readPath)),
+    ]),
+  );
+}
+
+function findMergeTarget(
+  index: GvqlGraphIndex,
+  binding: GvqlBinding,
+  target: { alias: string; path?: string },
+  onPath: string,
+  expected: unknown,
+): string | undefined {
+  const collection = resolveCollection(index, binding, target);
+  const candidates = collection.kind === "array" || collection.kind === "set" ? collection.items : [];
+  for (const candidate of candidates) {
+    if (!candidate || typeof candidate !== "object" || !("$ref" in candidate)) continue;
+    const node = index.envelope.nodes[candidate.$ref];
+    if (!node) continue;
+    if (sameMergeValue(encodedValueToJs(getNodePath(node, onPath)), expected)) return candidate.$ref;
+  }
+  return undefined;
+}
+
+function resolveCollection(index: GvqlGraphIndex, binding: GvqlBinding, target: { alias: string; path?: string }): EncodedNode {
+  const parentId = binding[target.alias];
+  if (!parentId) throw new Error(`GVQL MERGE INTO alias "${target.alias}" is not bound.`);
+  const parentNode = index.envelope.nodes[parentId];
+  if (!parentNode) throw new Error(`GVQL MERGE INTO parent "${target.alias}" does not exist.`);
+  if (!target.path) return parentNode;
+  const existing = getNodePath(parentNode, target.path);
+  if (existing && typeof existing === "object" && "$ref" in existing) {
+    const collection = index.envelope.nodes[existing.$ref];
+    if (!collection) throw new Error(`GVQL MERGE INTO target "${target.alias}.${target.path}" points to a missing node.`);
+    return collection;
+  }
+  if (typeof existing === "undefined") return { kind: "array", items: [] };
+  throw new Error(`GVQL MERGE INTO requires an array or set target at "${target.alias}.${target.path}".`);
+}
+
+function sameMergeValue(left: unknown, right: unknown): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
 }
 
 function attachCreatedObject(index: GvqlGraphIndex, binding: GvqlBinding, target: { alias: string; path?: string }, objectId: string): GvqlMutationPreview[] {
