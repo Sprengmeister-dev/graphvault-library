@@ -52,10 +52,11 @@ export interface GvqlPredicate {
   right: GvqlLiteral | GvqlPathExpression;
 }
 
-export interface GvqlWhereClause {
-  first: GvqlPredicate;
-  rest: Array<{ operator: GvqlLogicalOperator; predicate: GvqlPredicate }>;
-}
+export type GvqlBooleanExpression<TPredicate> =
+  | { kind: "predicate"; predicate: TPredicate }
+  | { kind: "logical"; operator: GvqlLogicalOperator; left: GvqlBooleanExpression<TPredicate>; right: GvqlBooleanExpression<TPredicate> };
+
+export type GvqlWhereClause = GvqlBooleanExpression<GvqlPredicate>;
 
 export interface GvqlRowReference {
   aliasName: string;
@@ -67,10 +68,7 @@ export interface GvqlRowPredicate {
   right: GvqlLiteral | GvqlRowReference;
 }
 
-export interface GvqlHavingClause {
-  first: GvqlRowPredicate;
-  rest: Array<{ operator: GvqlLogicalOperator; predicate: GvqlRowPredicate }>;
-}
+export type GvqlHavingClause = GvqlBooleanExpression<GvqlRowPredicate>;
 
 export type GvqlReturnExpression =
   | { kind: "all"; alias?: string; aliasName?: string }

@@ -188,6 +188,24 @@ try {
   assert.equal(nullFilter.kind, "select");
   assert.deepEqual(nullFilter.rows, [{ id: "doc-1" }, { id: "doc-3" }]);
 
+  const wherePrecedence = await reloaded.gvql(`
+    MATCH (doc:Document)
+    WHERE doc.id = "doc-1" OR doc.status = "published" AND doc.views > 50
+    RETURN doc.id AS id
+    ORDER BY doc.id ASC
+  `);
+  assert.equal(wherePrecedence.kind, "select");
+  assert.deepEqual(wherePrecedence.rows, [{ id: "doc-1" }, { id: "doc-3" }]);
+
+  const whereParentheses = await reloaded.gvql(`
+    MATCH (doc:Document)
+    WHERE (doc.id = "doc-1" OR doc.status = "published") AND doc.views > 50
+    RETURN doc.id AS id
+    ORDER BY doc.id ASC
+  `);
+  assert.equal(whereParentheses.kind, "select");
+  assert.deepEqual(whereParentheses.rows, [{ id: "doc-3" }]);
+
   const aggregate = await reloaded.gvql(`
     MATCH (doc:Document)
     RETURN doc.status AS status, count(*) AS count, count(doc.views) AS viewed, sum(doc.views) AS views, avg(doc.views) AS avgViews
@@ -218,6 +236,29 @@ try {
   assert.equal(having.kind, "select");
   assert.deepEqual(having.rows, [{ status: "draft", count: 2 }]);
   assert.equal(having.plan.operations.includes("having-filter"), true);
+
+  const havingPrecedence = await reloaded.gvql(`
+    MATCH (doc:Document)
+    RETURN doc.status AS status, count(*) AS count, avg(doc.views) AS avgViews
+    GROUP BY doc.status
+    HAVING status = "published" OR count >= 2 AND avgViews < 20
+    ORDER BY status ASC
+  `);
+  assert.equal(havingPrecedence.kind, "select");
+  assert.deepEqual(havingPrecedence.rows, [
+    { status: "draft", count: 2, avgViews: 12.5 },
+    { status: "published", count: 1, avgViews: 100 },
+  ]);
+
+  const havingParentheses = await reloaded.gvql(`
+    MATCH (doc:Document)
+    RETURN doc.status AS status, count(*) AS count, avg(doc.views) AS avgViews
+    GROUP BY doc.status
+    HAVING (status = "published" OR count >= 2) AND avgViews < 20
+    ORDER BY status ASC
+  `);
+  assert.equal(havingParentheses.kind, "select");
+  assert.deepEqual(havingParentheses.rows, [{ status: "draft", count: 2, avgViews: 12.5 }]);
 
   const indexed = await reloaded.gvql('MATCH (doc:Document) WHERE doc.id = $id RETURN doc.id AS id', { parameters: { id: "doc-2" } });
   assert.equal(indexed.kind, "select");

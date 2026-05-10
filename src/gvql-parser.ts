@@ -1,5 +1,6 @@
 import type {
   GvqlCompareOperator,
+  GvqlBooleanExpression,
   GvqlEdgePattern,
   GvqlHavingClause,
   GvqlLiteral,
@@ -109,27 +110,41 @@ function readEdge(input: string, start: number): { edge: GvqlEdgePattern; end: n
 }
 
 function parseWhere(input: string): GvqlWhereClause {
-  const parts = splitLogical(input);
-  if (parts.length === 0) {
-    throw new Error("GVQL WHERE is empty.");
-  }
-  const [first, ...rest] = parts as [{ text: string; operator?: GvqlLogicalOperator }, ...Array<{ text: string; operator?: GvqlLogicalOperator }>];
-  return {
-    first: parsePredicate(first.text),
-    rest: rest.map((part) => ({ operator: part.operator as GvqlLogicalOperator, predicate: parsePredicate(part.text) })),
-  };
+  return parseBooleanExpression(input, parsePredicate, "WHERE");
 }
 
 function parseHaving(input: string): GvqlHavingClause {
-  const parts = splitLogical(input);
-  if (parts.length === 0) {
-    throw new Error("GVQL HAVING is empty.");
+  return parseBooleanExpression(input, parseRowPredicate, "HAVING");
+}
+
+function parseBooleanExpression<TPredicate>(
+  input: string,
+  parseLeaf: (input: string) => TPredicate,
+  clauseName: "WHERE" | "HAVING",
+): GvqlBooleanExpression<TPredicate> {
+  const trimmed = stripOuterParentheses(input.trim());
+  if (!trimmed) {
+    throw new Error(`GVQL ${clauseName} is empty.`);
   }
-  const [first, ...rest] = parts as [{ text: string; operator?: GvqlLogicalOperator }, ...Array<{ text: string; operator?: GvqlLogicalOperator }>];
-  return {
-    first: parseRowPredicate(first.text),
-    rest: rest.map((part) => ({ operator: part.operator as GvqlLogicalOperator, predicate: parseRowPredicate(part.text) })),
-  };
+  const orIndex = findTopLevelLogicalOperator(trimmed, "OR");
+  if (orIndex >= 0) {
+    return {
+      kind: "logical",
+      operator: "OR",
+      left: parseBooleanExpression(trimmed.slice(0, orIndex), parseLeaf, clauseName),
+      right: parseBooleanExpression(trimmed.slice(orIndex + "OR".length), parseLeaf, clauseName),
+    };
+  }
+  const andIndex = findTopLevelLogicalOperator(trimmed, "AND");
+  if (andIndex >= 0) {
+    return {
+      kind: "logical",
+      operator: "AND",
+      left: parseBooleanExpression(trimmed.slice(0, andIndex), parseLeaf, clauseName),
+      right: parseBooleanExpression(trimmed.slice(andIndex + "AND".length), parseLeaf, clauseName),
+    };
+  }
+  return { kind: "predicate", predicate: parseLeaf(trimmed) };
 }
 
 function parsePredicate(input: string): GvqlPredicate {
@@ -340,22 +355,6 @@ function parseLiteral(input: string): GvqlLiteral {
   throw new Error(`Unsupported GVQL literal "${input}". Use strings, numbers, booleans, null, arrays, or $parameters.`);
 }
 
-function splitLogical(input: string): Array<{ operator?: GvqlLogicalOperator; text: string }> {
-  const result: Array<{ operator?: GvqlLogicalOperator; text: string }> = [];
-  let cursor = 0;
-  let currentOperator: GvqlLogicalOperator | undefined;
-  for (let index = 0; index < input.length; index++) {
-    const operator = keywordAt(input, index, "AND") ? "AND" : keywordAt(input, index, "OR") ? "OR" : undefined;
-    if (!operator || isQuoted(input, index)) continue;
-    result.push({ ...(currentOperator ? { operator: currentOperator } : {}), text: input.slice(cursor, index).trim() });
-    currentOperator = operator;
-    index += operator.length - 1;
-    cursor = index + 1;
-  }
-  result.push({ ...(currentOperator ? { operator: currentOperator } : {}), text: input.slice(cursor).trim() });
-  return result.filter((part) => part.text);
-}
-
 function splitComma(input: string): string[] {
   const parts: string[] = [];
   let cursor = 0;
@@ -372,6 +371,48 @@ function splitComma(input: string): string[] {
   }
   parts.push(input.slice(cursor).trim());
   return parts.filter(Boolean);
+}
+
+function stripOuterParentheses(input: string): string {
+  let current = input;
+  while (current.startsWith("(") && current.endsWith(")") && outerParenthesesEnclose(current)) {
+    current = current.slice(1, -1).trim();
+  }
+  return current;
+}
+
+function outerParenthesesEnclose(input: string): boolean {
+  let depth = 0;
+  for (let index = 0; index < input.length; index++) {
+    if (isQuoted(input, index)) continue;
+    const char = input[index];
+    if (char === "(") depth++;
+    if (char === ")") depth--;
+    if (depth === 0) return index === input.length - 1;
+  }
+  return false;
+}
+
+function findTopLevelLogicalOperator(input: string, operator: GvqlLogicalOperator): number {
+  let depth = 0;
+  let found = -1;
+  for (let index = 0; index < input.length; index++) {
+    if (isQuoted(input, index)) continue;
+    const char = input[index];
+    if (char === "(" || char === "[") {
+      depth++;
+      continue;
+    }
+    if (char === ")" || char === "]") {
+      depth--;
+      continue;
+    }
+    if (depth === 0 && keywordAt(input, index, operator)) {
+      found = index;
+      index += operator.length - 1;
+    }
+  }
+  return found;
 }
 
 function splitAlias(input: string): { expression: string; aliasName?: string } {

@@ -5,6 +5,7 @@ import { encodedValueToJs, getNodePath, jsValueToEncoded, literalToJs, nodeSumma
 import type { EncodedNode, EncodedValue, SerializedEnvelope } from "./types.js";
 import type {
   GvqlBinding,
+  GvqlBooleanExpression,
   GvqlExecutionOptions,
   GvqlExecutionPlan,
   GvqlGraphEdge,
@@ -288,12 +289,16 @@ function matchesType(index: GvqlGraphIndex, objectId: string, type: string | und
 
 function matchesWhere(index: GvqlGraphIndex, binding: GvqlBinding, statement: GvqlStatement, parameters: Record<string, unknown>): boolean {
   if (!statement.where) return true;
-  let result = evaluatePredicate(index, binding, statement.where.first, parameters);
-  for (const item of statement.where.rest) {
-    if (item.operator === "AND") result = result && evaluatePredicate(index, binding, item.predicate, parameters);
-    else result = result || evaluatePredicate(index, binding, item.predicate, parameters);
-  }
-  return result;
+  return evaluateBooleanExpression(statement.where, (predicate) => evaluatePredicate(index, binding, predicate, parameters));
+}
+
+function evaluateBooleanExpression<TPredicate>(
+  expression: GvqlBooleanExpression<TPredicate>,
+  evaluate: (predicate: TPredicate) => boolean,
+): boolean {
+  if (expression.kind === "predicate") return evaluate(expression.predicate);
+  if (expression.operator === "AND") return evaluateBooleanExpression(expression.left, evaluate) && evaluateBooleanExpression(expression.right, evaluate);
+  return evaluateBooleanExpression(expression.left, evaluate) || evaluateBooleanExpression(expression.right, evaluate);
 }
 
 function evaluatePredicate(
@@ -377,12 +382,7 @@ function applyRowOrderingAndLimit(rows: Array<Record<string, unknown>>, statemen
 
 function matchesHaving(row: Record<string, unknown>, statement: GvqlStatement, parameters: Record<string, unknown>): boolean {
   if (!statement.having) return true;
-  let result = evaluateRowPredicate(row, statement.having.first, parameters);
-  for (const item of statement.having.rest) {
-    if (item.operator === "AND") result = result && evaluateRowPredicate(row, item.predicate, parameters);
-    else result = result || evaluateRowPredicate(row, item.predicate, parameters);
-  }
-  return result;
+  return evaluateBooleanExpression(statement.having, (predicate) => evaluateRowPredicate(row, predicate, parameters));
 }
 
 function evaluateRowPredicate(row: Record<string, unknown>, predicate: GvqlRowPredicate, parameters: Record<string, unknown>): boolean {
@@ -568,10 +568,10 @@ function indexablePredicates(
   parameters: Record<string, unknown>,
 ): IndexablePredicateSet | undefined {
   if (!statement.where) return undefined;
-  const operators = statement.where.rest.map((item) => item.operator);
-  const mode = operators.every((operator) => operator === "OR") ? "OR" : operators.every((operator) => operator === "AND") ? "AND" : undefined;
+  const expression = statement.where;
+  const mode = expression.kind === "predicate" ? "AND" : flattenLogicalPredicates(expression, "OR") ? "OR" : flattenLogicalPredicates(expression, "AND") ? "AND" : undefined;
   if (!mode) return undefined;
-  const predicates = [statement.where.first, ...statement.where.rest.map((item) => item.predicate)];
+  const predicates = flattenLogicalPredicates(expression, mode) ?? [];
   const start = statement.match.start;
   const result: IndexablePredicate[] = [];
   for (const predicate of predicates) {
@@ -593,6 +593,15 @@ function indexablePredicates(
   }
   if (mode === "OR" && result.length !== predicates.length) return undefined;
   return result.length > 0 ? { mode, predicates: result } : undefined;
+}
+
+function flattenLogicalPredicates(expression: GvqlBooleanExpression<GvqlPredicate>, operator: "AND" | "OR"): GvqlPredicate[] | undefined {
+  if (expression.kind === "predicate") return [expression.predicate];
+  if (expression.operator !== operator) return undefined;
+  const left = flattenLogicalPredicates(expression.left, operator);
+  const right = flattenLogicalPredicates(expression.right, operator);
+  if (!left || !right) return undefined;
+  return [...left, ...right];
 }
 
 function intersectCandidates(candidateLists: string[][]): Set<string> {
