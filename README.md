@@ -349,6 +349,21 @@ const totals = await storage.gvql(`
 });
 ```
 
+Every GVQL result also includes a compact execution plan so production tools can explain performance:
+
+```ts
+const result = await storage.gvql(`
+  MATCH (doc:Document)
+  WHERE doc.id = $id
+  RETURN doc.title AS title
+`, {
+  parameters: { id: "doc-42" },
+});
+
+console.log(result.plan.candidateSource); // "property-index"
+console.log(result.plan.startCandidates); // number of objects read from the first candidate set
+```
+
 ## Performance
 
 GraphVault includes a real benchmark instead of README-only claims:

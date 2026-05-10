@@ -120,6 +120,28 @@ export interface GvqlExecutionOptions {
   dryRun?: boolean;
 }
 
+export type GvqlCandidateSource = "property-index" | "type-index" | "full-scan";
+
+export interface GvqlExecutionPlan {
+  nodeCount: number;
+  candidateSource: GvqlCandidateSource;
+  indexUsed: boolean;
+  startType?: string;
+  propertyIndex?: {
+    path: string;
+    key: string;
+    value: unknown;
+  };
+  startCandidates: number;
+  edgeSteps: number;
+  matchedBindings: number;
+  filteredBindings: number;
+  returnedRows: number;
+  grouped: boolean;
+  having: boolean;
+  operations: string[];
+}
+
 export interface GvqlQueryResult {
   kind: "select";
   statement: GvqlStatement;
@@ -127,6 +149,7 @@ export interface GvqlQueryResult {
   matched: number;
   scannedObjects: number;
   elapsedMs: number;
+  plan: GvqlExecutionPlan;
 }
 
 export interface GvqlMutationPreview {
@@ -147,6 +170,7 @@ export interface GvqlMutationResult {
   elapsedMs: number;
   dryRun: boolean;
   changes: GvqlMutationPreview[];
+  plan: GvqlExecutionPlan;
   metadata?: StoreMetadata;
 }
 

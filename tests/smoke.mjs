@@ -83,6 +83,9 @@ try {
     { id: "doc-1", title: "Object graph persistence" },
     { id: "doc-2", title: "Admin workflows" },
   ]);
+  assert.equal(query.plan.candidateSource, "type-index");
+  assert.equal(query.plan.edgeSteps, 1);
+  assert.equal(query.plan.returnedRows, 2);
 
   const aggregate = await reloaded.gvql(`
     MATCH (doc:Document)
@@ -97,6 +100,9 @@ try {
     { status: "draft", count: 2, viewed: 2, views: 25, avgViews: 12.5 },
   ]);
   assert.ok(aggregate.matched <= aggregate.scannedObjects);
+  assert.equal(aggregate.plan.grouped, true);
+  assert.equal(aggregate.plan.having, true);
+  assert.equal(aggregate.plan.returnedRows, 2);
 
   const having = await reloaded.gvql(
     `
@@ -110,6 +116,15 @@ try {
   );
   assert.equal(having.kind, "select");
   assert.deepEqual(having.rows, [{ status: "draft", count: 2 }]);
+  assert.equal(having.plan.operations.includes("having-filter"), true);
+
+  const indexed = await reloaded.gvql('MATCH (doc:Document) WHERE doc.id = $id RETURN doc.id AS id', { parameters: { id: "doc-2" } });
+  assert.equal(indexed.kind, "select");
+  assert.deepEqual(indexed.rows, [{ id: "doc-2" }]);
+  assert.equal(indexed.plan.candidateSource, "property-index");
+  assert.equal(indexed.plan.indexUsed, true);
+  assert.equal(indexed.plan.propertyIndex.path, "id");
+  assert.equal(indexed.plan.startCandidates, 1);
 
   const preview = await reloaded.previewGvql(
     'MATCH (doc:Document) WHERE doc.id = $id SET doc.title = "Admin workflows updated" RETURN doc.id AS id, doc.title AS title',
@@ -118,6 +133,7 @@ try {
   assert.equal(preview.kind, "update");
   assert.equal(preview.dryRun, true);
   assert.equal(preview.changes.length, 1);
+  assert.equal(preview.plan.candidateSource, "property-index");
   assert.equal(reloaded.root.documents[1].title, "Admin workflows");
 
   const update = await reloaded.gvql(

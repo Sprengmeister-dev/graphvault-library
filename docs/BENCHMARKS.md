@@ -23,17 +23,17 @@ Environment:
 
 - Runtime: Node.js `v25.9.0`
 - Platform: `darwin arm64`
-- Date: `2026-05-10T16:28:28.682Z`
+- Date: `2026-05-10T16:34:13.764Z`
 - Storage format: GraphVault `0.1.0`
 
 | target | documents | storeRoot | GVQL traversal | GVQL indexed aggregate | reload | storage size |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| memory | 100 | 8.3 ms | 4.0 ms | 1.7 ms | 3.7 ms | - |
-| filesystem | 100 | 3349.9 ms | 5.5 ms | 5.2 ms | 44.5 ms | 0.51 MiB |
-| memory | 300 | 12.0 ms | 3.5 ms | 3.7 ms | 5.1 ms | - |
-| filesystem | 300 | 8186.0 ms | 6.1 ms | 4.3 ms | 78.8 ms | 1.36 MiB |
-| memory | 750 | 23.3 ms | 8.2 ms | 7.5 ms | 12.6 ms | - |
-| filesystem | 750 | 20140.8 ms | 15.5 ms | 13.6 ms | 173.6 ms | 3.30 MiB |
+| memory | 100 | 8.9 ms | 3.9 ms | 1.7 ms | 2.9 ms | - |
+| filesystem | 100 | 2949.2 ms | 6.6 ms | 5.2 ms | 44.8 ms | 0.51 MiB |
+| memory | 300 | 11.5 ms | 3.7 ms | 3.7 ms | 4.9 ms | - |
+| filesystem | 300 | 8026.8 ms | 15.6 ms | 10.4 ms | 76.5 ms | 1.36 MiB |
+| memory | 750 | 24.9 ms | 7.4 ms | 7.8 ms | 13.5 ms | - |
+| filesystem | 750 | 20374.0 ms | 16.2 ms | 11.7 ms | 178.4 ms | 3.30 MiB |
 
 ## Reading The Numbers
 

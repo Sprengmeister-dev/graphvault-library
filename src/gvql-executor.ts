@@ -6,6 +6,7 @@ import type { EncodedNode, EncodedValue, SerializedEnvelope } from "./types.js";
 import type {
   GvqlBinding,
   GvqlExecutionOptions,
+  GvqlExecutionPlan,
   GvqlGraphEdge,
   GvqlGraphIndex,
   GvqlMutationPreview,
@@ -19,9 +20,11 @@ export function executeGvqlStatement(envelope: SerializedEnvelope, statement: Gv
   const started = performance.now();
   const parameters = options.parameters ?? {};
   const index = buildGvqlGraphIndex(envelope);
-  const bindings = matchBindings(index, statement, parameters).filter((binding) => matchesWhere(index, binding, statement, parameters));
+  const matched = matchBindingsWithPlan(index, statement, parameters);
+  const bindings = matched.bindings.filter((binding) => matchesWhere(index, binding, statement, parameters));
   if (statement.kind === "select") {
     const rows = projectSelectRows(index, bindings, statement, parameters);
+    const plan = completePlan(matched.plan, bindings, rows.length);
     return {
       kind: "select",
       statement,
@@ -29,6 +32,7 @@ export function executeGvqlStatement(envelope: SerializedEnvelope, statement: Gv
       matched: bindings.length,
       scannedObjects: index.nodes.size,
       elapsedMs: performance.now() - started,
+      plan,
     };
   }
   if (!options.allowMutations && !options.dryRun) {
@@ -36,16 +40,19 @@ export function executeGvqlStatement(envelope: SerializedEnvelope, statement: Gv
   }
   const limitedBindings = applyBindingOrderingAndLimit(index, bindings, statement);
   const changes = applySet(index, limitedBindings, statement, options);
+  const rows = projectGvqlRows(index, limitedBindings, statement, readPath, readNode);
+  const plan = completePlan(matched.plan, bindings, rows.length);
   return {
     kind: "update",
     statement,
-    rows: projectGvqlRows(index, limitedBindings, statement, readPath, readNode),
+    rows,
     matched: bindings.length,
     changed: changes.length,
     scannedObjects: index.nodes.size,
     elapsedMs: performance.now() - started,
     dryRun: options.dryRun ?? false,
     changes,
+    plan,
   };
 }
 
@@ -64,9 +71,20 @@ function projectSelectRows(
 }
 
 export function matchBindings(index: GvqlGraphIndex, statement: GvqlStatement, parameters: Record<string, unknown> = {}): GvqlBinding[] {
-  const firstCandidates = candidates(index, statement, parameters);
+  return matchBindingsWithPlan(index, statement, parameters).bindings;
+}
+
+function matchBindingsWithPlan(
+  index: GvqlGraphIndex,
+  statement: GvqlStatement,
+  parameters: Record<string, unknown> = {},
+): { bindings: GvqlBinding[]; plan: GvqlExecutionPlan } {
+  const selection = candidates(index, statement, parameters);
+  const firstCandidates = selection.objectIds;
   let bindings = firstCandidates.map((objectId) => ({ [statement.match.start.alias]: objectId }));
+  const operations = [...selection.operations];
   for (const link of statement.match.chain) {
+    operations.push(`${link.edge.direction === "out" ? "traverse" : "reverse-traverse"}:${link.edge.label ?? "*"}`);
     const nextBindings: GvqlBinding[] = [];
     for (const binding of bindings) {
       const fromId = binding[previousAlias(statement, link)];
@@ -83,7 +101,24 @@ export function matchBindings(index: GvqlGraphIndex, statement: GvqlStatement, p
     }
     bindings = nextBindings;
   }
-  return bindings;
+  return {
+    bindings,
+    plan: {
+      nodeCount: index.nodes.size,
+      candidateSource: selection.source,
+      indexUsed: selection.source !== "full-scan",
+      ...(statement.match.start.type ? { startType: statement.match.start.type } : {}),
+      ...(selection.propertyIndex ? { propertyIndex: selection.propertyIndex } : {}),
+      startCandidates: firstCandidates.length,
+      edgeSteps: statement.match.chain.length,
+      matchedBindings: bindings.length,
+      filteredBindings: bindings.length,
+      returnedRows: 0,
+      grouped: isAggregateStatement(statement),
+      having: Boolean(statement.having),
+      operations,
+    },
+  };
 }
 
 function previousAlias(statement: GvqlStatement, target: GvqlStatement["match"]["chain"][number]): string {
@@ -95,14 +130,34 @@ function previousAlias(statement: GvqlStatement, target: GvqlStatement["match"][
   return previous;
 }
 
-function candidates(index: GvqlGraphIndex, statement: GvqlStatement, parameters: Record<string, unknown>): string[] {
+function candidates(
+  index: GvqlGraphIndex,
+  statement: GvqlStatement,
+  parameters: Record<string, unknown>,
+): {
+  objectIds: string[];
+  source: GvqlExecutionPlan["candidateSource"];
+  propertyIndex?: GvqlExecutionPlan["propertyIndex"];
+  operations: string[];
+} {
   const type = statement.match.start.type;
   const typeCandidates = type ? index.byType.get(type) ?? [] : Array.from(index.nodes.keys());
   const indexed = firstEqualityPredicate(statement, parameters);
-  if (!indexed) return typeCandidates;
+  if (!indexed) {
+    return {
+      objectIds: typeCandidates,
+      source: type ? "type-index" : "full-scan",
+      operations: [type ? `type-index:${type}` : "full-scan"],
+    };
+  }
   const propertyCandidates = index.byProperty.get(indexed.key) ?? [];
   const allowed = new Set(propertyCandidates);
-  return typeCandidates.filter((objectId) => allowed.has(objectId));
+  return {
+    objectIds: typeCandidates.filter((objectId) => allowed.has(objectId)),
+    source: "property-index",
+    propertyIndex: { path: indexed.path, key: indexed.key, value: indexed.value },
+    operations: [`property-index:${indexed.path}`, ...(type ? [`type-filter:${type}`] : [])],
+  };
 }
 
 function matchesType(index: GvqlGraphIndex, objectId: string, type: string | undefined): boolean {
@@ -283,13 +338,31 @@ function rowKey(expression: { alias: string; path?: string }): string {
   return [expression.alias, expression.path].filter(Boolean).join(".");
 }
 
-function firstEqualityPredicate(statement: GvqlStatement, parameters: Record<string, unknown>): { key: string } | undefined {
+function completePlan(plan: GvqlExecutionPlan, filteredBindings: GvqlBinding[], returnedRows: number): GvqlExecutionPlan {
+  return {
+    ...plan,
+    filteredBindings: filteredBindings.length,
+    returnedRows,
+    operations: [
+      ...plan.operations,
+      ...(filteredBindings.length !== plan.matchedBindings ? ["where-filter"] : []),
+      ...(plan.grouped ? ["aggregate"] : []),
+      ...(plan.having ? ["having-filter"] : []),
+      ...(returnedRows !== filteredBindings.length ? ["project-or-limit"] : ["project"]),
+    ],
+  };
+}
+
+function firstEqualityPredicate(
+  statement: GvqlStatement,
+  parameters: Record<string, unknown>,
+): { key: string; path: string; value: unknown } | undefined {
   const predicates = statement.where ? [statement.where.first, ...statement.where.rest.filter((item) => item.operator === "AND").map((item) => item.predicate)] : [];
   const start = statement.match.start;
   for (const predicate of predicates) {
     if (predicate.operator !== "=" || predicate.left.alias !== start.alias || !predicate.left.path || isPathExpression(predicate.right)) continue;
     const value = literalToJs(predicate.right, parameters);
-    return { key: propertyIndexKey(start.type, predicate.left.path, value) };
+    return { key: propertyIndexKey(start.type, predicate.left.path, value), path: predicate.left.path, value };
   }
   return undefined;
 }
