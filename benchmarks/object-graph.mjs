@@ -85,12 +85,25 @@ async function benchmarkMemory(count) {
   const gvqlMultiIndex = await time(() =>
     storage.gvql('MATCH (doc:Document) WHERE doc.status = "active" AND doc.id = 1 RETURN doc.id AS id, doc.title AS title'),
   );
+  const gvqlIndexedIn = await time(() =>
+    storage.gvql('MATCH (doc:Document) WHERE doc.status IN ["active", "review"] AND doc.id IN [1, 7, 14, 21] RETURN doc.id AS id ORDER BY doc.id ASC'),
+  );
   await storage.shutdown();
   const load = await time(async () => {
     const loaded = await EmbeddedStorage.start({ storageDirectory: directory, storageTarget: target, rootFactory: () => ({}), types: typeRegistrations() });
     await loaded.shutdown();
   });
-  return { target: "memory", count, storeMs: store.ms, gvqlMs: gvql.ms, gvqlIndexedMs: gvqlIndexed.ms, gvqlMultiIndexMs: gvqlMultiIndex.ms, loadMs: load.ms, bytes: undefined };
+  return {
+    target: "memory",
+    count,
+    storeMs: store.ms,
+    gvqlMs: gvql.ms,
+    gvqlIndexedMs: gvqlIndexed.ms,
+    gvqlMultiIndexMs: gvqlMultiIndex.ms,
+    gvqlIndexedInMs: gvqlIndexedIn.ms,
+    loadMs: load.ms,
+    bytes: undefined,
+  };
 }
 
 async function benchmarkFilesystem(count) {
@@ -110,6 +123,9 @@ async function benchmarkFilesystem(count) {
     const gvqlMultiIndex = await time(() =>
       storage.gvql('MATCH (doc:Document) WHERE doc.status = "active" AND doc.id = 1 RETURN doc.id AS id, doc.title AS title'),
     );
+    const gvqlIndexedIn = await time(() =>
+      storage.gvql('MATCH (doc:Document) WHERE doc.status IN ["active", "review"] AND doc.id IN [1, 7, 14, 21] RETURN doc.id AS id ORDER BY doc.id ASC'),
+    );
     await storage.shutdown();
     const load = await time(async () => {
       const loaded = await EmbeddedStorage.start({ storageDirectory: directory, rootFactory: () => ({}), types: typeRegistrations() });
@@ -122,6 +138,7 @@ async function benchmarkFilesystem(count) {
       gvqlMs: gvql.ms,
       gvqlIndexedMs: gvqlIndexed.ms,
       gvqlMultiIndexMs: gvqlMultiIndex.ms,
+      gvqlIndexedInMs: gvqlIndexedIn.ms,
       loadMs: load.ms,
       bytes: await directorySize(directory),
     };
@@ -173,10 +190,10 @@ console.log(`Runtime: ${process.version}`);
 console.log(`Platform: ${process.platform} ${process.arch}`);
 console.log(`Date: ${new Date().toISOString()}`);
 console.log();
-console.log(`| target | documents | storeRoot | GVQL traversal | GVQL indexed aggregate | GVQL multi-index lookup | reload | storage size |`);
-console.log(`| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |`);
+console.log(`| target | documents | storeRoot | GVQL traversal | GVQL indexed aggregate | GVQL multi-index lookup | GVQL indexed IN lookup | reload | storage size |`);
+console.log(`| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |`);
 for (const row of rows) {
   console.log(
-    `| ${row.target} | ${row.count.toLocaleString("en-US")} | ${formatMs(row.storeMs)} | ${formatMs(row.gvqlMs)} | ${formatMs(row.gvqlIndexedMs)} | ${formatMs(row.gvqlMultiIndexMs)} | ${formatMs(row.loadMs)} | ${formatBytes(row.bytes)} |`,
+    `| ${row.target} | ${row.count.toLocaleString("en-US")} | ${formatMs(row.storeMs)} | ${formatMs(row.gvqlMs)} | ${formatMs(row.gvqlIndexedMs)} | ${formatMs(row.gvqlMultiIndexMs)} | ${formatMs(row.gvqlIndexedInMs)} | ${formatMs(row.loadMs)} | ${formatBytes(row.bytes)} |`,
   );
 }

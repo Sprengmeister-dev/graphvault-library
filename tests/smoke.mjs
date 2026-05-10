@@ -183,6 +183,20 @@ try {
   assert.equal(indexedIntersection.plan.propertyIndexes.length, 2);
   assert.equal(indexedIntersection.plan.operations.includes("property-index-intersect:2"), true);
 
+  const indexedIn = await reloaded.gvql(`
+    MATCH (doc:Document)
+    WHERE doc.status IN ["draft", "published"] AND doc.id IN ["doc-1", "doc-3"]
+    RETURN doc.id AS id
+    ORDER BY doc.id ASC
+  `);
+  assert.equal(indexedIn.kind, "select");
+  assert.deepEqual(indexedIn.rows, [{ id: "doc-1" }, { id: "doc-3" }]);
+  assert.equal(indexedIn.plan.candidateSource, "property-index");
+  assert.equal(indexedIn.plan.propertyIndexes.length, 4);
+  assert.equal(indexedIn.plan.operations.includes("property-index-union:status:2"), true);
+  assert.equal(indexedIn.plan.operations.includes("property-index-union:id:2"), true);
+  assert.equal(indexedIn.plan.operations.includes("property-index-intersect:2"), true);
+
   const disjunction = await reloaded.gvql(`
     MATCH (doc:Document)
     WHERE doc.id = "missing" OR doc.status = "published"

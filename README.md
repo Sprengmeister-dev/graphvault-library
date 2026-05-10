@@ -345,7 +345,7 @@ Current GVQL supports:
 - `HAVING` over returned aliases for aggregate filtering
 - `ORDER BY` paths and returned aliases, with multiple criteria plus `LIMIT` and `OFFSET`
 - `SET` for primitive field updates and `REMOVE` for object-field cleanup
-- type indexes and primitive-property index intersections for common equality filters on the first matched node
+- type indexes and primitive-property index intersections/unions for common equality and `IN` filters on the first matched node
 
 Aggregate queries stay compact:
 

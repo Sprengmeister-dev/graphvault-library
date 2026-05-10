@@ -16,6 +16,15 @@ import type {
   GvqlStatement,
 } from "./gvql-types.js";
 
+interface IndexedCandidateSelection {
+  path: string;
+  key: string;
+  value: unknown;
+  objectIds: string[];
+  propertyIndexes: NonNullable<GvqlExecutionPlan["propertyIndexes"]>;
+  operation: string;
+}
+
 export function executeGvqlStatement(envelope: SerializedEnvelope, statement: GvqlStatement, options: GvqlExecutionOptions = {}): GvqlResult {
   const started = performance.now();
   const parameters = options.parameters ?? {};
@@ -152,7 +161,7 @@ function candidates(
 } {
   const type = statement.match.start.type;
   const typeCandidates = type ? index.byType.get(type) ?? [] : Array.from(index.nodes.keys());
-  const indexed = equalityPredicates(statement, parameters);
+  const indexed = indexablePredicates(statement, parameters);
   if (indexed.length === 0) {
     return {
       objectIds: typeCandidates,
@@ -161,19 +170,60 @@ function candidates(
     };
   }
   const indexedCandidates = indexed
-    .map((item) => ({ ...item, objectIds: index.byProperty.get(item.key) ?? [] }))
+    .map((item) => indexedCandidateSelection(index, item))
     .sort((a, b) => a.objectIds.length - b.objectIds.length);
   const allowed = intersectCandidates(indexedCandidates.map((item) => item.objectIds));
-  const propertyIndexes = indexedCandidates.map((item) => ({ path: item.path, key: item.key, value: item.value, candidates: item.objectIds.length }));
+  const propertyIndexes = indexedCandidates.flatMap((item) => item.propertyIndexes);
   return {
     objectIds: typeCandidates.filter((objectId) => allowed.has(objectId)),
     source: "property-index",
     ...(propertyIndexes[0] ? { propertyIndex: { path: propertyIndexes[0].path, key: propertyIndexes[0].key, value: propertyIndexes[0].value } } : {}),
     propertyIndexes,
     operations: [
-      indexedCandidates.length > 1 ? `property-index-intersect:${indexedCandidates.length}` : `property-index:${indexedCandidates[0]?.path ?? "unknown"}`,
+      ...indexedCandidates.map((item) => item.operation),
+      ...(indexedCandidates.length > 1 ? [`property-index-intersect:${indexedCandidates.length}`] : []),
       ...(type ? [`type-filter:${type}`] : []),
     ],
+  };
+}
+
+function indexedCandidateSelection(
+  index: GvqlGraphIndex,
+  item: { path: string; keyValues: Array<{ key: string; value: unknown }> },
+): IndexedCandidateSelection {
+  const keyedCandidates = item.keyValues.map(({ key, value }) => ({ key, value, objectIds: index.byProperty.get(key) ?? [] }));
+  if (keyedCandidates.length === 1) {
+    const only = keyedCandidates[0] as { key: string; value: unknown; objectIds: string[] };
+    return {
+      path: item.path,
+      key: only.key,
+      value: only.value,
+      objectIds: only.objectIds,
+      propertyIndexes: [{ path: item.path, key: only.key, value: only.value, candidates: only.objectIds.length }],
+      operation: `property-index:${item.path}`,
+    };
+  }
+  const seen = new Set<string>();
+  const union: string[] = [];
+  for (const candidate of keyedCandidates) {
+    for (const objectId of candidate.objectIds) {
+      if (seen.has(objectId)) continue;
+      seen.add(objectId);
+      union.push(objectId);
+    }
+  }
+  return {
+    path: item.path,
+    key: keyedCandidates.map((candidate) => candidate.key).join("|"),
+    value: keyedCandidates.map((candidate) => candidate.value),
+    objectIds: union,
+    propertyIndexes: keyedCandidates.map((candidate) => ({
+      path: item.path,
+      key: candidate.key,
+      value: candidate.value,
+      candidates: candidate.objectIds.length,
+    })),
+    operation: `property-index-union:${item.path}:${keyedCandidates.length}`,
   };
 }
 
@@ -449,18 +499,30 @@ function stableStringify(value: unknown): string {
   return `{${entries.map(([key, item]) => `${JSON.stringify(key)}:${stableStringify(item)}`).join(",")}}`;
 }
 
-function equalityPredicates(
+function indexablePredicates(
   statement: GvqlStatement,
   parameters: Record<string, unknown>,
-): Array<{ key: string; path: string; value: unknown }> {
+): Array<{ path: string; keyValues: Array<{ key: string; value: unknown }> }> {
   if (!statement.where || statement.where.rest.some((item) => item.operator === "OR")) return [];
   const predicates = [statement.where.first, ...statement.where.rest.map((item) => item.predicate)];
   const start = statement.match.start;
-  const result: Array<{ key: string; path: string; value: unknown }> = [];
+  const result: Array<{ path: string; keyValues: Array<{ key: string; value: unknown }> }> = [];
   for (const predicate of predicates) {
-    if (predicate.operator !== "=" || predicate.left.alias !== start.alias || !predicate.left.path || isPathExpression(predicate.right)) continue;
-    const value = literalToJs(predicate.right, parameters);
-    result.push({ key: propertyIndexKey(start.type, predicate.left.path, value), path: predicate.left.path, value });
+    if (predicate.left.alias !== start.alias || !predicate.left.path || isPathExpression(predicate.right)) continue;
+    if (predicate.operator === "=") {
+      const value = literalToJs(predicate.right, parameters);
+      result.push({
+        path: predicate.left.path,
+        keyValues: [{ key: propertyIndexKey(start.type, predicate.left.path, value), value }],
+      });
+    } else if (predicate.operator === "IN") {
+      const values = literalToJs(predicate.right, parameters);
+      if (!Array.isArray(values) || values.length === 0) continue;
+      result.push({
+        path: predicate.left.path,
+        keyValues: values.map((value) => ({ key: propertyIndexKey(start.type, predicate.left.path as string, value), value })),
+      });
+    }
   }
   return result;
 }
