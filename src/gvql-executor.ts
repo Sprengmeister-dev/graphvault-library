@@ -432,7 +432,17 @@ function readPath(index: GvqlGraphIndex, binding: GvqlBinding, expression: { ali
   const node = index.envelope.nodes[objectId];
   if (!node) return undefined;
   if (!expression.path) return readNode(index, objectId);
+  const metadata = readVirtualNodePath(index, objectId, expression.path);
+  if (metadata.handled) return metadata.value;
   return encodedValueToJs(getNodePath(node, expression.path));
+}
+
+function readVirtualNodePath(index: GvqlGraphIndex, objectId: string, path: string): { handled: boolean; value?: unknown } {
+  if (path === "$id") return { handled: true, value: objectId };
+  const node = index.nodes.get(objectId);
+  if (path === "$kind") return { handled: true, value: node?.kind };
+  if (path === "$type") return { handled: true, value: node?.type };
+  return { handled: false };
 }
 
 function readNode(index: GvqlGraphIndex, objectId: string | undefined): unknown {

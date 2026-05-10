@@ -340,7 +340,7 @@ Current GVQL supports:
 - reference traversal: `-[:owner]->` and inverse traversal: `<-[:owner]-`
 - `WHERE` predicates with `=`, `!=`, `<`, `<=`, `>`, `>=`, `CONTAINS`, `STARTS WITH`, `ENDS WITH`, `IN`, `IS NULL`, `IS NOT NULL`
 - `$parameters`
-- `RETURN`, `RETURN DISTINCT`, aliases with `AS`, `count(*)`
+- `RETURN`, `RETURN DISTINCT`, aliases with `AS`, `count(*)`, and virtual metadata paths `$id`, `$type`, `$kind`
 - `GROUP BY` with `count`, `sum`, `avg`, `min`, `max`
 - `HAVING` over returned aliases for aggregate filtering
 - `ORDER BY` paths and returned aliases, with multiple criteria plus `LIMIT` and `OFFSET`

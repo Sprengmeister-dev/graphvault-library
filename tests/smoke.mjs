@@ -101,6 +101,22 @@ try {
   assert.equal(paged.plan.offset, 1);
   assert.equal(paged.plan.operations.includes("project-window"), true);
 
+  const metadataQuery = await reloaded.gvql(`
+    MATCH (doc:Document)
+    RETURN doc.$id AS objectId, doc.$type AS type, doc.$kind AS kind
+    ORDER BY doc.$id ASC
+    LIMIT 1
+  `);
+  assert.equal(metadataQuery.kind, "select");
+  assert.equal(typeof metadataQuery.rows[0].objectId, "string");
+  assert.deepEqual(
+    {
+      type: metadataQuery.rows[0].type,
+      kind: metadataQuery.rows[0].kind,
+    },
+    { type: "Document", kind: "object" },
+  );
+
   const distinct = await reloaded.gvql(`
     MATCH (doc:Document)
     RETURN DISTINCT doc.status AS status
