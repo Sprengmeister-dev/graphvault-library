@@ -309,6 +309,48 @@ try {
     { id: "doc-3", bucket: "hot" },
   ]);
 
+  const withProjection = await reloaded.gvql(`
+    MATCH (doc:Document)
+    WITH doc.id AS id,
+      CASE
+        WHEN doc.views >= 100 THEN "hot"
+        WHEN doc.archivedAt IS NOT NULL THEN "archived"
+        ELSE "active"
+      END AS bucket
+    WHERE bucket = "hot" OR id = "doc-1"
+    RETURN id, bucket
+    ORDER BY id ASC
+  `);
+  assert.equal(withProjection.kind, "select");
+  assert.deepEqual(withProjection.rows, [
+    { id: "doc-1", bucket: "active" },
+    { id: "doc-3", bucket: "hot" },
+  ]);
+  assert.equal(withProjection.statement.with.returns.length, 2);
+  assert.equal(withProjection.plan.operations.includes("with-project"), true);
+
+  const withAggregate = await reloaded.gvql(`
+    MATCH (doc:Document)
+    WITH doc.status AS status, count(*) AS count, avg(doc.views) AS avgViews
+    GROUP BY doc.status
+    HAVING count >= 1
+    RETURN status, count, avgViews
+    ORDER BY count DESC, status ASC
+  `);
+  assert.equal(withAggregate.kind, "select");
+  assert.deepEqual(withAggregate.rows, [
+    { status: "draft", count: 2, avgViews: 12.5 },
+    { status: "published", count: 1, avgViews: 100 },
+  ]);
+
+  const startsWithStillScansClausesCorrectly = await reloaded.gvql(`
+    MATCH (doc:Document)
+    WHERE doc.title STARTS WITH "Object"
+    RETURN doc.id AS id
+  `);
+  assert.equal(startsWithStillScansClausesCorrectly.kind, "select");
+  assert.deepEqual(startsWithStillScansClausesCorrectly.rows, [{ id: "doc-1" }]);
+
   const aggregate = await reloaded.gvql(`
     MATCH (doc:Document)
     RETURN doc.status AS status, count(*) AS count, count(doc.views) AS viewed, sum(doc.views) AS views, avg(doc.views) AS avgViews

@@ -37,7 +37,7 @@ const result = await storage.gvql(`
 });
 ```
 
-GVQL supports graph traversal, comma-separated `MATCH` patterns for joins, `OPTIONAL MATCH` for left-join style graph expansion, indexed metadata and property filters, indexed equality/`IN` intersections and `OR` unions, parenthesized `WHERE`/`HAVING` logic with `NOT` and SQL-style `AND` precedence, computed `RETURN` expressions, scalar functions, conditional `CASE` expressions, grouping, aggregates, `RETURN DISTINCT`, `count(DISTINCT path)`, pagination, execution plans, and preview-first batch updates with `CREATE`, `SET`, arithmetic/conditional `SET` expressions, `REMOVE`, and `DELETE`. It is also what powers GraphVault Studio's search, inspection, and manipulation workflows.
+GVQL supports graph traversal, comma-separated `MATCH` patterns for joins, `OPTIONAL MATCH` for left-join style graph expansion, indexed metadata and property filters, indexed equality/`IN` intersections and `OR` unions, parenthesized `WHERE`/`HAVING` logic with `NOT` and SQL-style `AND` precedence, `WITH` pipelines, computed `RETURN` expressions, scalar functions, conditional `CASE` expressions, grouping, aggregates, `RETURN DISTINCT`, `count(DISTINCT path)`, pagination, execution plans, and preview-first batch updates with `CREATE`, `SET`, arithmetic/conditional `SET` expressions, `REMOVE`, and `DELETE`. It is also what powers GraphVault Studio's search, inspection, and manipulation workflows.
 
 ## Why Use This Instead Of A Normal Database?
 
@@ -367,6 +367,15 @@ const buckets = await storage.gvql(`
       ELSE "active"
     END AS bucket
 `);
+
+const withPipeline = await storage.gvql(`
+  MATCH (doc:Document)
+  WITH doc.status AS status, count(*) AS count, avg(doc.views) AS avgViews
+  GROUP BY doc.status
+  HAVING count > 0
+  RETURN status, count, avgViews
+  ORDER BY count DESC
+`);
 ```
 
 Batch updates are explicit and can be previewed first:
@@ -445,6 +454,7 @@ Current GVQL supports:
 - `OPTIONAL MATCH` for left-join style relationship expansion
 - `WHERE` predicates with `=`, `!=`, `<`, `<=`, `>`, `>=`, `CONTAINS`, `STARTS WITH`, `ENDS WITH`, `IN`, `IS NULL`, `IS NOT NULL`, `AND`, `OR`, `NOT`, and parentheses
 - `$parameters`
+- `WITH` pipelines for named intermediate rows, aggregate stages, and row-level filters before the final `RETURN`
 - `RETURN`, `RETURN DISTINCT`, aliases with `AS`, arithmetic computed expressions such as `(doc.views + $bonus) * 2 AS score`, conditional `CASE WHEN ... THEN ... ELSE ... END` expressions, scalar functions `lower`, `upper`, `trim`, `length`, `coalesce`, `count(*)`, `count(DISTINCT path)`, and virtual metadata paths `$id`, `$type`, `$kind`
 - `GROUP BY` with `count`, `sum`, `avg`, `min`, `max`
 - `HAVING` over returned aliases for aggregate filtering, with `AND`, `OR`, `NOT`, and parentheses

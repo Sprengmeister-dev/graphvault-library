@@ -116,6 +116,11 @@ async function benchmarkMemory(count) {
       'MATCH (doc:Document) RETURN doc.id AS id, CASE WHEN doc.status = "archived" THEN "cold" WHEN doc.views > 5000 THEN "hot" ELSE "normal" END AS bucket ORDER BY doc.id ASC LIMIT 25',
     ),
   );
+  const gvqlWithPipeline = await time(() =>
+    storage.gvql(
+      'MATCH (doc:Document) WITH doc.status AS status, count(*) AS count, avg(doc.views) AS avgViews GROUP BY doc.status HAVING count > 0 RETURN status, count, avgViews ORDER BY count DESC',
+    ),
+  );
   const gvqlCreatePreview = await time(() =>
     storage.previewGvql(
       'MATCH (doc:Document) WHERE doc.id = 1 CREATE (created:Document { id: 1000001, title: "Benchmark create", status: "draft", views: $views }) INTO doc.related RETURN created.id AS id',
@@ -144,6 +149,7 @@ async function benchmarkMemory(count) {
     gvqlComputedReturnMs: gvqlComputedReturn.ms,
     gvqlScalarFunctionsMs: gvqlScalarFunctions.ms,
     gvqlCaseExpressionMs: gvqlCaseExpression.ms,
+    gvqlWithPipelineMs: gvqlWithPipeline.ms,
     gvqlCreatePreviewMs: gvqlCreatePreview.ms,
     gvqlDeletePreviewMs: gvqlDeletePreview.ms,
     loadMs: load.ms,
@@ -199,6 +205,11 @@ async function benchmarkFilesystem(count) {
         'MATCH (doc:Document) RETURN doc.id AS id, CASE WHEN doc.status = "archived" THEN "cold" WHEN doc.views > 5000 THEN "hot" ELSE "normal" END AS bucket ORDER BY doc.id ASC LIMIT 25',
       ),
     );
+    const gvqlWithPipeline = await time(() =>
+      storage.gvql(
+        'MATCH (doc:Document) WITH doc.status AS status, count(*) AS count, avg(doc.views) AS avgViews GROUP BY doc.status HAVING count > 0 RETURN status, count, avgViews ORDER BY count DESC',
+      ),
+    );
     const gvqlCreatePreview = await time(() =>
       storage.previewGvql(
         'MATCH (doc:Document) WHERE doc.id = 1 CREATE (created:Document { id: 1000001, title: "Benchmark create", status: "draft", views: $views }) INTO doc.related RETURN created.id AS id',
@@ -227,6 +238,7 @@ async function benchmarkFilesystem(count) {
       gvqlComputedReturnMs: gvqlComputedReturn.ms,
       gvqlScalarFunctionsMs: gvqlScalarFunctions.ms,
       gvqlCaseExpressionMs: gvqlCaseExpression.ms,
+      gvqlWithPipelineMs: gvqlWithPipeline.ms,
       gvqlCreatePreviewMs: gvqlCreatePreview.ms,
       gvqlDeletePreviewMs: gvqlDeletePreview.ms,
       loadMs: load.ms,
@@ -280,10 +292,10 @@ console.log(`Runtime: ${process.version}`);
 console.log(`Platform: ${process.platform} ${process.arch}`);
 console.log(`Date: ${new Date().toISOString()}`);
 console.log();
-console.log(`| target | documents | storeRoot | GVQL traversal | GVQL multi-match join | GVQL optional match | GVQL indexed aggregate | GVQL multi-index lookup | GVQL indexed IN lookup | GVQL indexed OR lookup | GVQL computed return | GVQL scalar functions | GVQL CASE expression | GVQL CREATE preview | GVQL DELETE preview | reload | storage size |`);
-console.log(`| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |`);
+console.log(`| target | documents | storeRoot | GVQL traversal | GVQL multi-match join | GVQL optional match | GVQL indexed aggregate | GVQL multi-index lookup | GVQL indexed IN lookup | GVQL indexed OR lookup | GVQL computed return | GVQL scalar functions | GVQL CASE expression | GVQL WITH pipeline | GVQL CREATE preview | GVQL DELETE preview | reload | storage size |`);
+console.log(`| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |`);
 for (const row of rows) {
   console.log(
-    `| ${row.target} | ${row.count.toLocaleString("en-US")} | ${formatMs(row.storeMs)} | ${formatMs(row.gvqlMs)} | ${formatMs(row.gvqlMultiMatchMs)} | ${formatMs(row.gvqlOptionalMatchMs)} | ${formatMs(row.gvqlIndexedMs)} | ${formatMs(row.gvqlMultiIndexMs)} | ${formatMs(row.gvqlIndexedInMs)} | ${formatMs(row.gvqlIndexedOrMs)} | ${formatMs(row.gvqlComputedReturnMs)} | ${formatMs(row.gvqlScalarFunctionsMs)} | ${formatMs(row.gvqlCaseExpressionMs)} | ${formatMs(row.gvqlCreatePreviewMs)} | ${formatMs(row.gvqlDeletePreviewMs)} | ${formatMs(row.loadMs)} | ${formatBytes(row.bytes)} |`,
+    `| ${row.target} | ${row.count.toLocaleString("en-US")} | ${formatMs(row.storeMs)} | ${formatMs(row.gvqlMs)} | ${formatMs(row.gvqlMultiMatchMs)} | ${formatMs(row.gvqlOptionalMatchMs)} | ${formatMs(row.gvqlIndexedMs)} | ${formatMs(row.gvqlMultiIndexMs)} | ${formatMs(row.gvqlIndexedInMs)} | ${formatMs(row.gvqlIndexedOrMs)} | ${formatMs(row.gvqlComputedReturnMs)} | ${formatMs(row.gvqlScalarFunctionsMs)} | ${formatMs(row.gvqlCaseExpressionMs)} | ${formatMs(row.gvqlWithPipelineMs)} | ${formatMs(row.gvqlCreatePreviewMs)} | ${formatMs(row.gvqlDeletePreviewMs)} | ${formatMs(row.loadMs)} | ${formatBytes(row.bytes)} |`,
   );
 }

@@ -76,6 +76,7 @@ export type GvqlHavingClause = GvqlBooleanExpression<GvqlRowPredicate>;
 export type GvqlReturnExpression =
   | { kind: "all"; alias?: string; aliasName?: string }
   | { kind: "path"; expression: GvqlPathExpression; aliasName?: string }
+  | { kind: "row"; source: string; aliasName?: string }
   | { kind: "value"; expression: GvqlValueExpression; source: string; aliasName?: string }
   | { kind: "count"; expression?: GvqlPathExpression; distinct?: boolean; aliasName?: string }
   | { kind: "aggregate"; fn: Exclude<GvqlAggregateFunction, "count">; expression: GvqlPathExpression; aliasName?: string };
@@ -118,12 +119,19 @@ export interface GvqlOrderBy {
   direction: "asc" | "desc";
 }
 
+export interface GvqlWithClause {
+  returns: GvqlReturnExpression[];
+  distinct: boolean;
+  where?: GvqlHavingClause;
+}
+
 export interface GvqlStatement {
   kind: GvqlStatementKind;
   match: GvqlMatchPattern;
   matches: GvqlMatchPattern[];
   optionalMatches: GvqlMatchPattern[];
   where?: GvqlWhereClause;
+  with?: GvqlWithClause;
   returns: GvqlReturnExpression[];
   distinct: boolean;
   set: GvqlSetExpression[];

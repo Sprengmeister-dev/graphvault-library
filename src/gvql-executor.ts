@@ -12,6 +12,7 @@ import type {
   GvqlExecutionPlan,
   GvqlGraphEdge,
   GvqlGraphIndex,
+  GvqlHavingClause,
   GvqlLiteral,
   GvqlMatchPattern,
   GvqlPathExpression,
@@ -48,7 +49,7 @@ export function executeGvqlStatement(envelope: SerializedEnvelope, statement: Gv
   const bindings = matched.bindings.filter((binding) => matchesWhere(index, binding, statement, parameters));
   if (statement.kind === "select") {
     const rows = projectSelectRows(index, bindings, statement, parameters);
-    const plan = completePlan(matched.plan, bindings, rows.length);
+    const plan = completePlan(matched.plan, bindings, rows.length, statement);
     return {
       kind: "select",
       statement,
@@ -66,7 +67,7 @@ export function executeGvqlStatement(envelope: SerializedEnvelope, statement: Gv
   const deleteRows = statement.delete.length > 0 ? projectGvqlRows(index, limitedBindings, statement, readPath, readNode, parameters) : undefined;
   const changes = applyGvqlMutations(index, limitedBindings, statement, options, readPath);
   const rows = deleteRows ?? projectGvqlRows(index, limitedBindings, statement, readPath, readNode, parameters);
-  const plan = completePlan(matched.plan, bindings, rows.length);
+  const plan = completePlan(matched.plan, bindings, rows.length, statement);
   return {
     kind: "update",
     statement,
@@ -87,6 +88,15 @@ function projectSelectRows(
   statement: GvqlStatement,
   parameters: Record<string, unknown>,
 ): Array<Record<string, unknown>> {
+  if (statement.with) {
+    const withStatement = { ...statement, returns: statement.with.returns, distinct: statement.with.distinct };
+    const projected = projectGvqlRows(index, bindings, withStatement, readPath, readNode, parameters).filter((row) => matchesHaving(row, withStatement, parameters));
+    const withRows = statement.with.distinct ? distinctRows(projected) : projected;
+    const filtered = statement.with.where ? withRows.filter((row) => matchesRowBoolean(row, statement.with?.where, parameters)) : withRows;
+    const finalRows = projectRowsFromRows(filtered, statement.returns);
+    const rows = statement.distinct ? distinctRows(finalRows) : finalRows;
+    return applyRowOrderingAndLimit(rows, statement);
+  }
   if (isAggregateStatement(statement) || statement.having || hasAliasOrdering(statement)) {
     const projected = projectGvqlRows(index, bindings, statement, readPath, readNode, parameters).filter((row) => matchesHaving(row, statement, parameters));
     const rows = statement.distinct ? distinctRows(projected) : projected;
@@ -98,6 +108,22 @@ function projectSelectRows(
     return applyOffsetAndLimit(rows, statement);
   }
   return projectGvqlRows(index, applyOffsetAndLimit(orderedBindings, statement), statement, readPath, readNode, parameters);
+}
+
+function projectRowsFromRows(rows: Array<Record<string, unknown>>, returns: GvqlStatement["returns"]): Array<Record<string, unknown>> {
+  return rows.map((row) => {
+    const projected: Record<string, unknown> = {};
+    for (const item of returns) {
+      if (item.kind === "all" && !item.alias) {
+        Object.assign(projected, row);
+      } else if (item.kind === "row") {
+        projected[item.aliasName ?? item.source] = row[item.source];
+      } else {
+        throw new Error("GVQL RETURN after WITH currently supports row aliases and RETURN *.");
+      }
+    }
+    return projected;
+  });
 }
 
 export function matchBindings(index: GvqlGraphIndex, statement: GvqlStatement, parameters: Record<string, unknown> = {}): GvqlBinding[] {
@@ -456,7 +482,12 @@ function applyRowOrderingAndLimit(rows: Array<Record<string, unknown>>, statemen
 
 function matchesHaving(row: Record<string, unknown>, statement: GvqlStatement, parameters: Record<string, unknown>): boolean {
   if (!statement.having) return true;
-  return evaluateBooleanExpression(statement.having, (predicate) => evaluateRowPredicate(row, predicate, parameters));
+  return matchesRowBoolean(row, statement.having, parameters);
+}
+
+function matchesRowBoolean(row: Record<string, unknown>, expression: GvqlHavingClause | undefined, parameters: Record<string, unknown>): boolean {
+  if (!expression) return true;
+  return evaluateBooleanExpression(expression, (predicate) => evaluateRowPredicate(row, predicate, parameters));
 }
 
 function evaluateRowPredicate(row: Record<string, unknown>, predicate: GvqlRowPredicate, parameters: Record<string, unknown>): boolean {
@@ -538,7 +569,7 @@ function rowKey(expression: { alias: string; path?: string }): string {
   return [expression.alias, expression.path].filter(Boolean).join(".");
 }
 
-function completePlan(plan: GvqlExecutionPlan, filteredBindings: GvqlBinding[], returnedRows: number): GvqlExecutionPlan {
+function completePlan(plan: GvqlExecutionPlan, filteredBindings: GvqlBinding[], returnedRows: number, statement: GvqlStatement): GvqlExecutionPlan {
   const windowed = plan.offset > 0 || typeof plan.limit === "number";
   return {
     ...plan,
@@ -549,6 +580,7 @@ function completePlan(plan: GvqlExecutionPlan, filteredBindings: GvqlBinding[], 
       ...(filteredBindings.length !== plan.matchedBindings ? ["where-filter"] : []),
       ...(plan.grouped ? ["aggregate"] : []),
       ...(plan.having ? ["having-filter"] : []),
+      ...(statement.with ? ["with-project"] : []),
       ...(plan.distinct ? ["distinct"] : []),
       ...(windowed || returnedRows !== filteredBindings.length ? ["project-window"] : ["project"]),
     ],

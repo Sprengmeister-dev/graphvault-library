@@ -1,3 +1,4 @@
+import { clausesByName, splitGvqlClauses, type GvqlClause } from "./gvql-clause-scanner.js";
 import type {
   GvqlCompareOperator,
   GvqlBooleanExpression,
@@ -18,27 +19,14 @@ import type {
   GvqlSetExpression,
   GvqlValueExpression,
   GvqlStatement,
+  GvqlWithClause,
   GvqlWhereClause,
   GvqlAggregateFunction,
 } from "./gvql-types.js";
 
-type ClauseName =
-  | "MATCH"
-  | "OPTIONAL MATCH"
-  | "WHERE"
-  | "SET"
-  | "REMOVE"
-  | "DELETE"
-  | "CREATE"
-  | "RETURN"
-  | "GROUP BY"
-  | "HAVING"
-  | "ORDER BY"
-  | "LIMIT"
-  | "OFFSET";
-
 export function parseGvql(source: string): GvqlStatement {
-  const clauses = splitClauses(source);
+  const clauseList = splitGvqlClauses(source);
+  const clauses = clausesByName(clauseList);
   const match = clauses.get("MATCH");
   if (!match) {
     throw new Error("GVQL requires a MATCH clause.");
@@ -47,8 +35,13 @@ export function parseGvql(source: string): GvqlStatement {
   const remove = clauses.get("REMOVE") ? parseRemoveList(clauses.get("REMOVE") as string) : [];
   const deleteItems = clauses.get("DELETE") ? parseDeleteList(clauses.get("DELETE") as string) : [];
   const create = clauses.get("CREATE") ? parseCreateList(clauses.get("CREATE") as string) : [];
+  const withClause = parseWithFromClauses(clauseList);
+  if (withClause && (set.length > 0 || remove.length > 0 || deleteItems.length > 0 || create.length > 0)) {
+    throw new Error("GVQL WITH is currently supported for read queries. Use RETURN directly for mutation previews.");
+  }
+  const rowAliases = withClause ? new Set(withClause.returns.map(returnExpressionOutputName).filter(Boolean) as string[]) : undefined;
   const returnClause = clauses.get("RETURN")
-    ? parseReturnClause(clauses.get("RETURN") as string)
+    ? parseReturnClause(clauses.get("RETURN") as string, rowAliases ? { rowAliases } : {})
     : { returns: defaultReturns(set, remove, deleteItems, create), distinct: false };
   const matches = parseMatchList(match);
   return {
@@ -56,7 +49,8 @@ export function parseGvql(source: string): GvqlStatement {
     match: matches[0] as GvqlMatchPattern,
     matches,
     optionalMatches: clauses.get("OPTIONAL MATCH") ? parseMatchList(clauses.get("OPTIONAL MATCH") as string) : [],
-    ...(clauses.get("WHERE") ? { where: parseWhere(clauses.get("WHERE") as string) } : {}),
+    ...(objectWhereClause(clauseList) ? { where: parseWhere(objectWhereClause(clauseList) as string) } : {}),
+    ...(withClause ? { with: withClause } : {}),
     returns: returnClause.returns,
     distinct: returnClause.distinct,
     set,
@@ -71,40 +65,22 @@ export function parseGvql(source: string): GvqlStatement {
   };
 }
 
-function splitClauses(source: string): Map<ClauseName, string> {
-  const normalized = source.trim().replace(/;$/, "");
-  const matches: Array<{ name: ClauseName; index: number; end: number }> = [];
-  for (const name of [
-    "MATCH",
-    "OPTIONAL MATCH",
-    "WHERE",
-    "SET",
-    "REMOVE",
-    "DELETE",
-    "CREATE",
-    "RETURN",
-    "GROUP BY",
-    "HAVING",
-    "ORDER BY",
-    "LIMIT",
-    "OFFSET",
-  ] as ClauseName[]) {
-    const found = findKeyword(normalized, name);
-    if (found >= 0) {
-      matches.push({ name, index: found, end: found + name.length });
-    }
-  }
-  matches.sort((a, b) => a.index - b.index);
-  if (matches[0]?.name !== "MATCH") {
-    throw new Error("GVQL statements must start with MATCH.");
-  }
-  const clauses = new Map<ClauseName, string>();
-  for (let index = 0; index < matches.length; index++) {
-    const current = matches[index] as { name: ClauseName; index: number; end: number };
-    const next = matches[index + 1];
-    clauses.set(current.name, normalized.slice(current.end, next?.index).trim());
-  }
-  return clauses;
+function parseWithFromClauses(clauses: GvqlClause[]): GvqlWithClause | undefined {
+  const withClause = clauses.find((clause) => clause.name === "WITH");
+  if (!withClause) return undefined;
+  const rowWhere = clauses.find((clause) => clause.name === "WHERE" && clause.index > withClause.index);
+  const parsed = parseReturnClause(withClause.body);
+  return {
+    returns: parsed.returns,
+    distinct: parsed.distinct,
+    ...(rowWhere ? { where: parseHaving(rowWhere.body) } : {}),
+  };
+}
+
+function objectWhereClause(clauses: GvqlClause[]): string | undefined {
+  const withClause = clauses.find((clause) => clause.name === "WITH");
+  const whereClause = clauses.find((clause) => clause.name === "WHERE" && (!withClause || clause.index < withClause.index));
+  return whereClause?.body;
 }
 
 function parseMatchList(patterns: string): GvqlMatchPattern[] {
@@ -335,20 +311,23 @@ function parseObjectPropertyName(input: string): string {
   throw new Error(`Invalid GVQL CREATE property name "${input}".`);
 }
 
-function parseReturnClause(input: string): { returns: GvqlReturnExpression[]; distinct: boolean } {
+function parseReturnClause(input: string, options: { rowAliases?: Set<string> } = {}): { returns: GvqlReturnExpression[]; distinct: boolean } {
   const trimmed = input.trim();
   const distinct = keywordAt(trimmed, 0, "DISTINCT");
   const body = distinct ? trimmed.slice("DISTINCT".length).trim() : trimmed;
   if (!body) {
     throw new Error("GVQL RETURN is empty.");
   }
-  return { returns: parseReturnList(body), distinct };
+  return { returns: parseReturnList(body, options), distinct };
 }
 
-function parseReturnList(input: string): GvqlReturnExpression[] {
+function parseReturnList(input: string, options: { rowAliases?: Set<string> } = {}): GvqlReturnExpression[] {
   return splitComma(input).map((item) => {
     const { expression, aliasName } = splitAlias(item);
     if (expression === "*") return { kind: "all", ...(aliasName ? { aliasName } : {}) };
+    if (/^[A-Za-z_][\w]*$/.test(expression) && options.rowAliases?.has(expression)) {
+      return { kind: "row", source: expression, ...(aliasName ? { aliasName } : {}) };
+    }
     const count = /^count\s*\(\s*(?:(DISTINCT)\s+)?(\*|[A-Za-z_][\w]*(?:\.[^)]+)?)\s*\)$/i.exec(expression);
     if (count) {
       const distinct = Boolean(count[1]);
@@ -381,6 +360,16 @@ function parseReturnList(input: string): GvqlReturnExpression[] {
     }
     return { kind: "path", expression: parsePathExpression(expression) };
   });
+}
+
+function returnExpressionOutputName(expression: GvqlReturnExpression): string | undefined {
+  if (expression.aliasName) return expression.aliasName;
+  if (expression.kind === "path") return [expression.expression.alias, expression.expression.path].filter(Boolean).join(".");
+  if (expression.kind === "value") return expression.source;
+  if (expression.kind === "row") return expression.source;
+  if (expression.kind === "count") return "count";
+  if (expression.kind === "aggregate") return `${expression.fn}.${expression.expression.alias}.${expression.expression.path ?? ""}`;
+  return expression.alias;
 }
 
 function parseGroupBy(input: string): GvqlPathExpression[] {
