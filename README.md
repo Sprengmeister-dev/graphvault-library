@@ -329,10 +329,10 @@ Current GVQL supports:
 - reference traversal: `-[:owner]->` and inverse traversal: `<-[:owner]-`
 - `WHERE` predicates with `=`, `!=`, `<`, `<=`, `>`, `>=`, `CONTAINS`, `STARTS WITH`, `ENDS WITH`, `IN`
 - `$parameters`
-- `RETURN`, aliases with `AS`, `count(*)`
+- `RETURN`, `RETURN DISTINCT`, aliases with `AS`, `count(*)`
 - `GROUP BY` with `count`, `sum`, `avg`, `min`, `max`
 - `HAVING` over returned aliases for aggregate filtering
-- `ORDER BY` paths and returned aliases, plus `LIMIT` and `OFFSET`
+- `ORDER BY` paths and returned aliases, with multiple criteria plus `LIMIT` and `OFFSET`
 - `SET` for primitive field updates
 - type indexes and primitive-property index intersections for common equality filters on the first matched node
 
@@ -344,10 +344,20 @@ const totals = await storage.gvql(`
   RETURN doc.status AS status, count(*) AS count, avg(doc.views) AS avgViews
   GROUP BY doc.status
   HAVING count >= $minimum
-  ORDER BY avgViews DESC
+  ORDER BY avgViews DESC, status ASC
 `, {
   parameters: { minimum: 5 },
 });
+```
+
+Deduplicate projected rows with `RETURN DISTINCT`:
+
+```ts
+const statuses = await storage.gvql(`
+  MATCH (doc:Document)
+  RETURN DISTINCT doc.status AS status
+  ORDER BY status ASC
+`);
 ```
 
 Every GVQL result also includes a compact execution plan so production tools can explain performance:

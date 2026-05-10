@@ -100,6 +100,29 @@ try {
   assert.equal(paged.plan.offset, 1);
   assert.equal(paged.plan.operations.includes("project-window"), true);
 
+  const distinct = await reloaded.gvql(`
+    MATCH (doc:Document)
+    RETURN DISTINCT doc.status AS status
+    ORDER BY status ASC
+  `);
+  assert.equal(distinct.kind, "select");
+  assert.deepEqual(distinct.rows, [{ status: "draft" }, { status: "published" }]);
+  assert.equal(distinct.statement.distinct, true);
+  assert.equal(distinct.plan.distinct, true);
+  assert.equal(distinct.plan.operations.includes("distinct"), true);
+
+  const multiOrder = await reloaded.gvql(`
+    MATCH (doc:Document)
+    RETURN doc.id AS id, doc.status AS status
+    ORDER BY doc.status ASC, doc.id DESC
+  `);
+  assert.equal(multiOrder.kind, "select");
+  assert.deepEqual(multiOrder.rows, [
+    { id: "doc-2", status: "draft" },
+    { id: "doc-1", status: "draft" },
+    { id: "doc-3", status: "published" },
+  ]);
+
   const aggregate = await reloaded.gvql(`
     MATCH (doc:Document)
     RETURN doc.status AS status, count(*) AS count, count(doc.views) AS viewed, sum(doc.views) AS views, avg(doc.views) AS avgViews

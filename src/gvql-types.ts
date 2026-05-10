@@ -85,8 +85,9 @@ export interface GvqlStatement {
   match: GvqlMatchPattern;
   where?: GvqlWhereClause;
   returns: GvqlReturnExpression[];
+  distinct: boolean;
   set: GvqlSetExpression[];
-  orderBy?: GvqlOrderBy;
+  orderBy?: GvqlOrderBy[];
   groupBy?: GvqlPathExpression[];
   having?: GvqlHavingClause;
   limit?: number;
@@ -146,6 +147,7 @@ export interface GvqlExecutionPlan {
   returnedRows: number;
   limit?: number;
   offset: number;
+  distinct: boolean;
   grouped: boolean;
   having: boolean;
   operations: string[];

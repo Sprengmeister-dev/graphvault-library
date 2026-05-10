@@ -62,12 +62,17 @@ function projectSelectRows(
   statement: GvqlStatement,
   parameters: Record<string, unknown>,
 ): Array<Record<string, unknown>> {
-  if (isAggregateStatement(statement) || statement.having || statement.orderBy?.expression.kind === "alias") {
-    const rows = projectGvqlRows(index, bindings, statement, readPath, readNode).filter((row) => matchesHaving(row, statement, parameters));
+  if (isAggregateStatement(statement) || statement.having || hasAliasOrdering(statement)) {
+    const projected = projectGvqlRows(index, bindings, statement, readPath, readNode).filter((row) => matchesHaving(row, statement, parameters));
+    const rows = statement.distinct ? distinctRows(projected) : projected;
     return applyRowOrderingAndLimit(rows, statement);
   }
-  const limitedBindings = applyBindingOrderingAndLimit(index, bindings, statement);
-  return projectGvqlRows(index, limitedBindings, statement, readPath, readNode);
+  const orderedBindings = applyBindingOrdering(index, bindings, statement);
+  if (statement.distinct) {
+    const rows = distinctRows(projectGvqlRows(index, orderedBindings, statement, readPath, readNode));
+    return applyOffsetAndLimit(rows, statement);
+  }
+  return projectGvqlRows(index, applyOffsetAndLimit(orderedBindings, statement), statement, readPath, readNode);
 }
 
 export function matchBindings(index: GvqlGraphIndex, statement: GvqlStatement, parameters: Record<string, unknown> = {}): GvqlBinding[] {
@@ -117,6 +122,7 @@ function matchBindingsWithPlan(
       returnedRows: 0,
       ...(typeof statement.limit === "number" ? { limit: statement.limit } : {}),
       offset: statement.offset ?? 0,
+      distinct: statement.distinct,
       grouped: isAggregateStatement(statement),
       having: Boolean(statement.having),
       operations,
@@ -225,28 +231,37 @@ function compare(left: unknown, right: unknown): number {
 }
 
 function applyBindingOrderingAndLimit(index: GvqlGraphIndex, bindings: GvqlBinding[], statement: GvqlStatement): GvqlBinding[] {
+  return applyOffsetAndLimit(applyBindingOrdering(index, bindings, statement), statement);
+}
+
+function applyBindingOrdering(index: GvqlGraphIndex, bindings: GvqlBinding[], statement: GvqlStatement): GvqlBinding[] {
   const rows = [...bindings];
-  const order = statement.orderBy;
-  if (order?.expression.kind === "path") {
-    const expression = order.expression.expression;
+  const pathOrders = statement.orderBy?.filter((order) => order.expression.kind === "path") ?? [];
+  if (pathOrders.length === statement.orderBy?.length) {
     rows.sort((a, b) => {
-      const comparison = compare(readPath(index, a, expression), readPath(index, b, expression));
-      return order.direction === "desc" ? -comparison : comparison;
+      for (const order of pathOrders) {
+        if (order.expression.kind !== "path") continue;
+        const comparison = compare(readPath(index, a, order.expression.expression), readPath(index, b, order.expression.expression));
+        if (comparison !== 0) return order.direction === "desc" ? -comparison : comparison;
+      }
+      return 0;
     });
   }
-  return applyOffsetAndLimit(rows, statement);
+  return rows;
 }
 
 function applyRowOrderingAndLimit(rows: Array<Record<string, unknown>>, statement: GvqlStatement): Array<Record<string, unknown>> {
   const ordered = [...rows];
-  if (statement.orderBy) {
-    const order = statement.orderBy;
+  if (statement.orderBy?.length) {
     ordered.sort((a, b) => {
-      const comparison =
-        order.expression.kind === "alias"
-          ? compare(a[order.expression.aliasName], b[order.expression.aliasName])
-          : compare(a[rowKey(order.expression.expression)], b[rowKey(order.expression.expression)]);
-      return order.direction === "desc" ? -comparison : comparison;
+      for (const order of statement.orderBy ?? []) {
+        const comparison =
+          order.expression.kind === "alias"
+            ? compare(a[order.expression.aliasName], b[order.expression.aliasName])
+            : compare(a[rowKey(order.expression.expression)], b[rowKey(order.expression.expression)]);
+        if (comparison !== 0) return order.direction === "desc" ? -comparison : comparison;
+      }
+      return 0;
     });
   }
   return applyOffsetAndLimit(ordered, statement);
@@ -345,6 +360,10 @@ function isAggregateStatement(statement: GvqlStatement): boolean {
   return Boolean(statement.groupBy?.length || statement.returns.some((item) => item.kind === "aggregate" || item.kind === "count"));
 }
 
+function hasAliasOrdering(statement: GvqlStatement): boolean {
+  return Boolean(statement.orderBy?.some((order) => order.expression.kind === "alias"));
+}
+
 function rowKey(expression: { alias: string; path?: string }): string {
   return [expression.alias, expression.path].filter(Boolean).join(".");
 }
@@ -360,9 +379,29 @@ function completePlan(plan: GvqlExecutionPlan, filteredBindings: GvqlBinding[], 
       ...(filteredBindings.length !== plan.matchedBindings ? ["where-filter"] : []),
       ...(plan.grouped ? ["aggregate"] : []),
       ...(plan.having ? ["having-filter"] : []),
+      ...(plan.distinct ? ["distinct"] : []),
       ...(windowed || returnedRows !== filteredBindings.length ? ["project-window"] : ["project"]),
     ],
   };
+}
+
+function distinctRows(rows: Array<Record<string, unknown>>): Array<Record<string, unknown>> {
+  const seen = new Set<string>();
+  const result: Array<Record<string, unknown>> = [];
+  for (const row of rows) {
+    const key = stableStringify(row);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(row);
+  }
+  return result;
+}
+
+function stableStringify(value: unknown): string {
+  if (value === null || typeof value !== "object") return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`;
+  const entries = Object.entries(value as Record<string, unknown>).sort(([left], [right]) => left.localeCompare(right));
+  return `{${entries.map(([key, item]) => `${JSON.stringify(key)}:${stableStringify(item)}`).join(",")}}`;
 }
 
 function equalityPredicates(

@@ -25,12 +25,13 @@ export function parseGvql(source: string): GvqlStatement {
     throw new Error("GVQL requires a MATCH clause.");
   }
   const set = clauses.get("SET") ? parseSetList(clauses.get("SET") as string) : [];
-  const returns = clauses.get("RETURN") ? parseReturnList(clauses.get("RETURN") as string) : defaultReturns(set);
+  const returnClause = clauses.get("RETURN") ? parseReturnClause(clauses.get("RETURN") as string) : { returns: defaultReturns(set), distinct: false };
   return {
     kind: set.length > 0 ? "update" : "select",
     match: parseMatch(match),
     ...(clauses.get("WHERE") ? { where: parseWhere(clauses.get("WHERE") as string) } : {}),
-    returns,
+    returns: returnClause.returns,
+    distinct: returnClause.distinct,
     set,
     ...(clauses.get("ORDER BY") ? { orderBy: parseOrderBy(clauses.get("ORDER BY") as string) } : {}),
     ...(clauses.get("GROUP BY") ? { groupBy: parseGroupBy(clauses.get("GROUP BY") as string) } : {}),
@@ -167,6 +168,16 @@ function parseSetList(input: string): GvqlSetExpression[] {
   });
 }
 
+function parseReturnClause(input: string): { returns: GvqlReturnExpression[]; distinct: boolean } {
+  const trimmed = input.trim();
+  const distinct = keywordAt(trimmed, 0, "DISTINCT");
+  const body = distinct ? trimmed.slice("DISTINCT".length).trim() : trimmed;
+  if (!body) {
+    throw new Error("GVQL RETURN is empty.");
+  }
+  return { returns: parseReturnList(body), distinct };
+}
+
 function parseReturnList(input: string): GvqlReturnExpression[] {
   return splitComma(input).map((item) => {
     const { expression, aliasName } = splitAlias(item);
@@ -194,7 +205,11 @@ function parseGroupBy(input: string): GvqlPathExpression[] {
   return splitComma(input).map(parsePathExpression);
 }
 
-function parseOrderBy(input: string): { expression: GvqlOrderExpression; direction: "asc" | "desc" } {
+function parseOrderBy(input: string): Array<{ expression: GvqlOrderExpression; direction: "asc" | "desc" }> {
+  return splitComma(input).map(parseOrderByItem);
+}
+
+function parseOrderByItem(input: string): { expression: GvqlOrderExpression; direction: "asc" | "desc" } {
   const match = /^(.*?)(?:\s+(ASC|DESC))?$/i.exec(input.trim());
   if (!match) throw new Error(`Invalid GVQL ORDER BY "${input}".`);
   return { expression: parseOrderExpression((match[1] ?? "").trim()), direction: match[2]?.toLowerCase() === "desc" ? "desc" : "asc" };
