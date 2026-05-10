@@ -73,12 +73,15 @@ async function benchmarkMemory(count) {
   const root = createRoot(count);
   const storage = await EmbeddedStorage.start({ storageDirectory: directory, storageTarget: target, root, types: typeRegistrations() });
   const store = await time(() => storage.storeRoot());
+  const gvql = await time(() =>
+    storage.gvql('MATCH (doc:Document)-[:owner]->(owner:Owner) WHERE owner.name = "Owner 1" RETURN doc.id AS id, doc.title AS title LIMIT 25'),
+  );
   await storage.shutdown();
   const load = await time(async () => {
     const loaded = await EmbeddedStorage.start({ storageDirectory: directory, storageTarget: target, rootFactory: () => ({}), types: typeRegistrations() });
     await loaded.shutdown();
   });
-  return { target: "memory", count, storeMs: store.ms, loadMs: load.ms, bytes: undefined };
+  return { target: "memory", count, storeMs: store.ms, gvqlMs: gvql.ms, loadMs: load.ms, bytes: undefined };
 }
 
 async function benchmarkFilesystem(count) {
@@ -87,12 +90,15 @@ async function benchmarkFilesystem(count) {
     const root = createRoot(count);
     const storage = await EmbeddedStorage.start({ storageDirectory: directory, root, types: typeRegistrations() });
     const store = await time(() => storage.storeRoot());
+    const gvql = await time(() =>
+      storage.gvql('MATCH (doc:Document)-[:owner]->(owner:Owner) WHERE owner.name = "Owner 1" RETURN doc.id AS id, doc.title AS title LIMIT 25'),
+    );
     await storage.shutdown();
     const load = await time(async () => {
       const loaded = await EmbeddedStorage.start({ storageDirectory: directory, rootFactory: () => ({}), types: typeRegistrations() });
       await loaded.shutdown();
     });
-    return { target: "filesystem", count, storeMs: store.ms, loadMs: load.ms, bytes: await directorySize(directory) };
+    return { target: "filesystem", count, storeMs: store.ms, gvqlMs: gvql.ms, loadMs: load.ms, bytes: await directorySize(directory) };
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
@@ -141,8 +147,10 @@ console.log(`Runtime: ${process.version}`);
 console.log(`Platform: ${process.platform} ${process.arch}`);
 console.log(`Date: ${new Date().toISOString()}`);
 console.log();
-console.log(`| target | documents | storeRoot | reload | storage size |`);
-console.log(`| --- | ---: | ---: | ---: | ---: |`);
+console.log(`| target | documents | storeRoot | GVQL select | reload | storage size |`);
+console.log(`| --- | ---: | ---: | ---: | ---: | ---: |`);
 for (const row of rows) {
-  console.log(`| ${row.target} | ${row.count.toLocaleString("en-US")} | ${formatMs(row.storeMs)} | ${formatMs(row.loadMs)} | ${formatBytes(row.bytes)} |`);
+  console.log(
+    `| ${row.target} | ${row.count.toLocaleString("en-US")} | ${formatMs(row.storeMs)} | ${formatMs(row.gvqlMs)} | ${formatMs(row.loadMs)} | ${formatBytes(row.bytes)} |`,
+  );
 }

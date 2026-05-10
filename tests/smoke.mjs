@@ -63,6 +63,36 @@ try {
   assert.equal(reloaded.root.documents[0].related[0], reloaded.root.documents[1]);
   assert.ok(reloaded.root.documents[0].tags.has("typescript"));
 
+  const query = await reloaded.gvql(`
+    MATCH (doc:Document)-[:owner]->(owner:Owner)
+    WHERE owner.name = "Platform Team"
+    RETURN doc.id AS id, doc.title AS title
+    ORDER BY doc.id ASC
+    LIMIT 5
+  `);
+  assert.equal(query.kind, "select");
+  assert.deepEqual(query.rows, [
+    { id: "doc-1", title: "Object graph persistence" },
+    { id: "doc-2", title: "Admin workflows" },
+  ]);
+
+  const preview = await reloaded.previewGvql(
+    'MATCH (doc:Document) WHERE doc.id = $id SET doc.title = "Admin workflows updated" RETURN doc.id AS id, doc.title AS title',
+    { parameters: { id: "doc-2" } },
+  );
+  assert.equal(preview.kind, "update");
+  assert.equal(preview.dryRun, true);
+  assert.equal(preview.changes.length, 1);
+  assert.equal(reloaded.root.documents[1].title, "Admin workflows");
+
+  const update = await reloaded.gvql(
+    'MATCH (doc:Document) WHERE doc.id = $id SET doc.title = "Admin workflows updated" RETURN doc.id AS id, doc.title AS title',
+    { parameters: { id: "doc-2" } },
+  );
+  assert.equal(update.kind, "update");
+  assert.equal(update.changed, 1);
+  assert.equal(reloaded.root.documents[1].title, "Admin workflows updated");
+
   const verification = await reloaded.verify();
   assert.equal(verification.ok, true);
   await reloaded.shutdown();

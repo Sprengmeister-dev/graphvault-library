@@ -1,6 +1,43 @@
 export { EmbeddedStorage } from "./embedded-storage.js";
 export { decodeBinaryRecord, encodeBinaryRecord } from "./binary-codec.js";
 export {
+  buildGvqlGraphIndex,
+  encodedValueToJs,
+  executeGvqlStatement,
+  jsValueToEncoded,
+  matchBindings,
+  parseGvql,
+  referencedEdges,
+  visitEncodedNode,
+} from "./gvql.js";
+export type {
+  GvqlBinding,
+  GvqlCompareOperator,
+  GvqlDirection,
+  GvqlEdgePattern,
+  GvqlExecutableContext,
+  GvqlExecutionOptions,
+  GvqlGraphEdge,
+  GvqlGraphIndex,
+  GvqlGraphNode,
+  GvqlLiteral,
+  GvqlLogicalOperator,
+  GvqlMatchPattern,
+  GvqlMutationPreview,
+  GvqlMutationResult,
+  GvqlNodePattern,
+  GvqlOrderBy,
+  GvqlPathExpression,
+  GvqlPredicate,
+  GvqlQueryResult,
+  GvqlResult,
+  GvqlReturnExpression,
+  GvqlSetExpression,
+  GvqlStatement,
+  GvqlStatementKind,
+  GvqlWhereClause,
+} from "./gvql.js";
+export {
   GraphVaultModule,
   GRAPHVAULT_MANAGER,
   GRAPHVAULT_OPTIONS,

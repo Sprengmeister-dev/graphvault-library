@@ -284,9 +284,53 @@ try {
     root.documents.push(new Document("doc-3", "Release checklist"));
   });
 } finally {
-  await storage.shutdown();
+await storage.shutdown();
 }
 ```
+
+## GVQL Query And Batch Update
+
+GVQL is GraphVault's graph query language. It follows the shape of modern property-graph languages: `MATCH` object patterns, filter with `WHERE`, project with `RETURN`, and use `SET` for controlled batch updates.
+
+```ts
+const result = await storage.gvql(`
+  MATCH (doc:Document)-[:owner]->(owner:Owner)
+  WHERE owner.name = $owner
+  RETURN doc.id AS id, doc.title AS title
+  ORDER BY doc.title ASC
+  LIMIT 25
+`, {
+  parameters: { owner: "Platform Team" },
+});
+```
+
+Batch updates are explicit and can be previewed first:
+
+```ts
+const preview = await storage.previewGvql(`
+  MATCH (doc:Document)
+  WHERE doc.status = "draft"
+  SET doc.status = "archived"
+  RETURN count(*) AS changed
+`);
+
+const committed = await storage.gvql(`
+  MATCH (doc:Document)
+  WHERE doc.status = "draft"
+  SET doc.status = "archived"
+  RETURN count(*) AS changed
+`);
+```
+
+Current GVQL supports:
+
+- node patterns: `(doc:Document)` or `(node)`
+- reference traversal: `-[:owner]->` and inverse traversal: `<-[:owner]-`
+- `WHERE` predicates with `=`, `!=`, `<`, `<=`, `>`, `>=`, `CONTAINS`, `STARTS WITH`, `ENDS WITH`, `IN`
+- `$parameters`
+- `RETURN`, aliases with `AS`, `count(*)`
+- `ORDER BY`, `LIMIT`
+- `SET` for primitive field updates
 
 ## Performance
 

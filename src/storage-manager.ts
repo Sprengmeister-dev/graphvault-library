@@ -9,6 +9,8 @@ import { copyStorageTargetTree, LocalFilesystemTarget } from "./storage-target.j
 import { Storer } from "./storer.js";
 import { LazyRef } from "./lazy-ref.js";
 import { ReadonlyStorageError, StorageNotStartedError } from "./errors.js";
+import { executeGvqlStatement } from "./gvql-executor.js";
+import { parseGvql } from "./gvql-parser.js";
 import type {
   CompactionResult,
   BackupResult,
@@ -25,6 +27,7 @@ import type {
   MaintenanceResult,
   MaintenanceOptions,
 } from "./types.js";
+import type { GvqlExecutionOptions, GvqlResult } from "./gvql-types.js";
 
 export class StorageManager<TRoot = unknown> {
   private readonly options: Required<Pick<StorageManagerOptions<TRoot>, "lockTimeoutMs" | "housekeepingIntervalMs">> &
@@ -259,6 +262,32 @@ export class StorageManager<TRoot = unknown> {
     return this.maintain({ keepSnapshots: 1, ...options });
   }
 
+  async gvql(query: string, options: GvqlExecutionOptions = {}): Promise<GvqlResult> {
+    this.assertStarted();
+    const statement = parseGvql(query);
+    if (statement.kind === "update" && !options.dryRun) {
+      this.assertWritable();
+    }
+    return this.mutex.runExclusive(async () => {
+      const envelope = this.serializer.serialize(this.rootValue);
+      const result = executeGvqlStatement(envelope, statement, {
+        ...options,
+        allowMutations: statement.kind === "update" && !options.dryRun,
+      });
+      if (result.kind === "update" && !result.dryRun) {
+        const nextRoot = this.serializer.deserialize<TRoot>(envelope);
+        this.rootValue = this.fillCustomRoot(nextRoot, envelope);
+        this.bindLazyRefs(this.rootValue);
+        result.metadata = await this.storeEnvelopeLocked(envelope, "standard", result.changes.map((change) => change.objectId));
+      }
+      return result;
+    });
+  }
+
+  async previewGvql(query: string, options: Omit<GvqlExecutionOptions, "dryRun"> = {}): Promise<GvqlResult> {
+    return this.gvql(query, { ...options, dryRun: true });
+  }
+
   private async collectGarbageLocked(): Promise<GarbageCollectionResult> {
     const manifest = await this.reader.readManifest();
     if (!manifest) {
@@ -414,6 +443,32 @@ export class StorageManager<TRoot = unknown> {
     this.transactionId = nextTransactionId;
     this.replacePersistedObjectIds(Object.keys(envelope.nodes));
     return { transactionId: nextTransactionId, storedAt: new Date(), snapshotFile, journalFile, mode, objectCount: targets.length, objectIds };
+  }
+
+  private async storeEnvelopeLocked(envelope: SerializedEnvelope, mode: StoreMode, changedObjectIds: string[]): Promise<StoreMetadata> {
+    const nextTransactionId = this.transactionId + 1;
+    const snapshotFile = `snapshot-${String(nextTransactionId).padStart(12, "0")}.json`;
+    const snapshotPath = join(this.layout.snapshotsDirectory, snapshotFile);
+    const objectIds = Array.from(new Set(changedObjectIds.length ? changedObjectIds : Object.keys(envelope.nodes))).sort((a, b) => Number(a) - Number(b));
+    await this.writer.writeObjectRecords(envelope, nextTransactionId, objectIds);
+    await this.writer.writeTypeDictionary(this.serializer.types.entries());
+    await this.writer.writeManifest(envelope, nextTransactionId);
+    await this.writer.writeParentIndex(envelope, nextTransactionId);
+    await this.writer.writeJson(snapshotPath, envelope);
+    await this.target.writeTextAtomic(this.layout.currentFile, snapshotFile);
+    const journalFile = await this.writer.writeTransactionRecord({
+      format: "graphvault-transaction",
+      version: 1,
+      transactionId: nextTransactionId,
+      committedAt: new Date().toISOString(),
+      snapshotFile,
+      objectIds: Object.keys(envelope.nodes).sort((a, b) => Number(a) - Number(b)),
+      mode,
+      targetCount: objectIds.length,
+    });
+    this.transactionId = nextTransactionId;
+    this.replacePersistedObjectIds(Object.keys(envelope.nodes));
+    return { transactionId: nextTransactionId, storedAt: new Date(), snapshotFile, journalFile, mode, objectCount: objectIds.length, objectIds };
   }
 
   private collectObjectIds(envelope: SerializedEnvelope, targets: readonly unknown[]): string[] {
