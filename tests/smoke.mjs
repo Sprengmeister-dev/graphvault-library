@@ -140,6 +140,21 @@ try {
   assert.deepEqual(metadataIdFilter.rows, [{ objectId: firstDocumentObjectId }]);
   assert.equal(metadataIdFilter.plan.candidateSource, "id-index");
 
+  const distinctCount = await reloaded.gvql(`
+    MATCH (doc:Document)
+    RETURN count(DISTINCT doc.status) AS statuses
+  `);
+  assert.equal(distinctCount.kind, "select");
+  assert.deepEqual(distinctCount.rows, [{ statuses: 2 }]);
+
+  const distinctTypeCount = await reloaded.gvql(`
+    MATCH (node)
+    WHERE node.$type IS NOT NULL
+    RETURN count(DISTINCT node.$type) AS types
+  `);
+  assert.equal(distinctTypeCount.kind, "select");
+  assert.deepEqual(distinctTypeCount.rows, [{ types: 2 }]);
+
   const distinct = await reloaded.gvql(`
     MATCH (doc:Document)
     RETURN DISTINCT doc.status AS status

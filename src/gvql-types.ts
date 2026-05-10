@@ -75,7 +75,7 @@ export interface GvqlHavingClause {
 export type GvqlReturnExpression =
   | { kind: "all"; alias?: string; aliasName?: string }
   | { kind: "path"; expression: GvqlPathExpression; aliasName?: string }
-  | { kind: "count"; expression?: GvqlPathExpression; aliasName?: string }
+  | { kind: "count"; expression?: GvqlPathExpression; distinct?: boolean; aliasName?: string }
   | { kind: "aggregate"; fn: Exclude<GvqlAggregateFunction, "count">; expression: GvqlPathExpression; aliasName?: string };
 
 export interface GvqlSetExpression {

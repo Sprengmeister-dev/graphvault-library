@@ -57,12 +57,7 @@ function projectAggregateRows(
     const row: Record<string, unknown> = {};
     for (const item of statement.returns) {
       if (item.kind === "count") {
-        row[item.aliasName ?? "count"] = item.expression
-          ? group.filter((binding) => {
-              const value = readPath(index, binding, item.expression as { alias: string; path?: string });
-              return value !== null && typeof value !== "undefined";
-            }).length
-          : group.length;
+        row[item.aliasName ?? "count"] = item.expression ? countValues(group, index, item.expression, item.distinct ?? false, readPath) : group.length;
       } else if (item.kind === "aggregate") {
         row[item.aliasName ?? `${item.fn}.${item.expression.alias}.${item.expression.path ?? ""}`] = aggregate(
           item.fn,
@@ -78,6 +73,20 @@ function projectAggregateRows(
   });
 }
 
+function countValues(
+  group: GvqlBinding[],
+  index: GvqlGraphIndex,
+  expression: { alias: string; path?: string },
+  distinct: boolean,
+  readPath: GvqlPathReader,
+): number {
+  const values = group
+    .map((binding) => readPath(index, binding, expression))
+    .filter((value) => value !== null && typeof value !== "undefined");
+  if (!distinct) return values.length;
+  return new Set(values.map(stableStringify)).size;
+}
+
 function aggregate(fn: "sum" | "avg" | "min" | "max", values: unknown[]): unknown {
   const present = values.filter((value) => value !== null && typeof value !== "undefined");
   if (fn === "sum" || fn === "avg") {
@@ -87,6 +96,13 @@ function aggregate(fn: "sum" | "avg" | "min" | "max", values: unknown[]): unknow
   }
   const sorted = [...present].sort((a, b) => compare(a, b));
   return fn === "min" ? sorted[0] ?? null : sorted[sorted.length - 1] ?? null;
+}
+
+function stableStringify(value: unknown): string {
+  if (value === null || typeof value !== "object") return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`;
+  const entries = Object.entries(value as Record<string, unknown>).sort(([left], [right]) => left.localeCompare(right));
+  return `{${entries.map(([key, item]) => `${JSON.stringify(key)}:${stableStringify(item)}`).join(",")}}`;
 }
 
 function compare(left: unknown, right: unknown): number {

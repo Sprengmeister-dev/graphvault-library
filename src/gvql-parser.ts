@@ -231,10 +231,19 @@ function parseReturnList(input: string): GvqlReturnExpression[] {
   return splitComma(input).map((item) => {
     const { expression, aliasName } = splitAlias(item);
     if (expression === "*") return { kind: "all", ...(aliasName ? { aliasName } : {}) };
-    const count = /^count\s*\(\s*(\*|[A-Za-z_][\w]*(?:\.[A-Za-z_][\w]*)?)\s*\)$/i.exec(expression);
+    const count = /^count\s*\(\s*(?:(DISTINCT)\s+)?(\*|[A-Za-z_][\w]*(?:\.[^)]+)?)\s*\)$/i.exec(expression);
     if (count) {
-      const countExpression = count[1] && count[1] !== "*" ? parsePathExpression(count[1]) : undefined;
-      return { kind: "count", ...(countExpression ? { expression: countExpression } : {}), ...(aliasName ? { aliasName } : {}) };
+      const distinct = Boolean(count[1]);
+      if (distinct && count[2] === "*") {
+        throw new Error("GVQL count(DISTINCT ...) requires a path expression.");
+      }
+      const countExpression = count[2] && count[2] !== "*" ? parsePathExpression(count[2]) : undefined;
+      return {
+        kind: "count",
+        ...(countExpression ? { expression: countExpression } : {}),
+        ...(distinct ? { distinct } : {}),
+        ...(aliasName ? { aliasName } : {}),
+      };
     }
     const aggregate = /^(sum|avg|min|max)\s*\(\s*([A-Za-z_][\w]*(?:\.[A-Za-z_][\w]*)+)\s*\)$/i.exec(expression);
     if (aggregate) {

@@ -21,6 +21,24 @@ It is embedded, explicit, and TypeScript-first: you keep your domain model in me
 - separate graphical admin tool: [GraphVault Studio](https://github.com/Sprengmeister-dev/graphvault-studio)
 - reproducible benchmark: [`npm run benchmark`](./docs/BENCHMARKS.md)
 
+## GVQL As A First-Class Feature
+
+GraphVault includes GVQL, a TypeScript-friendly graph query and batch-update language for production tooling. It gives you SQL-like reach into an object graph without flattening your domain model into tables first.
+
+```ts
+const result = await storage.gvql(`
+  MATCH (doc:Document)-[:owner]->(owner:Owner)
+  WHERE owner.name = $owner AND doc.status IN ["draft", "review"]
+  RETURN doc.status AS status, count(DISTINCT doc.id) AS documents
+  GROUP BY doc.status
+  ORDER BY documents DESC
+`, {
+  parameters: { owner: "Platform Team" },
+});
+```
+
+GVQL supports graph traversal, indexed metadata and property filters, grouping, aggregates, `RETURN DISTINCT`, `count(DISTINCT path)`, pagination, execution plans, and preview-first batch updates with `SET` and `REMOVE`. It is also what powers GraphVault Studio's search, inspection, and manipulation workflows.
+
 ## Why Use This Instead Of A Normal Database?
 
 Relational and document databases are excellent when your application is primarily about querying independent records. They become awkward when the important shape is an in-memory domain model with identity, links, and behavior. GraphVault is for cases where you want to keep that model intact and persist it deliberately.
@@ -340,7 +358,7 @@ Current GVQL supports:
 - reference traversal: `-[:owner]->` and inverse traversal: `<-[:owner]-`
 - `WHERE` predicates with `=`, `!=`, `<`, `<=`, `>`, `>=`, `CONTAINS`, `STARTS WITH`, `ENDS WITH`, `IN`, `IS NULL`, `IS NOT NULL`
 - `$parameters`
-- `RETURN`, `RETURN DISTINCT`, aliases with `AS`, `count(*)`, and virtual metadata paths `$id`, `$type`, `$kind`
+- `RETURN`, `RETURN DISTINCT`, aliases with `AS`, `count(*)`, `count(DISTINCT path)`, and virtual metadata paths `$id`, `$type`, `$kind`
 - `GROUP BY` with `count`, `sum`, `avg`, `min`, `max`
 - `HAVING` over returned aliases for aggregate filtering
 - `ORDER BY` paths and returned aliases, with multiple criteria plus `LIMIT` and `OFFSET`
