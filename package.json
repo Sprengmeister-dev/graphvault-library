@@ -1,0 +1,60 @@
+{
+  "name": "graphvault",
+  "version": "0.1.0",
+  "description": "TypeScript object graph persistence for application-owned object models.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./nest": {
+      "types": "./dist/nest.d.ts",
+      "import": "./dist/nest.js"
+    },
+    "./internal/*": {
+      "types": "./dist/*.d.ts",
+      "import": "./dist/*.js"
+    },
+    "./internal/storage-targets/*": {
+      "types": "./dist/storage-targets/*.d.ts",
+      "import": "./dist/storage-targets/*.js"
+    }
+  },
+  "files": [
+    "assets",
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "npm run build",
+    "prepack": "npm run build"
+  },
+  "keywords": [
+    "graphvault",
+    "object-graph",
+    "persistence",
+    "typescript",
+    "nestjs"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "peerDependencies": {
+    "@nestjs/common": ">=10 || >=11"
+  },
+  "peerDependenciesMeta": {
+    "@nestjs/common": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.3",
+    "typescript": "^5.8.3"
+  }
+}
