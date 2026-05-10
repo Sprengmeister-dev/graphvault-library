@@ -36,9 +36,11 @@ export function parseGvql(source: string): GvqlStatement {
   const returnClause = clauses.get("RETURN")
     ? parseReturnClause(clauses.get("RETURN") as string)
     : { returns: defaultReturns(set, remove, deleteItems, create), distinct: false };
+  const matches = parseMatchList(match);
   return {
     kind: set.length > 0 || remove.length > 0 || deleteItems.length > 0 || create.length > 0 ? "update" : "select",
-    match: parseMatch(match),
+    match: matches[0] as GvqlMatchPattern,
+    matches,
     ...(clauses.get("WHERE") ? { where: parseWhere(clauses.get("WHERE") as string) } : {}),
     returns: returnClause.returns,
     distinct: returnClause.distinct,
@@ -74,6 +76,14 @@ function splitClauses(source: string): Map<ClauseName, string> {
     clauses.set(current.name, normalized.slice(current.end, next?.index).trim());
   }
   return clauses;
+}
+
+function parseMatchList(patterns: string): GvqlMatchPattern[] {
+  const parsed = splitComma(patterns).map(parseMatch);
+  if (parsed.length === 0) {
+    throw new Error("GVQL MATCH is empty.");
+  }
+  return parsed;
 }
 
 function parseMatch(pattern: string): GvqlMatchPattern {

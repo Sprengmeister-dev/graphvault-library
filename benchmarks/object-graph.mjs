@@ -77,6 +77,11 @@ async function benchmarkMemory(count) {
   const gvql = await time(() =>
     storage.gvql('MATCH (doc:Document)-[:owner]->(owner:Owner) WHERE owner.name = "Owner 1" RETURN doc.id AS id, doc.title AS title LIMIT 25'),
   );
+  const gvqlMultiMatch = await time(() =>
+    storage.gvql(
+      'MATCH (doc:Document)-[:owner]->(owner:Owner), (doc)-[:category]->(category:Category) WHERE owner.name = "Owner 1" AND category.slug = "cat-1" RETURN doc.id AS id, category.label AS category LIMIT 25',
+    ),
+  );
   const gvqlIndexed = await time(() =>
     storage.gvql(
       'MATCH (doc:Document) WHERE doc.status = "active" RETURN doc.status AS status, count(*) AS count, avg(doc.views) AS avgViews GROUP BY doc.status HAVING count > 0 ORDER BY count DESC',
@@ -115,6 +120,7 @@ async function benchmarkMemory(count) {
     count,
     storeMs: store.ms,
     gvqlMs: gvql.ms,
+    gvqlMultiMatchMs: gvqlMultiMatch.ms,
     gvqlIndexedMs: gvqlIndexed.ms,
     gvqlMultiIndexMs: gvqlMultiIndex.ms,
     gvqlIndexedInMs: gvqlIndexedIn.ms,
@@ -135,6 +141,11 @@ async function benchmarkFilesystem(count) {
     const store = await time(() => storage.storeRoot());
     const gvql = await time(() =>
       storage.gvql('MATCH (doc:Document)-[:owner]->(owner:Owner) WHERE owner.name = "Owner 1" RETURN doc.id AS id, doc.title AS title LIMIT 25'),
+    );
+    const gvqlMultiMatch = await time(() =>
+      storage.gvql(
+        'MATCH (doc:Document)-[:owner]->(owner:Owner), (doc)-[:category]->(category:Category) WHERE owner.name = "Owner 1" AND category.slug = "cat-1" RETURN doc.id AS id, category.label AS category LIMIT 25',
+      ),
     );
     const gvqlIndexed = await time(() =>
       storage.gvql(
@@ -174,6 +185,7 @@ async function benchmarkFilesystem(count) {
       count,
       storeMs: store.ms,
       gvqlMs: gvql.ms,
+      gvqlMultiMatchMs: gvqlMultiMatch.ms,
       gvqlIndexedMs: gvqlIndexed.ms,
       gvqlMultiIndexMs: gvqlMultiIndex.ms,
       gvqlIndexedInMs: gvqlIndexedIn.ms,
@@ -232,10 +244,10 @@ console.log(`Runtime: ${process.version}`);
 console.log(`Platform: ${process.platform} ${process.arch}`);
 console.log(`Date: ${new Date().toISOString()}`);
 console.log();
-console.log(`| target | documents | storeRoot | GVQL traversal | GVQL indexed aggregate | GVQL multi-index lookup | GVQL indexed IN lookup | GVQL indexed OR lookup | GVQL computed return | GVQL CREATE preview | GVQL DELETE preview | reload | storage size |`);
-console.log(`| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |`);
+console.log(`| target | documents | storeRoot | GVQL traversal | GVQL multi-match join | GVQL indexed aggregate | GVQL multi-index lookup | GVQL indexed IN lookup | GVQL indexed OR lookup | GVQL computed return | GVQL CREATE preview | GVQL DELETE preview | reload | storage size |`);
+console.log(`| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |`);
 for (const row of rows) {
   console.log(
-    `| ${row.target} | ${row.count.toLocaleString("en-US")} | ${formatMs(row.storeMs)} | ${formatMs(row.gvqlMs)} | ${formatMs(row.gvqlIndexedMs)} | ${formatMs(row.gvqlMultiIndexMs)} | ${formatMs(row.gvqlIndexedInMs)} | ${formatMs(row.gvqlIndexedOrMs)} | ${formatMs(row.gvqlComputedReturnMs)} | ${formatMs(row.gvqlCreatePreviewMs)} | ${formatMs(row.gvqlDeletePreviewMs)} | ${formatMs(row.loadMs)} | ${formatBytes(row.bytes)} |`,
+    `| ${row.target} | ${row.count.toLocaleString("en-US")} | ${formatMs(row.storeMs)} | ${formatMs(row.gvqlMs)} | ${formatMs(row.gvqlMultiMatchMs)} | ${formatMs(row.gvqlIndexedMs)} | ${formatMs(row.gvqlMultiIndexMs)} | ${formatMs(row.gvqlIndexedInMs)} | ${formatMs(row.gvqlIndexedOrMs)} | ${formatMs(row.gvqlComputedReturnMs)} | ${formatMs(row.gvqlCreatePreviewMs)} | ${formatMs(row.gvqlDeletePreviewMs)} | ${formatMs(row.loadMs)} | ${formatBytes(row.bytes)} |`,
   );
 }

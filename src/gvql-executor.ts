@@ -11,6 +11,7 @@ import type {
   GvqlExecutionPlan,
   GvqlGraphEdge,
   GvqlGraphIndex,
+  GvqlMatchPattern,
   GvqlPredicate,
   GvqlResult,
   GvqlRowPredicate,
@@ -104,39 +105,33 @@ function matchBindingsWithPlan(
   statement: GvqlStatement,
   parameters: Record<string, unknown> = {},
 ): { bindings: GvqlBinding[]; plan: GvqlExecutionPlan } {
-  const selection = candidates(index, statement, parameters);
-  const firstCandidates = selection.objectIds;
-  let bindings = firstCandidates.map((objectId) => ({ [statement.match.start.alias]: objectId }));
-  const operations = [...selection.operations];
-  for (const link of statement.match.chain) {
-    operations.push(`${link.edge.direction === "out" ? "traverse" : "reverse-traverse"}:${link.edge.label ?? "*"}`);
-    const nextBindings: GvqlBinding[] = [];
-    for (const binding of bindings) {
-      const fromId = binding[previousAlias(statement, link)];
-      if (!fromId) continue;
-      const edges = link.edge.direction === "out" ? index.outgoing.get(fromId) ?? [] : index.incoming.get(fromId) ?? [];
-      for (const edge of edges) {
-        if (link.edge.label && edge.label !== link.edge.label && edge.path !== link.edge.label) continue;
-        const targetId = link.edge.direction === "out" ? edge.to : edge.from;
-        if (!matchesType(index, targetId, link.node.type)) continue;
-        const existing = binding[link.node.alias];
-        if (existing && existing !== targetId) continue;
-        nextBindings.push({ ...binding, [link.node.alias]: targetId });
-      }
-    }
-    bindings = nextBindings;
+  const patterns = statement.matches.length ? statement.matches : [statement.match];
+  let bindings: GvqlBinding[] = [{}];
+  let firstSelection: ReturnType<typeof candidates> | undefined;
+  const operations: string[] = patterns.length > 1 ? [`multi-match:${patterns.length}`] : [];
+  let edgeSteps = 0;
+  for (const pattern of patterns) {
+    const selection = candidates(index, statement, pattern, parameters);
+    firstSelection ??= selection;
+    bindings = matchPattern(index, pattern, bindings, selection, operations);
+    edgeSteps += pattern.chain.length;
   }
+  const selection = firstSelection ?? {
+    objectIds: [],
+    source: "full-scan" as const,
+    operations: ["full-scan"],
+  };
   return {
     bindings,
     plan: {
       nodeCount: index.nodes.size,
       candidateSource: selection.source,
       indexUsed: selection.source !== "full-scan",
-      ...(statement.match.start.type ? { startType: statement.match.start.type } : {}),
+      ...(patterns[0]?.start.type ? { startType: patterns[0].start.type } : {}),
       ...(selection.propertyIndex ? { propertyIndex: selection.propertyIndex } : {}),
       ...(selection.propertyIndexes ? { propertyIndexes: selection.propertyIndexes } : {}),
-      startCandidates: firstCandidates.length,
-      edgeSteps: statement.match.chain.length,
+      startCandidates: selection.objectIds.length,
+      edgeSteps,
       matchedBindings: bindings.length,
       filteredBindings: bindings.length,
       returnedRows: 0,
@@ -150,9 +145,48 @@ function matchBindingsWithPlan(
   };
 }
 
-function previousAlias(statement: GvqlStatement, target: GvqlStatement["match"]["chain"][number]): string {
-  let previous = statement.match.start.alias;
-  for (const item of statement.match.chain) {
+function matchPattern(
+  index: GvqlGraphIndex,
+  pattern: GvqlMatchPattern,
+  inputBindings: GvqlBinding[],
+  selection: ReturnType<typeof candidates>,
+  operations: string[],
+): GvqlBinding[] {
+  const startCandidates = new Set(selection.objectIds);
+  let bindings: GvqlBinding[] = [];
+  operations.push(...selection.operations);
+  for (const binding of inputBindings) {
+    const boundStart = binding[pattern.start.alias];
+    const objectIds = boundStart ? [boundStart] : selection.objectIds;
+    for (const objectId of objectIds) {
+      if (!startCandidates.has(objectId) || !matchesType(index, objectId, pattern.start.type)) continue;
+      bindings.push({ ...binding, [pattern.start.alias]: objectId });
+    }
+  }
+  for (const link of pattern.chain) {
+    operations.push(`${link.edge.direction === "out" ? "traverse" : "reverse-traverse"}:${link.edge.label ?? "*"}`);
+    const nextBindings: GvqlBinding[] = [];
+    for (const binding of bindings) {
+      const fromId = binding[previousAlias(pattern, link)];
+      if (!fromId) continue;
+      const edges = link.edge.direction === "out" ? index.outgoing.get(fromId) ?? [] : index.incoming.get(fromId) ?? [];
+      for (const edge of edges) {
+        if (link.edge.label && edge.label !== link.edge.label && edge.path !== link.edge.label) continue;
+        const targetId = link.edge.direction === "out" ? edge.to : edge.from;
+        if (!matchesType(index, targetId, link.node.type)) continue;
+        const existing = binding[link.node.alias];
+        if (existing && existing !== targetId) continue;
+        nextBindings.push({ ...binding, [link.node.alias]: targetId });
+      }
+    }
+    bindings = nextBindings;
+  }
+  return bindings;
+}
+
+function previousAlias(pattern: GvqlMatchPattern, target: GvqlMatchPattern["chain"][number]): string {
+  let previous = pattern.start.alias;
+  for (const item of pattern.chain) {
     if (item === target) return previous;
     previous = item.node.alias;
   }
@@ -162,6 +196,7 @@ function previousAlias(statement: GvqlStatement, target: GvqlStatement["match"][
 function candidates(
   index: GvqlGraphIndex,
   statement: GvqlStatement,
+  pattern: GvqlMatchPattern,
   parameters: Record<string, unknown>,
 ): {
   objectIds: string[];
@@ -170,9 +205,9 @@ function candidates(
   propertyIndexes?: GvqlExecutionPlan["propertyIndexes"];
   operations: string[];
 } {
-  const type = statement.match.start.type;
+  const type = pattern.start.type;
   const typeCandidates = type ? index.byType.get(type) ?? [] : Array.from(index.nodes.keys());
-  const indexed = indexablePredicates(statement, parameters);
+  const indexed = indexablePredicates(statement, pattern, parameters);
   if (!indexed || indexed.predicates.length === 0) {
     return {
       objectIds: typeCandidates,
@@ -504,6 +539,7 @@ function stableStringify(value: unknown): string {
 
 function indexablePredicates(
   statement: GvqlStatement,
+  pattern: GvqlMatchPattern,
   parameters: Record<string, unknown>,
 ): IndexablePredicateSet | undefined {
   if (!statement.where) return undefined;
@@ -511,7 +547,7 @@ function indexablePredicates(
   const mode = expression.kind === "predicate" ? "AND" : flattenLogicalPredicates(expression, "OR") ? "OR" : flattenLogicalPredicates(expression, "AND") ? "AND" : undefined;
   if (!mode) return undefined;
   const predicates = flattenLogicalPredicates(expression, mode) ?? [];
-  const start = statement.match.start;
+  const start = pattern.start;
   const result: IndexablePredicate[] = [];
   for (const predicate of predicates) {
     if (predicate.left.alias !== start.alias || !predicate.left.path || isPathExpression(predicate.right)) continue;

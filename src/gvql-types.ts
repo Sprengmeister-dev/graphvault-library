@@ -118,6 +118,7 @@ export interface GvqlOrderBy {
 export interface GvqlStatement {
   kind: GvqlStatementKind;
   match: GvqlMatchPattern;
+  matches: GvqlMatchPattern[];
   where?: GvqlWhereClause;
   returns: GvqlReturnExpression[];
   distinct: boolean;

@@ -37,7 +37,7 @@ const result = await storage.gvql(`
 });
 ```
 
-GVQL supports graph traversal, indexed metadata and property filters, indexed equality/`IN` intersections and `OR` unions, parenthesized `WHERE`/`HAVING` logic with `NOT` and SQL-style `AND` precedence, computed `RETURN` expressions, grouping, aggregates, `RETURN DISTINCT`, `count(DISTINCT path)`, pagination, execution plans, and preview-first batch updates with `CREATE`, `SET`, arithmetic `SET` expressions, `REMOVE`, and `DELETE`. It is also what powers GraphVault Studio's search, inspection, and manipulation workflows.
+GVQL supports graph traversal, comma-separated `MATCH` patterns for joins, indexed metadata and property filters, indexed equality/`IN` intersections and `OR` unions, parenthesized `WHERE`/`HAVING` logic with `NOT` and SQL-style `AND` precedence, computed `RETURN` expressions, grouping, aggregates, `RETURN DISTINCT`, `count(DISTINCT path)`, pagination, execution plans, and preview-first batch updates with `CREATE`, `SET`, arithmetic `SET` expressions, `REMOVE`, and `DELETE`. It is also what powers GraphVault Studio's search, inspection, and manipulation workflows.
 
 ## Why Use This Instead Of A Normal Database?
 
@@ -323,6 +323,19 @@ const result = await storage.gvql(`
 });
 ```
 
+Join multiple graph patterns by reusing aliases in the same `MATCH` clause:
+
+```ts
+const joined = await storage.gvql(`
+  MATCH (doc:Document)-[:owner]->(owner:Owner), (doc)-[:category]->(category:Category)
+  WHERE owner.name = $owner AND category.slug = $category
+  RETURN doc.id AS id, doc.title AS title, category.label AS category
+  ORDER BY doc.title ASC
+`, {
+  parameters: { owner: "Platform Team", category: "guides" },
+});
+```
+
 Batch updates are explicit and can be previewed first:
 
 ```ts
@@ -395,6 +408,7 @@ Current GVQL supports:
 
 - node patterns: `(doc:Document)` or `(node)`
 - reference traversal: `-[:owner]->` and inverse traversal: `<-[:owner]-`
+- multiple comma-separated `MATCH` patterns where shared aliases act as join keys
 - `WHERE` predicates with `=`, `!=`, `<`, `<=`, `>`, `>=`, `CONTAINS`, `STARTS WITH`, `ENDS WITH`, `IN`, `IS NULL`, `IS NOT NULL`, `AND`, `OR`, `NOT`, and parentheses
 - `$parameters`
 - `RETURN`, `RETURN DISTINCT`, aliases with `AS`, arithmetic computed expressions such as `(doc.views + $bonus) * 2 AS score`, `count(*)`, `count(DISTINCT path)`, and virtual metadata paths `$id`, `$type`, `$kind`

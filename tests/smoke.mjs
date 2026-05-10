@@ -88,6 +88,27 @@ try {
   assert.equal(query.plan.edgeSteps, 1);
   assert.equal(query.plan.returnedRows, 2);
 
+  const multiMatchJoin = await reloaded.gvql(`
+    MATCH (doc:Document)-[:owner]->(owner:Owner), (doc)-[:related]->(items)-[:*]->(related:Document)
+    WHERE owner.name = "Platform Team"
+    RETURN doc.id AS id, related.id AS relatedId
+  `);
+  assert.equal(multiMatchJoin.kind, "select");
+  assert.deepEqual(multiMatchJoin.rows, [{ id: "doc-1", relatedId: "doc-2" }]);
+  assert.equal(multiMatchJoin.statement.matches.length, 2);
+  assert.equal(multiMatchJoin.plan.edgeSteps, 3);
+  assert.equal(multiMatchJoin.plan.operations.includes("multi-match:2"), true);
+
+  const multiMatchCrossJoin = await reloaded.gvql(`
+    MATCH (owner:Owner), (doc:Document)
+    WHERE owner.name = "Platform Team" AND doc.status = "published"
+    RETURN owner.id AS ownerId, doc.id AS docId
+  `);
+  assert.equal(multiMatchCrossJoin.kind, "select");
+  assert.deepEqual(multiMatchCrossJoin.rows, [{ ownerId: "owner-1", docId: "doc-3" }]);
+  assert.equal(multiMatchCrossJoin.statement.matches.length, 2);
+  assert.equal(multiMatchCrossJoin.plan.operations.includes("property-index:status"), true);
+
   const paged = await reloaded.gvql(`
     MATCH (doc:Document)
     RETURN doc.id AS id
