@@ -8,6 +8,7 @@ import type {
   GvqlOrderExpression,
   GvqlPathExpression,
   GvqlPredicate,
+  GvqlRemoveExpression,
   GvqlRowPredicate,
   GvqlReturnExpression,
   GvqlSetExpression,
@@ -16,7 +17,7 @@ import type {
   GvqlAggregateFunction,
 } from "./gvql-types.js";
 
-type ClauseName = "MATCH" | "WHERE" | "SET" | "RETURN" | "GROUP BY" | "HAVING" | "ORDER BY" | "LIMIT" | "OFFSET";
+type ClauseName = "MATCH" | "WHERE" | "SET" | "REMOVE" | "RETURN" | "GROUP BY" | "HAVING" | "ORDER BY" | "LIMIT" | "OFFSET";
 
 export function parseGvql(source: string): GvqlStatement {
   const clauses = splitClauses(source);
@@ -25,14 +26,18 @@ export function parseGvql(source: string): GvqlStatement {
     throw new Error("GVQL requires a MATCH clause.");
   }
   const set = clauses.get("SET") ? parseSetList(clauses.get("SET") as string) : [];
-  const returnClause = clauses.get("RETURN") ? parseReturnClause(clauses.get("RETURN") as string) : { returns: defaultReturns(set), distinct: false };
+  const remove = clauses.get("REMOVE") ? parseRemoveList(clauses.get("REMOVE") as string) : [];
+  const returnClause = clauses.get("RETURN")
+    ? parseReturnClause(clauses.get("RETURN") as string)
+    : { returns: defaultReturns(set, remove), distinct: false };
   return {
-    kind: set.length > 0 ? "update" : "select",
+    kind: set.length > 0 || remove.length > 0 ? "update" : "select",
     match: parseMatch(match),
     ...(clauses.get("WHERE") ? { where: parseWhere(clauses.get("WHERE") as string) } : {}),
     returns: returnClause.returns,
     distinct: returnClause.distinct,
     set,
+    remove,
     ...(clauses.get("ORDER BY") ? { orderBy: parseOrderBy(clauses.get("ORDER BY") as string) } : {}),
     ...(clauses.get("GROUP BY") ? { groupBy: parseGroupBy(clauses.get("GROUP BY") as string) } : {}),
     ...(clauses.get("HAVING") ? { having: parseHaving(clauses.get("HAVING") as string) } : {}),
@@ -44,7 +49,7 @@ export function parseGvql(source: string): GvqlStatement {
 function splitClauses(source: string): Map<ClauseName, string> {
   const normalized = source.trim().replace(/;$/, "");
   const matches: Array<{ name: ClauseName; index: number; end: number }> = [];
-  for (const name of ["MATCH", "WHERE", "SET", "RETURN", "GROUP BY", "HAVING", "ORDER BY", "LIMIT", "OFFSET"] as ClauseName[]) {
+  for (const name of ["MATCH", "WHERE", "SET", "REMOVE", "RETURN", "GROUP BY", "HAVING", "ORDER BY", "LIMIT", "OFFSET"] as ClauseName[]) {
     const found = findKeyword(normalized, name);
     if (found >= 0) {
       matches.push({ name, index: found, end: found + name.length });
@@ -208,6 +213,10 @@ function parseSetList(input: string): GvqlSetExpression[] {
   });
 }
 
+function parseRemoveList(input: string): GvqlRemoveExpression[] {
+  return splitComma(input).map((item) => ({ target: parsePathExpression(item) }));
+}
+
 function parseReturnClause(input: string): { returns: GvqlReturnExpression[]; distinct: boolean } {
   const trimmed = input.trim();
   const distinct = keywordAt(trimmed, 0, "DISTINCT");
@@ -271,8 +280,8 @@ function parseOffset(input: string): number {
   return value;
 }
 
-function defaultReturns(set: GvqlSetExpression[]): GvqlReturnExpression[] {
-  return set.length > 0 ? [{ kind: "count", aliasName: "changed" }] : [{ kind: "all" }];
+function defaultReturns(set: GvqlSetExpression[], remove: GvqlRemoveExpression[] = []): GvqlReturnExpression[] {
+  return set.length > 0 || remove.length > 0 ? [{ kind: "count", aliasName: "changed" }] : [{ kind: "all" }];
 }
 
 function parsePathExpression(input: string): GvqlPathExpression {

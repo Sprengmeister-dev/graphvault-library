@@ -83,6 +83,10 @@ export interface GvqlSetExpression {
   value: GvqlLiteral | GvqlPathExpression;
 }
 
+export interface GvqlRemoveExpression {
+  target: GvqlPathExpression;
+}
+
 export type GvqlOrderExpression =
   | { kind: "path"; expression: GvqlPathExpression }
   | { kind: "alias"; aliasName: string };
@@ -99,6 +103,7 @@ export interface GvqlStatement {
   returns: GvqlReturnExpression[];
   distinct: boolean;
   set: GvqlSetExpression[];
+  remove: GvqlRemoveExpression[];
   orderBy?: GvqlOrderBy[];
   groupBy?: GvqlPathExpression[];
   having?: GvqlHavingClause;

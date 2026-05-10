@@ -39,6 +39,7 @@ try {
   const third = new Document("doc-3", "Long-term archive", archiveOwner);
   first.views = 10;
   second.views = 15;
+  second.archivedAt = "2026-05-10";
   third.status = "published";
   third.views = 100;
   first.tags.add("typescript");
@@ -131,7 +132,7 @@ try {
     LIMIT 2
   `);
   assert.equal(nullFilter.kind, "select");
-  assert.deepEqual(nullFilter.rows, [{ id: "doc-1" }, { id: "doc-2" }]);
+  assert.deepEqual(nullFilter.rows, [{ id: "doc-1" }, { id: "doc-3" }]);
 
   const aggregate = await reloaded.gvql(`
     MATCH (doc:Document)
@@ -208,6 +209,27 @@ try {
   assert.equal(update.kind, "update");
   assert.equal(update.changed, 1);
   assert.equal(reloaded.root.documents[1].title, "Admin workflows updated");
+
+  const removePreview = await reloaded.previewGvql('MATCH (doc:Document) WHERE doc.id = $id REMOVE doc.archivedAt RETURN doc.id AS id', {
+    parameters: { id: "doc-2" },
+  });
+  assert.equal(removePreview.kind, "update");
+  assert.equal(removePreview.dryRun, true);
+  assert.equal(removePreview.changed, 1);
+  assert.equal(removePreview.changes[0].before, "2026-05-10");
+  assert.equal(removePreview.changes[0].after, undefined);
+  assert.equal(reloaded.root.documents[1].archivedAt, "2026-05-10");
+
+  const remove = await reloaded.gvql('MATCH (doc:Document) WHERE doc.id = $id REMOVE doc.archivedAt RETURN doc.id AS id', {
+    parameters: { id: "doc-2" },
+  });
+  assert.equal(remove.kind, "update");
+  assert.equal(remove.changed, 1);
+  assert.equal(reloaded.root.documents[1].archivedAt, undefined);
+
+  const removedFieldQuery = await reloaded.gvql('MATCH (doc:Document) WHERE doc.archivedAt IS NULL AND doc.id = "doc-2" RETURN doc.id AS id');
+  assert.equal(removedFieldQuery.kind, "select");
+  assert.deepEqual(removedFieldQuery.rows, [{ id: "doc-2" }]);
 
   const verification = await reloaded.verify();
   assert.equal(verification.ok, true);

@@ -105,6 +105,21 @@ export function setNodePath(node: EncodedNode, path: string | undefined, value: 
   throw new Error(`GVQL cannot set fields on ${node.kind} nodes.`);
 }
 
+export function removeNodePath(node: EncodedNode, path: string | undefined): { before: EncodedValue | undefined; removed: boolean } {
+  if (!path) {
+    throw new Error("GVQL REMOVE requires an aliased property path, for example REMOVE doc.archivedAt.");
+  }
+  if (node.kind !== "object") {
+    throw new Error(`GVQL REMOVE currently supports object fields, not ${node.kind} nodes.`);
+  }
+  if (!(path in node.props)) {
+    return { before: undefined, removed: false };
+  }
+  const before = node.props[path];
+  delete node.props[path];
+  return { before, removed: true };
+}
+
 export function nodeSummary(node: EncodedNode): unknown {
   if (node.kind === "object") {
     const result: Record<string, unknown> = { kind: "object", ...(node.type ? { type: node.type } : {}) };

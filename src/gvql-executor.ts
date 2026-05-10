@@ -1,7 +1,7 @@
 import { performance } from "node:perf_hooks";
 import { projectGvqlRows } from "./gvql-aggregation.js";
 import { buildGvqlGraphIndex, propertyIndexKey } from "./gvql-index.js";
-import { encodedValueToJs, getNodePath, jsValueToEncoded, literalToJs, nodeSummary, setNodePath } from "./gvql-values.js";
+import { encodedValueToJs, getNodePath, jsValueToEncoded, literalToJs, nodeSummary, removeNodePath, setNodePath } from "./gvql-values.js";
 import type { EncodedNode, EncodedValue, SerializedEnvelope } from "./types.js";
 import type {
   GvqlBinding,
@@ -39,7 +39,7 @@ export function executeGvqlStatement(envelope: SerializedEnvelope, statement: Gv
     throw new Error("GVQL update statements require allowMutations.");
   }
   const limitedBindings = applyBindingOrderingAndLimit(index, bindings, statement);
-  const changes = applySet(index, limitedBindings, statement, options);
+  const changes = applyMutations(index, limitedBindings, statement, options);
   const rows = projectGvqlRows(index, limitedBindings, statement, readPath, readNode);
   const plan = completePlan(matched.plan, bindings, rows.length);
   return {
@@ -313,6 +313,13 @@ function evaluateRowPredicate(row: Record<string, unknown>, predicate: GvqlRowPr
   return false;
 }
 
+function applyMutations(index: GvqlGraphIndex, bindings: GvqlBinding[], statement: GvqlStatement, options: GvqlExecutionOptions): GvqlMutationPreview[] {
+  const changes: GvqlMutationPreview[] = [];
+  changes.push(...applySet(index, bindings, statement, options));
+  changes.push(...applyRemove(index, bindings, statement, options));
+  return changes;
+}
+
 function applySet(index: GvqlGraphIndex, bindings: GvqlBinding[], statement: GvqlStatement, options: GvqlExecutionOptions): GvqlMutationPreview[] {
   const changes: GvqlMutationPreview[] = [];
   for (const binding of bindings) {
@@ -334,6 +341,36 @@ function applySet(index: GvqlGraphIndex, bindings: GvqlBinding[], statement: Gvq
       if (!options.dryRun) {
         setNodePath(node, item.target.path, afterEncoded);
       }
+    }
+  }
+  return changes;
+}
+
+function applyRemove(index: GvqlGraphIndex, bindings: GvqlBinding[], statement: GvqlStatement, options: GvqlExecutionOptions): GvqlMutationPreview[] {
+  const changes: GvqlMutationPreview[] = [];
+  for (const binding of bindings) {
+    for (const item of statement.remove) {
+      const objectId = binding[item.target.alias];
+      if (!objectId) continue;
+      const node = index.envelope.nodes[objectId];
+      if (!node) continue;
+      if (node.kind !== "object") {
+        throw new Error(`GVQL REMOVE currently supports object fields, not ${node.kind} nodes.`);
+      }
+      const beforeEncoded = getNodePath(node, item.target.path);
+      const preview = {
+        objectId,
+        alias: item.target.alias,
+        path: item.target.path ?? "",
+        before: encodedValueToJs(beforeEncoded),
+        after: undefined,
+      };
+      if (options.dryRun) {
+        if (typeof beforeEncoded !== "undefined") changes.push(preview);
+        continue;
+      }
+      const removed = removeNodePath(node, item.target.path);
+      if (removed.removed) changes.push(preview);
     }
   }
   return changes;

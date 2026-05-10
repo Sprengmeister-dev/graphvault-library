@@ -323,6 +323,17 @@ const committed = await storage.gvql(`
 `);
 ```
 
+Remove optional object fields in the same preview-first workflow:
+
+```ts
+const cleanup = await storage.previewGvql(`
+  MATCH (doc:Document)
+  WHERE doc.archivedAt IS NOT NULL
+  REMOVE doc.archivedAt
+  RETURN count(*) AS changed
+`);
+```
+
 Current GVQL supports:
 
 - node patterns: `(doc:Document)` or `(node)`
@@ -333,7 +344,7 @@ Current GVQL supports:
 - `GROUP BY` with `count`, `sum`, `avg`, `min`, `max`
 - `HAVING` over returned aliases for aggregate filtering
 - `ORDER BY` paths and returned aliases, with multiple criteria plus `LIMIT` and `OFFSET`
-- `SET` for primitive field updates
+- `SET` for primitive field updates and `REMOVE` for object-field cleanup
 - type indexes and primitive-property index intersections for common equality filters on the first matched node
 
 Aggregate queries stay compact:
