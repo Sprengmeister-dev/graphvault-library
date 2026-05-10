@@ -75,13 +75,16 @@ export type GvqlHavingClause = GvqlBooleanExpression<GvqlRowPredicate>;
 export type GvqlReturnExpression =
   | { kind: "all"; alias?: string; aliasName?: string }
   | { kind: "path"; expression: GvqlPathExpression; aliasName?: string }
+  | { kind: "value"; expression: GvqlValueExpression; source: string; aliasName?: string }
   | { kind: "count"; expression?: GvqlPathExpression; distinct?: boolean; aliasName?: string }
   | { kind: "aggregate"; fn: Exclude<GvqlAggregateFunction, "count">; expression: GvqlPathExpression; aliasName?: string };
 
-export type GvqlSetValueExpression =
+export type GvqlValueExpression =
   | GvqlLiteral
   | GvqlPathExpression
-  | { kind: "binary"; operator: GvqlArithmeticOperator; left: GvqlSetValueExpression; right: GvqlSetValueExpression };
+  | { kind: "binary"; operator: GvqlArithmeticOperator; left: GvqlValueExpression; right: GvqlValueExpression };
+
+export type GvqlSetValueExpression = GvqlValueExpression;
 
 export interface GvqlSetExpression {
   target: GvqlPathExpression;

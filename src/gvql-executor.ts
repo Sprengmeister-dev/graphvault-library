@@ -58,9 +58,9 @@ export function executeGvqlStatement(envelope: SerializedEnvelope, statement: Gv
     throw new Error("GVQL update statements require allowMutations.");
   }
   const limitedBindings = applyBindingOrderingAndLimit(index, bindings, statement);
-  const deleteRows = statement.delete.length > 0 ? projectGvqlRows(index, limitedBindings, statement, readPath, readNode) : undefined;
+  const deleteRows = statement.delete.length > 0 ? projectGvqlRows(index, limitedBindings, statement, readPath, readNode, parameters) : undefined;
   const changes = applyGvqlMutations(index, limitedBindings, statement, options, readPath);
-  const rows = deleteRows ?? projectGvqlRows(index, limitedBindings, statement, readPath, readNode);
+  const rows = deleteRows ?? projectGvqlRows(index, limitedBindings, statement, readPath, readNode, parameters);
   const plan = completePlan(matched.plan, bindings, rows.length);
   return {
     kind: "update",
@@ -83,16 +83,16 @@ function projectSelectRows(
   parameters: Record<string, unknown>,
 ): Array<Record<string, unknown>> {
   if (isAggregateStatement(statement) || statement.having || hasAliasOrdering(statement)) {
-    const projected = projectGvqlRows(index, bindings, statement, readPath, readNode).filter((row) => matchesHaving(row, statement, parameters));
+    const projected = projectGvqlRows(index, bindings, statement, readPath, readNode, parameters).filter((row) => matchesHaving(row, statement, parameters));
     const rows = statement.distinct ? distinctRows(projected) : projected;
     return applyRowOrderingAndLimit(rows, statement);
   }
   const orderedBindings = applyBindingOrdering(index, bindings, statement);
   if (statement.distinct) {
-    const rows = distinctRows(projectGvqlRows(index, orderedBindings, statement, readPath, readNode));
+    const rows = distinctRows(projectGvqlRows(index, orderedBindings, statement, readPath, readNode, parameters));
     return applyOffsetAndLimit(rows, statement);
   }
-  return projectGvqlRows(index, applyOffsetAndLimit(orderedBindings, statement), statement, readPath, readNode);
+  return projectGvqlRows(index, applyOffsetAndLimit(orderedBindings, statement), statement, readPath, readNode, parameters);
 }
 
 export function matchBindings(index: GvqlGraphIndex, statement: GvqlStatement, parameters: Record<string, unknown> = {}): GvqlBinding[] {

@@ -1,3 +1,4 @@
+import { evaluateGvqlValueExpression } from "./gvql-expressions.js";
 import type { GvqlBinding, GvqlGraphIndex, GvqlReturnExpression, GvqlStatement } from "./gvql-types.js";
 
 export type GvqlPathReader = (index: GvqlGraphIndex, binding: GvqlBinding, expression: { alias: string; path?: string }) => unknown;
@@ -9,11 +10,12 @@ export function projectGvqlRows(
   statement: GvqlStatement,
   readPath: GvqlPathReader,
   readNode: GvqlNodeReader,
+  parameters: Record<string, unknown> = {},
 ): Array<Record<string, unknown>> {
   if (statement.groupBy?.length || statement.returns.some((item) => item.kind === "aggregate" || item.kind === "count")) {
-    return projectAggregateRows(index, bindings, statement, readPath);
+    return projectAggregateRows(index, bindings, statement, readPath, parameters);
   }
-  return bindings.map((binding) => projectPlainRow(index, binding, statement.returns, readPath, readNode));
+  return bindings.map((binding) => projectPlainRow(index, binding, statement.returns, readPath, readNode, parameters));
 }
 
 function projectPlainRow(
@@ -22,6 +24,7 @@ function projectPlainRow(
   returns: GvqlReturnExpression[],
   readPath: GvqlPathReader,
   readNode: GvqlNodeReader,
+  parameters: Record<string, unknown>,
 ): Record<string, unknown> {
   const row: Record<string, unknown> = {};
   for (const item of returns) {
@@ -30,6 +33,8 @@ function projectPlainRow(
       else row[item.aliasName ?? "*"] = Object.fromEntries(Object.entries(binding).map(([alias, objectId]) => [alias, readNode(index, objectId)]));
     } else if (item.kind === "path") {
       row[item.aliasName ?? [item.expression.alias, item.expression.path].filter(Boolean).join(".")] = readPath(index, binding, item.expression);
+    } else if (item.kind === "value") {
+      row[item.aliasName ?? item.source] = evaluateGvqlValueExpression(index, binding, item.expression, parameters, readPath);
     }
   }
   return row;
@@ -40,6 +45,7 @@ function projectAggregateRows(
   bindings: GvqlBinding[],
   statement: GvqlStatement,
   readPath: GvqlPathReader,
+  parameters: Record<string, unknown>,
 ): Array<Record<string, unknown>> {
   const groupBy = statement.groupBy ?? [];
   const groups = new Map<string, GvqlBinding[]>();
@@ -66,6 +72,10 @@ function projectAggregateRows(
       } else if (item.kind === "path") {
         row[item.aliasName ?? [item.expression.alias, item.expression.path].filter(Boolean).join(".")] = group[0]
           ? readPath(index, group[0], item.expression)
+          : undefined;
+      } else if (item.kind === "value") {
+        row[item.aliasName ?? item.source] = group[0]
+          ? evaluateGvqlValueExpression(index, group[0], item.expression, parameters, readPath)
           : undefined;
       }
     }

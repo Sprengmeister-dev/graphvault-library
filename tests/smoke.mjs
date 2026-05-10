@@ -215,6 +215,18 @@ try {
   assert.equal(whereNot.kind, "select");
   assert.deepEqual(whereNot.rows, [{ id: "doc-2" }]);
 
+  const computedReturn = await reloaded.gvql(
+    `
+      MATCH (doc:Document)
+      RETURN doc.id AS id, (doc.views + $bonus) * 2 AS score
+      ORDER BY score DESC
+      LIMIT 1
+    `,
+    { parameters: { bonus: 5 } },
+  );
+  assert.equal(computedReturn.kind, "select");
+  assert.deepEqual(computedReturn.rows, [{ id: "doc-3", score: 210 }]);
+
   const aggregate = await reloaded.gvql(`
     MATCH (doc:Document)
     RETURN doc.status AS status, count(*) AS count, count(doc.views) AS viewed, sum(doc.views) AS views, avg(doc.views) AS avgViews

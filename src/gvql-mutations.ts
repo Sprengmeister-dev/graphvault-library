@@ -1,16 +1,14 @@
-import { encodedValueToJs, getNodePath, jsValueToEncoded, literalToJs, nodeSummary, removeNodePath, setNodePath } from "./gvql-values.js";
+import { evaluateGvqlValueExpression } from "./gvql-expressions.js";
+import { encodedValueToJs, getNodePath, jsValueToEncoded, nodeSummary, removeNodePath, setNodePath } from "./gvql-values.js";
 import type { EncodedNode, EncodedValue, SerializedEnvelope } from "./types.js";
 import type {
   GvqlBinding,
   GvqlExecutionOptions,
   GvqlGraphIndex,
   GvqlMutationPreview,
-  GvqlPathExpression,
-  GvqlSetValueExpression,
   GvqlStatement,
 } from "./gvql-types.js";
-
-export type GvqlPathReader = (index: GvqlGraphIndex, binding: GvqlBinding, expression: GvqlPathExpression) => unknown;
+import type { GvqlPathReader } from "./gvql-expressions.js";
 
 export function applyGvqlMutations(
   index: GvqlGraphIndex,
@@ -41,7 +39,7 @@ function applySet(
       const node = index.envelope.nodes[objectId];
       if (!node) continue;
       const beforeEncoded = getNodePath(node, item.target.path);
-      const next = evaluateSetValue(index, binding, item.value, options.parameters ?? {}, readPath);
+      const next = evaluateGvqlValueExpression(index, binding, item.value, options.parameters ?? {}, readPath);
       const afterEncoded = jsValueToEncoded(next);
       changes.push({
         objectId,
@@ -57,33 +55,6 @@ function applySet(
     }
   }
   return changes;
-}
-
-function evaluateSetValue(
-  index: GvqlGraphIndex,
-  binding: GvqlBinding,
-  expression: GvqlSetValueExpression,
-  parameters: Record<string, unknown>,
-  readPath: GvqlPathReader,
-): unknown {
-  if (isBinarySetExpression(expression)) {
-    const left = evaluateSetValue(index, binding, expression.left, parameters, readPath);
-    const right = evaluateSetValue(index, binding, expression.right, parameters, readPath);
-    if (typeof left !== "number" || typeof right !== "number") {
-      throw new Error("GVQL arithmetic SET expressions require numeric operands.");
-    }
-    switch (expression.operator) {
-      case "+":
-        return left + right;
-      case "-":
-        return left - right;
-      case "*":
-        return left * right;
-      case "/":
-        return left / right;
-    }
-  }
-  return isPathExpression(expression) ? readPath(index, binding, expression) : literalToJs(expression, parameters);
 }
 
 function applyRemove(index: GvqlGraphIndex, bindings: GvqlBinding[], statement: GvqlStatement, options: GvqlExecutionOptions): GvqlMutationPreview[] {
@@ -202,12 +173,4 @@ function isReferenceTo(value: EncodedValue, targetIds: Set<string>): boolean {
 
 function rootObjectId(envelope: SerializedEnvelope): string | undefined {
   return envelope.root && typeof envelope.root === "object" && "$ref" in envelope.root ? envelope.root.$ref : undefined;
-}
-
-function isPathExpression(value: unknown): value is GvqlPathExpression {
-  return Boolean(value && typeof value === "object" && "alias" in value);
-}
-
-function isBinarySetExpression(value: unknown): value is Extract<GvqlSetValueExpression, { kind: "binary" }> {
-  return Boolean(value && typeof value === "object" && "kind" in value && value.kind === "binary");
 }

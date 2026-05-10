@@ -14,7 +14,7 @@ import type {
   GvqlRowPredicate,
   GvqlReturnExpression,
   GvqlSetExpression,
-  GvqlSetValueExpression,
+  GvqlValueExpression,
   GvqlStatement,
   GvqlWhereClause,
   GvqlAggregateFunction,
@@ -230,7 +230,7 @@ function parseSetList(input: string): GvqlSetExpression[] {
     }
     return {
       target: parsePathExpression(item.slice(0, index).trim()),
-      value: parseSetValueExpression(item.slice(index + 1).trim()),
+      value: parseValueExpression(item.slice(index + 1).trim()),
     };
   });
 }
@@ -287,7 +287,13 @@ function parseReturnList(input: string): GvqlReturnExpression[] {
       };
     }
     if (/^[A-Za-z_][\w]*$/.test(expression)) return { kind: "all", alias: expression, ...(aliasName ? { aliasName } : {}) };
-    return { kind: "path", expression: parsePathExpression(expression), ...(aliasName ? { aliasName } : {}) };
+    if (!aliasName && isPathExpressionSource(expression)) {
+      return { kind: "path", expression: parsePathExpression(expression) };
+    }
+    if (aliasName || isValueExpression(expression)) {
+      return { kind: "value", expression: parseValueExpression(expression), source: expression, ...(aliasName ? { aliasName } : {}) };
+    }
+    return { kind: "path", expression: parsePathExpression(expression) };
   });
 }
 
@@ -344,21 +350,21 @@ function parseRowReference(input: string): { aliasName: string } {
 }
 
 function parseValueOrPath(input: string): GvqlLiteral | GvqlPathExpression {
-  if (/^[A-Za-z_][\w]*(?:\.[A-Za-z_][\w]*)+$/.test(input)) {
+  if (isPathExpressionSource(input)) {
     return parsePathExpression(input);
   }
   return parseLiteral(input);
 }
 
-function parseSetValueExpression(input: string): GvqlSetValueExpression {
+function parseValueExpression(input: string): GvqlValueExpression {
   const trimmed = stripOuterParentheses(input.trim());
   const additive = findTopLevelArithmeticOperator(trimmed, ["+", "-"]);
   if (additive) {
     return {
       kind: "binary",
       operator: additive.operator,
-      left: parseSetValueExpression(trimmed.slice(0, additive.index)),
-      right: parseSetValueExpression(trimmed.slice(additive.index + 1)),
+      left: parseValueExpression(trimmed.slice(0, additive.index)),
+      right: parseValueExpression(trimmed.slice(additive.index + 1)),
     };
   }
   const multiplicative = findTopLevelArithmeticOperator(trimmed, ["*", "/"]);
@@ -366,8 +372,8 @@ function parseSetValueExpression(input: string): GvqlSetValueExpression {
     return {
       kind: "binary",
       operator: multiplicative.operator,
-      left: parseSetValueExpression(trimmed.slice(0, multiplicative.index)),
-      right: parseSetValueExpression(trimmed.slice(multiplicative.index + 1)),
+      left: parseValueExpression(trimmed.slice(0, multiplicative.index)),
+      right: parseValueExpression(trimmed.slice(multiplicative.index + 1)),
     };
   }
   return parseValueOrPath(trimmed);
@@ -393,6 +399,25 @@ function parseLiteral(input: string): GvqlLiteral {
     return body ? splitComma(body).map(parseLiteral) : [];
   }
   throw new Error(`Unsupported GVQL literal "${input}". Use strings, numbers, booleans, null, arrays, or $parameters.`);
+}
+
+function isValueExpression(input: string): boolean {
+  const trimmed = input.trim();
+  return Boolean(
+    findTopLevelArithmeticOperator(trimmed, ["+", "-"]) ||
+      findTopLevelArithmeticOperator(trimmed, ["*", "/"]) ||
+      trimmed.startsWith("$") ||
+      trimmed === "null" ||
+      trimmed === "true" ||
+      trimmed === "false" ||
+      /^-?\d+(?:\.\d+)?$/.test(trimmed) ||
+      (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+      (trimmed.startsWith("'") && trimmed.endsWith("'")),
+  );
+}
+
+function isPathExpressionSource(input: string): boolean {
+  return /^[A-Za-z_][\w]*(?:\.[A-Za-z_$][\w$]*)+$/.test(input.trim());
 }
 
 function splitComma(input: string): string[] {
