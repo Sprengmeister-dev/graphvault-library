@@ -1,11 +1,14 @@
 import type {
   GvqlCompareOperator,
   GvqlEdgePattern,
+  GvqlHavingClause,
   GvqlLiteral,
   GvqlLogicalOperator,
   GvqlMatchPattern,
+  GvqlOrderExpression,
   GvqlPathExpression,
   GvqlPredicate,
+  GvqlRowPredicate,
   GvqlReturnExpression,
   GvqlSetExpression,
   GvqlStatement,
@@ -13,7 +16,7 @@ import type {
   GvqlAggregateFunction,
 } from "./gvql-types.js";
 
-type ClauseName = "MATCH" | "WHERE" | "SET" | "RETURN" | "GROUP BY" | "ORDER BY" | "LIMIT";
+type ClauseName = "MATCH" | "WHERE" | "SET" | "RETURN" | "GROUP BY" | "HAVING" | "ORDER BY" | "LIMIT";
 
 export function parseGvql(source: string): GvqlStatement {
   const clauses = splitClauses(source);
@@ -31,6 +34,7 @@ export function parseGvql(source: string): GvqlStatement {
     set,
     ...(clauses.get("ORDER BY") ? { orderBy: parseOrderBy(clauses.get("ORDER BY") as string) } : {}),
     ...(clauses.get("GROUP BY") ? { groupBy: parseGroupBy(clauses.get("GROUP BY") as string) } : {}),
+    ...(clauses.get("HAVING") ? { having: parseHaving(clauses.get("HAVING") as string) } : {}),
     ...(clauses.get("LIMIT") ? { limit: parseLimit(clauses.get("LIMIT") as string) } : {}),
   };
 }
@@ -38,7 +42,7 @@ export function parseGvql(source: string): GvqlStatement {
 function splitClauses(source: string): Map<ClauseName, string> {
   const normalized = source.trim().replace(/;$/, "");
   const matches: Array<{ name: ClauseName; index: number; end: number }> = [];
-  for (const name of ["MATCH", "WHERE", "SET", "RETURN", "GROUP BY", "ORDER BY", "LIMIT"] as ClauseName[]) {
+  for (const name of ["MATCH", "WHERE", "SET", "RETURN", "GROUP BY", "HAVING", "ORDER BY", "LIMIT"] as ClauseName[]) {
     const found = findKeyword(normalized, name);
     if (found >= 0) {
       matches.push({ name, index: found, end: found + name.length });
@@ -109,6 +113,18 @@ function parseWhere(input: string): GvqlWhereClause {
   };
 }
 
+function parseHaving(input: string): GvqlHavingClause {
+  const parts = splitLogical(input);
+  if (parts.length === 0) {
+    throw new Error("GVQL HAVING is empty.");
+  }
+  const [first, ...rest] = parts as [{ text: string; operator?: GvqlLogicalOperator }, ...Array<{ text: string; operator?: GvqlLogicalOperator }>];
+  return {
+    first: parseRowPredicate(first.text),
+    rest: rest.map((part) => ({ operator: part.operator as GvqlLogicalOperator, predicate: parseRowPredicate(part.text) })),
+  };
+}
+
 function parsePredicate(input: string): GvqlPredicate {
   for (const operator of ["STARTS WITH", "ENDS WITH", "CONTAINS", "!=", ">=", "<=", "=", ">", "<", "IN"] as GvqlCompareOperator[]) {
     const index = findOperator(input, operator);
@@ -121,6 +137,20 @@ function parsePredicate(input: string): GvqlPredicate {
     }
   }
   throw new Error(`Unsupported GVQL predicate "${input}".`);
+}
+
+function parseRowPredicate(input: string): GvqlRowPredicate {
+  for (const operator of ["STARTS WITH", "ENDS WITH", "CONTAINS", "!=", ">=", "<=", "=", ">", "<", "IN"] as GvqlCompareOperator[]) {
+    const index = findOperator(input, operator);
+    if (index >= 0) {
+      return {
+        left: parseRowReference(input.slice(0, index).trim()),
+        operator,
+        right: parseRowValueOrLiteral(input.slice(index + operator.length).trim()),
+      };
+    }
+  }
+  throw new Error(`Unsupported GVQL HAVING predicate "${input}".`);
 }
 
 function parseSetList(input: string): GvqlSetExpression[] {
@@ -163,10 +193,10 @@ function parseGroupBy(input: string): GvqlPathExpression[] {
   return splitComma(input).map(parsePathExpression);
 }
 
-function parseOrderBy(input: string): { expression: GvqlPathExpression; direction: "asc" | "desc" } {
+function parseOrderBy(input: string): { expression: GvqlOrderExpression; direction: "asc" | "desc" } {
   const match = /^(.*?)(?:\s+(ASC|DESC))?$/i.exec(input.trim());
   if (!match) throw new Error(`Invalid GVQL ORDER BY "${input}".`);
-  return { expression: parsePathExpression((match[1] ?? "").trim()), direction: match[2]?.toLowerCase() === "desc" ? "desc" : "asc" };
+  return { expression: parseOrderExpression((match[1] ?? "").trim()), direction: match[2]?.toLowerCase() === "desc" ? "desc" : "asc" };
 }
 
 function parseLimit(input: string): number {
@@ -189,10 +219,25 @@ function parsePathExpression(input: string): GvqlPathExpression {
   return { alias, ...(path.length ? { path: path.join(".") } : {}) };
 }
 
+function parseOrderExpression(input: string): GvqlOrderExpression {
+  if (/^[A-Za-z_][\w]*$/.test(input)) return { kind: "alias", aliasName: input };
+  return { kind: "path", expression: parsePathExpression(input) };
+}
+
+function parseRowReference(input: string): { aliasName: string } {
+  if (/^[A-Za-z_][\w]*$/.test(input)) return { aliasName: input };
+  throw new Error(`Invalid GVQL row reference "${input}". Use a RETURN alias in HAVING.`);
+}
+
 function parseValueOrPath(input: string): GvqlLiteral | GvqlPathExpression {
   if (/^[A-Za-z_][\w]*(?:\.[A-Za-z_][\w]*)+$/.test(input)) {
     return parsePathExpression(input);
   }
+  return parseLiteral(input);
+}
+
+function parseRowValueOrLiteral(input: string): GvqlLiteral | { aliasName: string } {
+  if (/^[A-Za-z_][\w]*$/.test(input)) return { aliasName: input };
   return parseLiteral(input);
 }
 

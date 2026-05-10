@@ -330,9 +330,24 @@ Current GVQL supports:
 - `$parameters`
 - `RETURN`, aliases with `AS`, `count(*)`
 - `GROUP BY` with `count`, `sum`, `avg`, `min`, `max`
-- `ORDER BY`, `LIMIT`
+- `HAVING` over returned aliases for aggregate filtering
+- `ORDER BY` paths and returned aliases, plus `LIMIT`
 - `SET` for primitive field updates
 - type and primitive-property indexes for common equality filters on the first matched node
+
+Aggregate queries stay compact:
+
+```ts
+const totals = await storage.gvql(`
+  MATCH (doc:Document)
+  RETURN doc.status AS status, count(*) AS count, avg(doc.views) AS avgViews
+  GROUP BY doc.status
+  HAVING count >= $minimum
+  ORDER BY avgViews DESC
+`, {
+  parameters: { minimum: 5 },
+});
+```
 
 ## Performance
 

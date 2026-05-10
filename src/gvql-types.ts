@@ -45,6 +45,21 @@ export interface GvqlWhereClause {
   rest: Array<{ operator: GvqlLogicalOperator; predicate: GvqlPredicate }>;
 }
 
+export interface GvqlRowReference {
+  aliasName: string;
+}
+
+export interface GvqlRowPredicate {
+  left: GvqlRowReference;
+  operator: GvqlCompareOperator;
+  right: GvqlLiteral | GvqlRowReference;
+}
+
+export interface GvqlHavingClause {
+  first: GvqlRowPredicate;
+  rest: Array<{ operator: GvqlLogicalOperator; predicate: GvqlRowPredicate }>;
+}
+
 export type GvqlReturnExpression =
   | { kind: "all"; alias?: string; aliasName?: string }
   | { kind: "path"; expression: GvqlPathExpression; aliasName?: string }
@@ -56,8 +71,12 @@ export interface GvqlSetExpression {
   value: GvqlLiteral | GvqlPathExpression;
 }
 
+export type GvqlOrderExpression =
+  | { kind: "path"; expression: GvqlPathExpression }
+  | { kind: "alias"; aliasName: string };
+
 export interface GvqlOrderBy {
-  expression: GvqlPathExpression;
+  expression: GvqlOrderExpression;
   direction: "asc" | "desc";
 }
 
@@ -69,6 +88,7 @@ export interface GvqlStatement {
   set: GvqlSetExpression[];
   orderBy?: GvqlOrderBy;
   groupBy?: GvqlPathExpression[];
+  having?: GvqlHavingClause;
   limit?: number;
 }
 

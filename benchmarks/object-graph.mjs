@@ -28,6 +28,7 @@ class Document {
     this.owner = owner;
     this.category = category;
     this.tags = [`team-${id % 8}`, `topic-${id % 17}`, id % 2 === 0 ? "even" : "odd"];
+    this.views = id * 13;
     this.metrics = { views: id * 13, score: (id % 100) / 100 };
     this.createdAt = new Date(1_765_000_000_000 + id * 60_000);
     this.related = previous ? [previous] : [];
@@ -77,7 +78,9 @@ async function benchmarkMemory(count) {
     storage.gvql('MATCH (doc:Document)-[:owner]->(owner:Owner) WHERE owner.name = "Owner 1" RETURN doc.id AS id, doc.title AS title LIMIT 25'),
   );
   const gvqlIndexed = await time(() =>
-    storage.gvql('MATCH (doc:Document) WHERE doc.status = "active" RETURN doc.status AS status, count(*) AS count GROUP BY doc.status'),
+    storage.gvql(
+      'MATCH (doc:Document) WHERE doc.status = "active" RETURN doc.status AS status, count(*) AS count, avg(doc.views) AS avgViews GROUP BY doc.status HAVING count > 0 ORDER BY count DESC',
+    ),
   );
   await storage.shutdown();
   const load = await time(async () => {
@@ -97,7 +100,9 @@ async function benchmarkFilesystem(count) {
       storage.gvql('MATCH (doc:Document)-[:owner]->(owner:Owner) WHERE owner.name = "Owner 1" RETURN doc.id AS id, doc.title AS title LIMIT 25'),
     );
     const gvqlIndexed = await time(() =>
-      storage.gvql('MATCH (doc:Document) WHERE doc.status = "active" RETURN doc.status AS status, count(*) AS count GROUP BY doc.status'),
+      storage.gvql(
+        'MATCH (doc:Document) WHERE doc.status = "active" RETURN doc.status AS status, count(*) AS count, avg(doc.views) AS avgViews GROUP BY doc.status HAVING count > 0 ORDER BY count DESC',
+      ),
     );
     await storage.shutdown();
     const load = await time(async () => {

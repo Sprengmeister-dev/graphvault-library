@@ -11,6 +11,7 @@ import type {
   GvqlMutationPreview,
   GvqlPredicate,
   GvqlResult,
+  GvqlRowPredicate,
   GvqlStatement,
 } from "./gvql-types.js";
 
@@ -19,12 +20,12 @@ export function executeGvqlStatement(envelope: SerializedEnvelope, statement: Gv
   const parameters = options.parameters ?? {};
   const index = buildGvqlGraphIndex(envelope);
   const bindings = matchBindings(index, statement, parameters).filter((binding) => matchesWhere(index, binding, statement, parameters));
-  const limitedBindings = applyOrderingAndLimit(index, bindings, statement);
   if (statement.kind === "select") {
+    const rows = projectSelectRows(index, bindings, statement, parameters);
     return {
       kind: "select",
       statement,
-      rows: projectGvqlRows(index, limitedBindings, statement, readPath, readNode),
+      rows,
       matched: bindings.length,
       scannedObjects: index.nodes.size,
       elapsedMs: performance.now() - started,
@@ -33,6 +34,7 @@ export function executeGvqlStatement(envelope: SerializedEnvelope, statement: Gv
   if (!options.allowMutations && !options.dryRun) {
     throw new Error("GVQL update statements require allowMutations.");
   }
+  const limitedBindings = applyBindingOrderingAndLimit(index, bindings, statement);
   const changes = applySet(index, limitedBindings, statement, options);
   return {
     kind: "update",
@@ -45,6 +47,20 @@ export function executeGvqlStatement(envelope: SerializedEnvelope, statement: Gv
     dryRun: options.dryRun ?? false,
     changes,
   };
+}
+
+function projectSelectRows(
+  index: GvqlGraphIndex,
+  bindings: GvqlBinding[],
+  statement: GvqlStatement,
+  parameters: Record<string, unknown>,
+): Array<Record<string, unknown>> {
+  if (isAggregateStatement(statement) || statement.having || statement.orderBy?.expression.kind === "alias") {
+    const rows = projectGvqlRows(index, bindings, statement, readPath, readNode).filter((row) => matchesHaving(row, statement, parameters));
+    return applyRowOrderingAndLimit(rows, statement);
+  }
+  const limitedBindings = applyBindingOrderingAndLimit(index, bindings, statement);
+  return projectGvqlRows(index, limitedBindings, statement, readPath, readNode);
 }
 
 export function matchBindings(index: GvqlGraphIndex, statement: GvqlStatement, parameters: Record<string, unknown> = {}): GvqlBinding[] {
@@ -142,16 +158,70 @@ function compare(left: unknown, right: unknown): number {
   return String(left ?? "").localeCompare(String(right ?? ""));
 }
 
-function applyOrderingAndLimit(index: GvqlGraphIndex, bindings: GvqlBinding[], statement: GvqlStatement): GvqlBinding[] {
+function applyBindingOrderingAndLimit(index: GvqlGraphIndex, bindings: GvqlBinding[], statement: GvqlStatement): GvqlBinding[] {
   const rows = [...bindings];
-  if (statement.orderBy) {
-    const order = statement.orderBy;
+  const order = statement.orderBy;
+  if (order?.expression.kind === "path") {
+    const expression = order.expression.expression;
     rows.sort((a, b) => {
-      const comparison = compare(readPath(index, a, order.expression), readPath(index, b, order.expression));
+      const comparison = compare(readPath(index, a, expression), readPath(index, b, expression));
       return order.direction === "desc" ? -comparison : comparison;
     });
   }
   return typeof statement.limit === "number" ? rows.slice(0, statement.limit) : rows;
+}
+
+function applyRowOrderingAndLimit(rows: Array<Record<string, unknown>>, statement: GvqlStatement): Array<Record<string, unknown>> {
+  const ordered = [...rows];
+  if (statement.orderBy) {
+    const order = statement.orderBy;
+    ordered.sort((a, b) => {
+      const comparison =
+        order.expression.kind === "alias"
+          ? compare(a[order.expression.aliasName], b[order.expression.aliasName])
+          : compare(a[rowKey(order.expression.expression)], b[rowKey(order.expression.expression)]);
+      return order.direction === "desc" ? -comparison : comparison;
+    });
+  }
+  return typeof statement.limit === "number" ? ordered.slice(0, statement.limit) : ordered;
+}
+
+function matchesHaving(row: Record<string, unknown>, statement: GvqlStatement, parameters: Record<string, unknown>): boolean {
+  if (!statement.having) return true;
+  let result = evaluateRowPredicate(row, statement.having.first, parameters);
+  for (const item of statement.having.rest) {
+    if (item.operator === "AND") result = result && evaluateRowPredicate(row, item.predicate, parameters);
+    else result = result || evaluateRowPredicate(row, item.predicate, parameters);
+  }
+  return result;
+}
+
+function evaluateRowPredicate(row: Record<string, unknown>, predicate: GvqlRowPredicate, parameters: Record<string, unknown>): boolean {
+  const left = row[predicate.left.aliasName];
+  const right = isRowReference(predicate.right) ? row[predicate.right.aliasName] : literalToJs(predicate.right, parameters);
+  switch (predicate.operator) {
+    case "=":
+      return left === right;
+    case "!=":
+      return left !== right;
+    case ">":
+      return compare(left, right) > 0;
+    case ">=":
+      return compare(left, right) >= 0;
+    case "<":
+      return compare(left, right) < 0;
+    case "<=":
+      return compare(left, right) <= 0;
+    case "CONTAINS":
+      return String(left ?? "").includes(String(right ?? ""));
+    case "STARTS WITH":
+      return String(left ?? "").startsWith(String(right ?? ""));
+    case "ENDS WITH":
+      return String(left ?? "").endsWith(String(right ?? ""));
+    case "IN":
+      return Array.isArray(right) && right.includes(left);
+  }
+  return false;
 }
 
 function applySet(index: GvqlGraphIndex, bindings: GvqlBinding[], statement: GvqlStatement, options: GvqlExecutionOptions): GvqlMutationPreview[] {
@@ -199,6 +269,18 @@ function readNode(index: GvqlGraphIndex, objectId: string | undefined): unknown 
 
 function isPathExpression(value: unknown): value is { alias: string; path?: string } {
   return Boolean(value && typeof value === "object" && "alias" in value);
+}
+
+function isRowReference(value: unknown): value is { aliasName: string } {
+  return Boolean(value && typeof value === "object" && "aliasName" in value);
+}
+
+function isAggregateStatement(statement: GvqlStatement): boolean {
+  return Boolean(statement.groupBy?.length || statement.returns.some((item) => item.kind === "aggregate" || item.kind === "count"));
+}
+
+function rowKey(expression: { alias: string; path?: string }): string {
+  return [expression.alias, expression.path].filter(Boolean).join(".");
 }
 
 function firstEqualityPredicate(statement: GvqlStatement, parameters: Record<string, unknown>): { key: string } | undefined {

@@ -33,10 +33,14 @@ const storageDirectory = await mkdtemp(join(tmpdir(), "graphvault-smoke-"));
 
 try {
   const owner = new Owner("owner-1", "Platform Team");
+  const archiveOwner = new Owner("owner-2", "Archive Team");
   const first = new Document("doc-1", "Object graph persistence", owner);
   const second = new Document("doc-2", "Admin workflows", owner);
+  const third = new Document("doc-3", "Long-term archive", archiveOwner);
   first.views = 10;
   second.views = 15;
+  third.status = "published";
+  third.views = 100;
   first.tags.add("typescript");
   first.tags.add("storage");
   second.links.set("source", first);
@@ -44,7 +48,7 @@ try {
 
   const storage = await EmbeddedStorage.start({
     storageDirectory,
-    root: { documents: [first, second], featured: first },
+    root: { documents: [first, second, third], featured: first },
     types,
   });
 
@@ -57,7 +61,7 @@ try {
     types,
   });
 
-  assert.equal(reloaded.root.documents.length, 2);
+  assert.equal(reloaded.root.documents.length, 3);
   assert.ok(reloaded.root.documents[0] instanceof Document);
   assert.ok(reloaded.root.documents[1] instanceof Document);
   assert.ok(reloaded.root.documents[0].owner instanceof Owner);
@@ -82,13 +86,30 @@ try {
 
   const aggregate = await reloaded.gvql(`
     MATCH (doc:Document)
-    WHERE doc.status = "draft"
     RETURN doc.status AS status, count(*) AS count, count(doc.views) AS viewed, sum(doc.views) AS views, avg(doc.views) AS avgViews
     GROUP BY doc.status
+    HAVING count >= 1
+    ORDER BY avgViews DESC
   `);
   assert.equal(aggregate.kind, "select");
-  assert.deepEqual(aggregate.rows, [{ status: "draft", count: 2, viewed: 2, views: 25, avgViews: 12.5 }]);
+  assert.deepEqual(aggregate.rows, [
+    { status: "published", count: 1, viewed: 1, views: 100, avgViews: 100 },
+    { status: "draft", count: 2, viewed: 2, views: 25, avgViews: 12.5 },
+  ]);
   assert.ok(aggregate.matched <= aggregate.scannedObjects);
+
+  const having = await reloaded.gvql(
+    `
+      MATCH (doc:Document)
+      RETURN doc.status AS status, count(*) AS count
+      GROUP BY doc.status
+      HAVING count >= $minimum
+      ORDER BY count DESC
+    `,
+    { parameters: { minimum: 2 } },
+  );
+  assert.equal(having.kind, "select");
+  assert.deepEqual(having.rows, [{ status: "draft", count: 2 }]);
 
   const preview = await reloaded.previewGvql(
     'MATCH (doc:Document) WHERE doc.id = $id SET doc.title = "Admin workflows updated" RETURN doc.id AS id, doc.title AS title',
