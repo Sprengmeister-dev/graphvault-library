@@ -128,9 +128,29 @@ function parseHaving(input: string): GvqlHavingClause {
 }
 
 function parsePredicate(input: string): GvqlPredicate {
-  for (const operator of ["STARTS WITH", "ENDS WITH", "CONTAINS", "!=", ">=", "<=", "=", ">", "<", "IN"] as GvqlCompareOperator[]) {
+  for (const operator of [
+    "IS NOT NULL",
+    "IS NULL",
+    "STARTS WITH",
+    "ENDS WITH",
+    "CONTAINS",
+    "!=",
+    ">=",
+    "<=",
+    "=",
+    ">",
+    "<",
+    "IN",
+  ] as GvqlCompareOperator[]) {
     const index = findOperator(input, operator);
     if (index >= 0) {
+      if (operator === "IS NULL" || operator === "IS NOT NULL") {
+        return {
+          left: parsePathExpression(input.slice(0, index).trim()),
+          operator,
+          right: null,
+        };
+      }
       return {
         left: parsePathExpression(input.slice(0, index).trim()),
         operator,
@@ -142,9 +162,29 @@ function parsePredicate(input: string): GvqlPredicate {
 }
 
 function parseRowPredicate(input: string): GvqlRowPredicate {
-  for (const operator of ["STARTS WITH", "ENDS WITH", "CONTAINS", "!=", ">=", "<=", "=", ">", "<", "IN"] as GvqlCompareOperator[]) {
+  for (const operator of [
+    "IS NOT NULL",
+    "IS NULL",
+    "STARTS WITH",
+    "ENDS WITH",
+    "CONTAINS",
+    "!=",
+    ">=",
+    "<=",
+    "=",
+    ">",
+    "<",
+    "IN",
+  ] as GvqlCompareOperator[]) {
     const index = findOperator(input, operator);
     if (index >= 0) {
+      if (operator === "IS NULL" || operator === "IS NOT NULL") {
+        return {
+          left: parseRowReference(input.slice(0, index).trim()),
+          operator,
+          right: null,
+        };
+      }
       return {
         left: parseRowReference(input.slice(0, index).trim()),
         operator,

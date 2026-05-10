@@ -327,7 +327,7 @@ Current GVQL supports:
 
 - node patterns: `(doc:Document)` or `(node)`
 - reference traversal: `-[:owner]->` and inverse traversal: `<-[:owner]-`
-- `WHERE` predicates with `=`, `!=`, `<`, `<=`, `>`, `>=`, `CONTAINS`, `STARTS WITH`, `ENDS WITH`, `IN`
+- `WHERE` predicates with `=`, `!=`, `<`, `<=`, `>`, `>=`, `CONTAINS`, `STARTS WITH`, `ENDS WITH`, `IN`, `IS NULL`, `IS NOT NULL`
 - `$parameters`
 - `RETURN`, `RETURN DISTINCT`, aliases with `AS`, `count(*)`
 - `GROUP BY` with `count`, `sum`, `avg`, `min`, `max`
@@ -357,6 +357,17 @@ const statuses = await storage.gvql(`
   MATCH (doc:Document)
   RETURN DISTINCT doc.status AS status
   ORDER BY status ASC
+`);
+```
+
+Find missing or populated optional fields with null checks:
+
+```ts
+const missingArchiveDate = await storage.gvql(`
+  MATCH (doc:Document)
+  WHERE doc.archivedAt IS NULL AND doc.status IS NOT NULL
+  RETURN doc.id AS id, doc.title AS title
+  ORDER BY doc.id ASC
 `);
 ```
 

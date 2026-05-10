@@ -2,7 +2,19 @@ import type { EncodedValue, SerializedEnvelope, StoreMetadata } from "./types.js
 
 export type GvqlStatementKind = "select" | "update";
 export type GvqlDirection = "out" | "in";
-export type GvqlCompareOperator = "=" | "!=" | ">" | ">=" | "<" | "<=" | "CONTAINS" | "STARTS WITH" | "ENDS WITH" | "IN";
+export type GvqlCompareOperator =
+  | "="
+  | "!="
+  | ">"
+  | ">="
+  | "<"
+  | "<="
+  | "CONTAINS"
+  | "STARTS WITH"
+  | "ENDS WITH"
+  | "IN"
+  | "IS NULL"
+  | "IS NOT NULL";
 export type GvqlLogicalOperator = "AND" | "OR";
 export type GvqlAggregateFunction = "count" | "sum" | "avg" | "min" | "max";
 

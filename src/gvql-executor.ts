@@ -221,6 +221,10 @@ function evaluatePredicate(
       return String(left ?? "").endsWith(String(right ?? ""));
     case "IN":
       return Array.isArray(right) && right.includes(left);
+    case "IS NULL":
+      return left === null || typeof left === "undefined";
+    case "IS NOT NULL":
+      return left !== null && typeof left !== "undefined";
   }
   return false;
 }
@@ -301,6 +305,10 @@ function evaluateRowPredicate(row: Record<string, unknown>, predicate: GvqlRowPr
       return String(left ?? "").endsWith(String(right ?? ""));
     case "IN":
       return Array.isArray(right) && right.includes(left);
+    case "IS NULL":
+      return left === null || typeof left === "undefined";
+    case "IS NOT NULL":
+      return left !== null && typeof left !== "undefined";
   }
   return false;
 }

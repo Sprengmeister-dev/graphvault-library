@@ -123,11 +123,21 @@ try {
     { id: "doc-3", status: "published" },
   ]);
 
+  const nullFilter = await reloaded.gvql(`
+    MATCH (doc:Document)
+    WHERE doc.archivedAt IS NULL AND doc.status IS NOT NULL
+    RETURN doc.id AS id
+    ORDER BY doc.id ASC
+    LIMIT 2
+  `);
+  assert.equal(nullFilter.kind, "select");
+  assert.deepEqual(nullFilter.rows, [{ id: "doc-1" }, { id: "doc-2" }]);
+
   const aggregate = await reloaded.gvql(`
     MATCH (doc:Document)
     RETURN doc.status AS status, count(*) AS count, count(doc.views) AS viewed, sum(doc.views) AS views, avg(doc.views) AS avgViews
     GROUP BY doc.status
-    HAVING count >= 1
+    HAVING count >= 1 AND status IS NOT NULL
     ORDER BY avgViews DESC
   `);
   assert.equal(aggregate.kind, "select");
