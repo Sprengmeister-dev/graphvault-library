@@ -1,5 +1,10 @@
 # GraphVault Library
 
+[![CI](https://github.com/Sprengmeister-dev/graphvault-library/actions/workflows/ci.yml/badge.svg)](https://github.com/Sprengmeister-dev/graphvault-library/actions/workflows/ci.yml)
+![Node](https://img.shields.io/badge/node-%3E%3D20-3c7a52)
+![TypeScript](https://img.shields.io/badge/TypeScript-first-315c92)
+![License](https://img.shields.io/badge/license-MIT-2f2f2f)
+
 GraphVault is a TypeScript persistence library for applications whose natural data model is an object graph: a root object with nested objects, arrays, maps, sets, shared references, cycles, and domain classes.
 
 It is embedded, explicit, and TypeScript-first: you keep your domain model in memory, call `storeRoot()` or `store(object)` when you want durability, and GraphVault writes a verifiable object graph store.
@@ -110,6 +115,17 @@ npm run benchmark
 ```
 
 Latest local results are documented in [docs/BENCHMARKS.md](./docs/BENCHMARKS.md). The short version: in-memory graph serialization is fast for typical embedded workloads; the local filesystem target is intentionally conservative because it writes atomic binary records and inspectable JSON records.
+
+## Developer Experience
+
+```bash
+npm ci
+npm test
+npm run benchmark
+npm run pack:dry-run
+```
+
+The smoke test stores and reloads a real object graph with class instances, shared references, maps, sets, and cycles. CI runs on Node.js 20 and 22.
 
 ## Storage Configuration
 
