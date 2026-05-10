@@ -77,6 +77,8 @@ npm install graphvault
 
 ## Basic Usage
 
+GraphVault has one central concept: your application owns a root object. Everything reachable from that root can be stored as an object graph.
+
 ```ts
 import { EmbeddedStorage } from "graphvault";
 
@@ -104,6 +106,186 @@ Run the complete JavaScript example:
 ```bash
 npm run build
 node examples/basic.mjs
+```
+
+## TypeScript Usage Guide
+
+### Model Your Root
+
+Use one root object for the part of your application state that belongs together. Plain objects work, but classes are usually nicer for domain-heavy apps.
+
+```ts
+import type { LazyRef } from "graphvault";
+
+class Workspace {
+  documents: Document[] = [];
+
+  constructor(readonly name: string) {}
+}
+
+class Document {
+  tags = new Set<string>();
+  related = new Map<string, Document>();
+  attachments = new Map<string, LazyRef<Buffer>>();
+
+  constructor(
+    readonly id: string,
+    public title: string,
+  ) {}
+}
+
+type AppRoot = Workspace;
+```
+
+### Start A Store
+
+For a new store, `rootFactory` creates the initial root. For an existing store, GraphVault loads the persisted root and ignores the factory result.
+
+```ts
+import { EmbeddedStorage } from "graphvault";
+
+const storage = await EmbeddedStorage.start<AppRoot>({
+  storageDirectory: "./data/graphvault",
+  rootFactory: () => new Workspace("Product"),
+});
+```
+
+For scripts, tests, and bootstrap code, passing a concrete root is often the shortest path:
+
+```ts
+const storage = await EmbeddedStorage.start({
+  storageDirectory: "./data/graphvault",
+  root: new Workspace("Product"),
+});
+```
+
+### Register Classes
+
+Register classes when you want loaded objects to keep their prototypes and methods.
+
+```ts
+const storage = await EmbeddedStorage.start<AppRoot>({
+  storageDirectory: "./data/graphvault",
+  rootFactory: () => new Workspace("Product"),
+  types: [
+    { name: "Workspace", ctor: Workspace },
+    { name: "Document", ctor: Document },
+  ],
+});
+```
+
+You can version and migrate classes:
+
+```ts
+{
+  name: "Document",
+  ctor: Document,
+  version: 2,
+  create: () => new Document("", ""),
+  migrate: (state, fromVersion) => {
+    if (fromVersion < 2) {
+      return { ...state, tags: [] };
+    }
+    return state;
+  },
+  hydrate: (target, state) => {
+    target.title = String(state.title ?? "");
+  },
+}
+```
+
+### Read And Write Data
+
+Mutate your root like normal TypeScript objects, then store explicitly.
+
+```ts
+const document = new Document("doc-1", "Storage design");
+document.tags.add("architecture");
+
+storage.root.documents.push(document);
+await storage.storeRoot();
+```
+
+For service methods, `update(...)` is the most convenient shape. It stores after the mutator succeeds and rolls the in-memory root back if the mutator throws.
+
+```ts
+await storage.update((root) => {
+  root.documents.push(new Document("doc-2", "Operational notes"));
+});
+```
+
+When you only want to mark specific objects as the write target, use `store(object)` or `storeAll(...)`.
+
+```ts
+document.title = "Storage design v2";
+await storage.store(document);
+
+await storage.storeAll(storage.root.documents);
+```
+
+### Batch Writes With A Storer
+
+Storers are useful when a workflow touches several objects and you want one commit at the end.
+
+```ts
+const storer = storage.createStorer();
+storer.store(storage.root);
+storer.storeAll(storage.root.documents);
+await storer.commit();
+```
+
+### Lazy Data
+
+Use `LazyRef` for large values that should live outside the main object graph until loaded.
+
+```ts
+const attachment = await storage.createLazyRef("attachments/doc-1", Buffer.from("content"));
+storage.root.documents[0].attachments.set("main", attachment);
+await storage.storeRoot();
+
+const bytes = await attachment.get();
+attachment.clear();
+```
+
+### Verification, Maintenance, And Backup
+
+```ts
+const verification = await storage.verify();
+if (!verification.ok) {
+  throw new Error(verification.errors.join("\n"));
+}
+
+await storage.maintain({ keepSnapshots: 2 });
+
+await storage.backup({
+  storageDirectory: "./backups/graphvault",
+});
+```
+
+### Read-Only Access
+
+Read-only mode is useful for admin jobs, export scripts, and safety checks. It does not acquire the writer lock and refuses mutations.
+
+```ts
+const storage = await EmbeddedStorage.start<AppRoot>({
+  storageDirectory: "./data/graphvault",
+  readOnly: true,
+  rootFactory: () => new Workspace("unused"),
+});
+```
+
+### Shutdown
+
+Always shut the manager down in CLIs, tests, and worker processes so locks and timers are released cleanly.
+
+```ts
+try {
+  await storage.update((root) => {
+    root.documents.push(new Document("doc-3", "Release checklist"));
+  });
+} finally {
+  await storage.shutdown();
+}
 ```
 
 ## Performance
@@ -242,9 +424,11 @@ const storage = await EmbeddedStorage.start({
 
 ## NestJS
 
+GraphVault is intentionally easy to wire into NestJS: import the module once, then inject `StorageManager<AppRoot>` directly in your services.
+
 ```ts
-import { Inject, Injectable, Module } from "@nestjs/common";
-import { GraphVaultModule, GRAPHVAULT_MANAGER, StorageManager } from "graphvault";
+import { Injectable, Module } from "@nestjs/common";
+import { GraphVaultModule, StorageManager } from "graphvault";
 
 interface AppRoot {
   documents: unknown[];
@@ -263,12 +447,125 @@ export class AppModule {}
 
 @Injectable()
 export class DocumentsService {
+  constructor(private readonly storage: StorageManager<AppRoot>) {}
+
+  async add(document: unknown): Promise<void> {
+    await this.storage.update((root) => {
+      root.documents.push(document);
+    });
+  }
+}
+```
+
+### NestJS With ConfigService
+
+Use `forRootAsync(...)` when the directory, target, or options come from configuration.
+
+```ts
+import { Module } from "@nestjs/common";
+import { ConfigModule, ConfigService } from "@nestjs/config";
+import { GraphVaultModule } from "graphvault";
+
+@Module({
+  imports: [
+    ConfigModule.forRoot(),
+    GraphVaultModule.forRootAsync<AppRoot>({
+      global: true,
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => ({
+        storageDirectory: config.getOrThrow("GRAPHVAULT_DIR"),
+        rootFactory: () => ({ documents: [] }),
+        lockTimeoutMs: 10_000,
+      }),
+    }),
+  ],
+})
+export class AppModule {}
+```
+
+### Multiple Stores In NestJS
+
+For one store, direct `StorageManager<AppRoot>` injection is the cleanest option. If you need multiple stores in the same Nest app, inject by token from custom providers or wrap each store in a domain-specific service. The built-in token is exported as `GRAPHVAULT_MANAGER`:
+
+```ts
+import { Inject, Injectable } from "@nestjs/common";
+import { GRAPHVAULT_MANAGER, StorageManager } from "graphvault";
+
+@Injectable()
+export class GraphVaultRootService {
   constructor(
     @Inject(GRAPHVAULT_MANAGER)
-    private readonly storage: StorageManager<AppRoot>,
+    readonly storage: StorageManager<AppRoot>,
   ) {}
 }
 ```
+
+### NestJS Shutdown
+
+`StorageManager` exposes a Nest-compatible `onApplicationShutdown()` hook. Nest will close the store when the application shuts down through the Nest lifecycle. For OS signal handling, enable shutdown hooks in your bootstrap:
+
+```ts
+const app = await NestFactory.create(AppModule);
+app.enableShutdownHooks();
+await app.listen(3000);
+```
+
+You can still call `await storage.shutdown()` directly in scripts, tests, and workers.
+
+
+## API Reference
+
+### `EmbeddedStorage.start(...)`
+
+Convenience entry point for embedded apps.
+
+```ts
+EmbeddedStorage.start(root, storageDirectory?)
+EmbeddedStorage.start({ storageDirectory, root, rootFactory, types, ...options })
+```
+
+`startStorage(options)` is the same idea without the `root` shortcut. Use it when you prefer a function over the `EmbeddedStorage` facade.
+
+### `StorageManager`
+
+Main runtime API.
+
+- `root`: loaded application root.
+- `start()`: opens the store and loads or creates the root.
+- `shutdown()`: releases timers and writer lock.
+- `onApplicationShutdown()`: Nest-compatible shutdown hook that delegates to `shutdown()`.
+- `storeRoot()`: stores the full root graph.
+- `store(object)`: stores after a specific object changed.
+- `storeAll(objects)` / `storeAll(...objects)`: stores after several objects changed.
+- `update(mutator, storeTarget?)`: mutates and stores in one safe operation.
+- `createStorer()`: batches several store targets into one commit.
+- `createLazyRef(key, value)`: creates and stores lazy data.
+- `loadLazy(key)` / `storeLazy(key, value)`: low-level lazy value access.
+- `verify()`: validates manifest, transactions, object records, and lazy files.
+- `maintain(options)`: garbage collection, compaction, and optional verification.
+- `compact(keepLatest)`: removes older snapshots.
+- `collectGarbage()`: removes unreferenced object records.
+- `backup(destination)`: copies the store to another directory or target.
+
+### Storage Targets
+
+- `LocalFilesystemTarget`: default target for file-based embedded storage.
+- `MemoryStorageTarget`: in-memory target for tests.
+- `HttpStorageTarget`: remote service target.
+- `S3StorageTarget`: S3-compatible object storage target.
+- `SqlStorageTarget`: SQL-row-backed target.
+
+### Important Options
+
+- `storageDirectory`: required logical store root.
+- `rootFactory`: creates the first root when no store exists.
+- `root`: short form for bootstrapping with a concrete object.
+- `types`: class registrations for prototype restoration and migrations.
+- `storageTarget`: custom target; defaults to local filesystem.
+- `readOnly`: opens without writer lock and rejects writes.
+- `channelCount`: spreads object records across channel folders.
+- `lockTimeoutMs`: writer-lock timeout.
+- `housekeepingIntervalMs`: periodic maintenance interval.
 
 ## Admin UI
 

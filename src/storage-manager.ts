@@ -106,6 +106,10 @@ export class StorageManager<TRoot = unknown> {
     this.started = false;
   }
 
+  async onApplicationShutdown(): Promise<void> {
+    await this.shutdown();
+  }
+
   async storeRoot(): Promise<StoreMetadata> {
     return this.store(this.root);
   }

@@ -5,6 +5,12 @@ export {
   GRAPHVAULT_MANAGER,
   GRAPHVAULT_OPTIONS,
 } from "./nest.js";
+export type {
+  DynamicModuleLike,
+  GraphVaultModuleAsyncOptions,
+  GraphVaultModuleOptions,
+  NestProvider,
+} from "./nest.js";
 export {
   GraphVaultError,
   StorageLockError,

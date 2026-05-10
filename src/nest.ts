@@ -7,7 +7,8 @@ export const GRAPHVAULT_OPTIONS = Symbol("GRAPHVAULT_OPTIONS");
 export interface NestProvider {
   provide: unknown;
   useValue?: unknown;
-  useFactory?: (...args: never[]) => unknown;
+  useFactory?: (...args: any[]) => unknown;
+  useExisting?: unknown;
   inject?: unknown[];
 }
 
@@ -18,22 +19,47 @@ export interface DynamicModuleLike {
   exports: unknown[];
 }
 
+export type GraphVaultModuleOptions<TRoot> = StorageManagerOptions<TRoot> & { global?: boolean };
+
+export interface GraphVaultModuleAsyncOptions<TRoot> {
+  global?: boolean;
+  inject?: unknown[];
+  useFactory: (...args: any[]) => StorageManagerOptions<TRoot> | Promise<StorageManagerOptions<TRoot>>;
+}
+
 export class GraphVaultModule {
-  static forRoot<TRoot>(options: StorageManagerOptions<TRoot> & { global?: boolean }): DynamicModuleLike {
-    const module: DynamicModuleLike = {
+  static forRoot<TRoot>(options: GraphVaultModuleOptions<TRoot>): DynamicModuleLike {
+    return this.moduleFromOptionsProvider(options.global, {
+      provide: GRAPHVAULT_OPTIONS,
+      useValue: options,
+    });
+  }
+
+  static forRootAsync<TRoot>(options: GraphVaultModuleAsyncOptions<TRoot>): DynamicModuleLike {
+    return this.moduleFromOptionsProvider(options.global, {
+      provide: GRAPHVAULT_OPTIONS,
+      useFactory: options.useFactory,
+      inject: options.inject ?? [],
+    });
+  }
+
+  private static moduleFromOptionsProvider(global: boolean | undefined, optionsProvider: NestProvider): DynamicModuleLike {
+    return {
       module: GraphVaultModule,
+      ...(typeof global === "boolean" ? { global } : {}),
       providers: [
-        { provide: GRAPHVAULT_OPTIONS, useValue: options },
+        optionsProvider,
         {
           provide: GRAPHVAULT_MANAGER,
-          useFactory: async () => new StorageManager(options).start(),
+          useFactory: async (options: StorageManagerOptions<unknown>) => new StorageManager(options).start(),
+          inject: [GRAPHVAULT_OPTIONS],
+        },
+        {
+          provide: StorageManager,
+          useExisting: GRAPHVAULT_MANAGER,
         },
       ],
-      exports: [GRAPHVAULT_MANAGER],
+      exports: [GRAPHVAULT_MANAGER, StorageManager],
     };
-    if (typeof options.global === "boolean") {
-      module.global = options.global;
-    }
-    return module;
   }
 }

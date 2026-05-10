@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { EmbeddedStorage } from "../dist/index.js";
+import { EmbeddedStorage, GRAPHVAULT_MANAGER, GraphVaultModule, StorageManager } from "../dist/index.js";
 
 class Owner {
   constructor(id, name) {
@@ -66,6 +66,14 @@ try {
   const verification = await reloaded.verify();
   assert.equal(verification.ok, true);
   await reloaded.shutdown();
+
+  const nestModule = GraphVaultModule.forRoot({
+    storageDirectory,
+    rootFactory: () => ({ documents: [] }),
+  });
+  assert.equal(nestModule.exports.includes(GRAPHVAULT_MANAGER), true);
+  assert.equal(nestModule.exports.includes(StorageManager), true);
+  assert.equal(nestModule.providers.some((provider) => provider.provide === StorageManager && provider.useExisting === GRAPHVAULT_MANAGER), true);
 } finally {
   await rm(storageDirectory, { recursive: true, force: true });
 }
