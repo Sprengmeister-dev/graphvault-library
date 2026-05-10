@@ -179,13 +179,13 @@ function applyCreate(
         after: nodeSummary(props),
         operation: "create",
       });
-      changes.push(attachCreatedObject(index, binding, item.into, objectId));
+      changes.push(...attachCreatedObject(index, binding, item.into, objectId));
     }
   }
   return changes;
 }
 
-function attachCreatedObject(index: GvqlGraphIndex, binding: GvqlBinding, target: { alias: string; path?: string }, objectId: string): GvqlMutationPreview {
+function attachCreatedObject(index: GvqlGraphIndex, binding: GvqlBinding, target: { alias: string; path?: string }, objectId: string): GvqlMutationPreview[] {
   const parentId = binding[target.alias];
   if (!parentId) throw new Error(`GVQL CREATE INTO alias "${target.alias}" is not bound.`);
   const parentNode = index.envelope.nodes[parentId];
@@ -193,20 +193,23 @@ function attachCreatedObject(index: GvqlGraphIndex, binding: GvqlBinding, target
   const reference: EncodedValue = { $ref: objectId };
   if (!target.path) {
     appendToCollection(parentNode, reference, target.alias);
-    return { objectId: parentId, alias: target.alias, path: "", before: undefined, after: { $ref: objectId }, operation: "attach" };
+    return [{ objectId: parentId, alias: target.alias, path: "", before: undefined, after: { $ref: objectId }, operation: "attach" }];
   }
   const existing = getNodePath(parentNode, target.path);
   if (existing && typeof existing === "object" && "$ref" in existing) {
     const collection = index.envelope.nodes[existing.$ref];
     if (!collection) throw new Error(`GVQL CREATE INTO target "${target.alias}.${target.path}" points to a missing node.`);
     appendToCollection(collection, reference, `${target.alias}.${target.path}`);
-    return { objectId: existing.$ref, alias: target.alias, path: target.path, before: undefined, after: { $ref: objectId }, operation: "attach" };
+    return [{ objectId: existing.$ref, alias: target.alias, path: target.path, before: undefined, after: { $ref: objectId }, operation: "attach" }];
   }
   if (typeof existing === "undefined" && parentNode.kind === "object") {
     const collectionId = nextObjectId(index.envelope);
     index.envelope.nodes[collectionId] = { kind: "array", items: [reference] };
     parentNode.props[target.path] = { $ref: collectionId };
-    return { objectId: parentId, alias: target.alias, path: target.path, before: undefined, after: { $ref: collectionId }, operation: "attach" };
+    return [
+      { objectId: collectionId, alias: "$collection", path: "", before: undefined, after: [], operation: "create" },
+      { objectId: parentId, alias: target.alias, path: target.path, before: undefined, after: { $ref: collectionId }, operation: "attach" },
+    ];
   }
   throw new Error(`GVQL CREATE INTO requires an array or set target at "${target.alias}.${target.path}".`);
 }

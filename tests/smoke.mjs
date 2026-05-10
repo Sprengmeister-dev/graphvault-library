@@ -448,9 +448,33 @@ try {
   assert.equal(createdQuery.kind, "select");
   assert.deepEqual(createdQuery.rows, [{ title: "Release checklist", views: 7 }]);
 
+  const createdMissingCollection = await reloaded.gvql(
+    `
+      MATCH (root)
+      WHERE root.documents IS NOT NULL
+      CREATE (doc:Document { id: "doc-5", title: "Backlog item", status: "draft", views: 1 }) INTO root.backlog
+      RETURN doc.id AS id
+    `,
+  );
+  assert.equal(createdMissingCollection.kind, "update");
+  assert.deepEqual(createdMissingCollection.rows, [{ id: "doc-5" }]);
+  assert.equal(reloaded.root.backlog.length, 1);
+  assert.ok(reloaded.root.backlog[0] instanceof Document);
+  assert.equal(createdMissingCollection.changes.some((change) => change.operation === "create" && change.alias === "$collection"), true);
+
   const verification = await reloaded.verify();
   assert.equal(verification.ok, true);
   await reloaded.shutdown();
+
+  const reloadedAfterCreate = await EmbeddedStorage.start({
+    storageDirectory,
+    rootFactory: () => ({ documents: [] }),
+    types,
+  });
+  assert.equal(reloadedAfterCreate.root.backlog.length, 1);
+  assert.ok(reloadedAfterCreate.root.backlog[0] instanceof Document);
+  assert.equal(reloadedAfterCreate.root.backlog[0].id, "doc-5");
+  await reloadedAfterCreate.shutdown();
 
   const nestModule = GraphVaultModule.forRoot({
     storageDirectory,
