@@ -15,6 +15,7 @@
 - Make `storeRoot()` and default `update(...)` commits persist the full reachable root graph, including nested mutable objects.
 - Add transaction-versioned object records so old manifests cannot observe partially written newer object records.
 - Add a tamper-evident SHA-256 transaction hash chain and verification checks for audit-oriented stores.
+- Add transaction metadata for actor, reason, source, trace ID, tags, and audit attributes protected by the transaction hash.
 - Refresh benchmark documentation with GraphVault 0.2.0 WAL and versioned-object-record numbers.
 - Make application-level backups consistent by default, writer-lock protected, WAL-aware, and free of volatile lock files.
 - Add `commitValidators` for application-level consistency gates before WAL prepare.

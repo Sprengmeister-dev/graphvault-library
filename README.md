@@ -37,6 +37,7 @@ await storage.shutdown();
 - GVQL query language for graph traversal, indexed filters, grouping, aggregate analysis, execution plans, and safe batch-update previews
 - explicit transactions with rollback plus optimistic or pessimistic locking for shared stores
 - WAL recovery, fencing tokens, transaction-versioned object records, and a tamper-evident SHA-256 transaction hash chain for audit-oriented deployments
+- transaction metadata for actor, reason, source, trace ID, tags, and audit attributes
 - local filesystem, memory, HTTP, S3-compatible, and SQL-backed storage targets
 - NestJS provider integration
 - separate graphical admin tool: [GraphVault Studio](https://github.com/Sprengmeister-dev/graphvault-studio)
@@ -72,7 +73,14 @@ await storage.transaction(
     invoice.status = "paid";
     root.auditLog.push({ type: "invoice-paid", invoiceId: invoice.id });
   },
-  { mode: "pessimistic" },
+  {
+    mode: "pessimistic",
+    metadata: {
+      actor: "billing-service",
+      reason: "invoice payment settlement",
+      traceId: "payment-evt-7f3c",
+    },
+  },
 );
 ```
 

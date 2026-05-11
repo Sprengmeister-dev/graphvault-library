@@ -162,6 +162,7 @@ For money-like state, keep invariant checks close to the commit boundary:
 - use `transaction(...)` for every business mutation
 - use `commitValidators` for non-negotiable invariants
 - write audit events into the same root graph as the state change
+- attach transaction metadata with actor, reason, source, and trace ID so operational history can be tied back to application events
 - keep `transactionLog: "full"` and `writeDurability: "strict"`
 - do not update existing lazy payload keys in place for transactional facts
 - run verification before and after restore drills

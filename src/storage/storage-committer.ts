@@ -4,6 +4,7 @@ import type {
   StorageTarget,
   StorageTargetLock,
   TransactionRecord,
+  TransactionMetadata,
   StoreMetadata,
   StoreMode,
 } from "../core/types.js";
@@ -33,6 +34,7 @@ export interface CommitEnvelopeOptions {
   baseObjectVersions: ReadonlyMap<string, number>;
   targetCount: number;
   lock: StorageTargetLock;
+  metadata?: TransactionMetadata;
 }
 
 export class StorageCommitter {
@@ -86,6 +88,7 @@ export class StorageCommitter {
       targetCount,
       lock,
       objectVersions,
+      ...(options.metadata ? { metadata: options.metadata } : {}),
     });
     return {
       transactionId: nextTransactionId,
@@ -95,6 +98,7 @@ export class StorageCommitter {
       mode,
       objectCount: targetCount,
       objectIds: [...objectIds],
+      ...(options.metadata ? { metadata: options.metadata } : {}),
     };
   }
 
@@ -106,6 +110,7 @@ export class StorageCommitter {
     targetCount: number;
     lock: StorageTargetLock;
     objectVersions?: ReadonlyMap<string, number>;
+    metadata?: TransactionMetadata;
   }): Promise<string> {
     const { envelope, transactionId, snapshotFile, mode, targetCount, lock } = options;
     const objectIds = sortedObjectIds(envelope);
@@ -123,6 +128,7 @@ export class StorageCommitter {
       objectIds,
       mode,
       targetCount,
+      ...(options.metadata ? { metadata: options.metadata } : {}),
       envelopeHash: envelopeHash(envelope),
       ...(previousHash ? { previousHash } : {}),
     };

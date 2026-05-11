@@ -14,9 +14,18 @@ await storage.transaction(
     const document = root.documents.find((item) => item.id === "doc-1");
     document.status = "approved";
   },
-  { mode: "pessimistic" },
+  {
+    mode: "pessimistic",
+    metadata: {
+      actor: "ops@example.com",
+      reason: "approval workflow",
+      traceId: "approval-evt-42",
+    },
+  },
 );
 ```
+
+`metadata` is written into the transaction record and included in the transaction hash. Use it for actor, reason, source, trace ID, tags, and simple audit attributes that help connect a commit to an application event or admin action.
 
 ## Optimistic Transactions
 

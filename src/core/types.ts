@@ -47,9 +47,19 @@ export interface TransactionRecord {
   objectIds: string[];
   mode: StoreMode;
   targetCount: number;
+  metadata?: TransactionMetadata;
   envelopeHash?: string;
   previousHash?: string;
   transactionHash?: string;
+}
+
+export interface TransactionMetadata {
+  actor?: string;
+  reason?: string;
+  source?: string;
+  traceId?: string;
+  tags?: string[];
+  attributes?: Record<string, string | number | boolean | null>;
 }
 
 export interface WalPrepareRecord {
@@ -206,6 +216,7 @@ export interface StoreMetadata {
   mode: StoreMode;
   objectCount: number;
   objectIds: string[];
+  metadata?: TransactionMetadata;
 }
 
 export interface GraphVaultTransactionContext<TRoot = unknown> {
@@ -219,6 +230,7 @@ export interface GraphVaultTransactionOptions<TRoot = unknown> {
   maxRetries?: number;
   retryDelayMs?: number;
   storeTarget?: (root: TRoot) => unknown;
+  metadata?: TransactionMetadata;
 }
 
 export interface GraphVaultTransactionResult<T = unknown> {

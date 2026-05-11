@@ -154,13 +154,30 @@ try {
   await auditedStore.storeRoot();
   auditedStore.root.ledger.push({ id: "entry-2", amount: -15 });
   await auditedStore.storeRoot();
+  const auditedResult = await auditedStore.transaction(
+    ({ root }) => {
+      root.ledger.push({ id: "entry-3", amount: 40 });
+    },
+    {
+      metadata: {
+        actor: "ops@example.com",
+        reason: "reconcile ledger",
+        source: "unit-test",
+        traceId: "trace-audit-1",
+        tags: ["audit", "ledger"],
+      },
+    },
+  );
+  assert.equal(auditedResult.metadata.metadata.actor, "ops@example.com");
   const auditedVerification = await auditedStore.verify();
   assert.equal(auditedVerification.ok, true);
   assert.equal(auditedVerification.checkedIntegrityHashes >= 3, true);
-  const secondTransactionPath = join(integrityDirectory, "transactions", "transaction-000000000002.json");
-  const secondTransaction = JSON.parse(await readFile(secondTransactionPath, "utf8"));
-  secondTransaction.targetCount += 1;
-  await writeFile(secondTransactionPath, `${JSON.stringify(secondTransaction, null, 2)}\n`);
+  const thirdTransactionPath = join(integrityDirectory, "transactions", "transaction-000000000003.json");
+  const thirdTransaction = JSON.parse(await readFile(thirdTransactionPath, "utf8"));
+  assert.equal(thirdTransaction.metadata.actor, "ops@example.com");
+  assert.equal(thirdTransaction.metadata.reason, "reconcile ledger");
+  thirdTransaction.targetCount += 1;
+  await writeFile(thirdTransactionPath, `${JSON.stringify(thirdTransaction, null, 2)}\n`);
   const tamperedVerification = await auditedStore.verify();
   assert.equal(tamperedVerification.ok, false);
   assert.equal(tamperedVerification.errors.some((error) => error.includes("invalid transactionHash")), true);

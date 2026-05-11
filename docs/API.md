@@ -60,6 +60,7 @@ Main runtime API.
 - `recoverCommittedWal`: finishes committed WAL entries at startup; defaults to `true` when WAL is enabled.
 - `readCommittedWal`: allows readers to load committed WAL entries before manifest repair; defaults to `true`.
 - `commitValidators`: application invariants that must pass before WAL prepare and commit.
+- `transaction(..., { metadata })`: records actor, reason, source, trace ID, tags, and simple audit attributes in the transaction record. Metadata is included in the transaction hash.
 - `housekeepingIntervalMs`: periodic maintenance interval.
 - `writeProfile`: `standard`, `fast`, or `maximum` write throughput profile.
 - `writeDurability`: `strict` for fsynced local atomic writes, `relaxed` for higher throughput.

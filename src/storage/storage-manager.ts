@@ -29,6 +29,7 @@ import type {
   GraphVaultTransactionOptions,
   GraphVaultTransactionResult,
   TransactionLockMode,
+  TransactionMetadata,
   VerificationResult,
   MaintenanceResult,
   MaintenanceOptions,
@@ -546,7 +547,7 @@ export class StorageManager<TRoot = unknown> {
     }
   }
 
-  private async storeLocked(mode: StoreMode, targets: readonly unknown[], lock: StorageTargetLock): Promise<StoreMetadata> {
+  private async storeLocked(mode: StoreMode, targets: readonly unknown[], lock: StorageTargetLock, metadata?: TransactionMetadata): Promise<StoreMetadata> {
     this.bindLazyRefs(this.rootValue);
     await this.storeLoadedLazyRefs(this.rootValue);
     const envelope = this.serializer.serialize(this.rootValue);
@@ -560,6 +561,7 @@ export class StorageManager<TRoot = unknown> {
       baseObjectVersions: this.persistedObjectVersions,
       targetCount: targets.length,
       lock,
+      ...(metadata ? { metadata } : {}),
     });
   }
 
@@ -574,8 +576,8 @@ export class StorageManager<TRoot = unknown> {
         const rollback = this.cloneRoot();
         try {
           const value = await this.runInTransactionScope(() => work({ root: this.root, transactionId: baseTransactionId, attempt: 1 }));
-          const metadata = await this.storeLocked("eager", [options.storeTarget ? options.storeTarget(this.root) : this.root], lock);
-          return { value, metadata, baseTransactionId, attempts: 1, lockMode: "pessimistic" };
+          const commitMetadata = await this.storeLocked("eager", [options.storeTarget ? options.storeTarget(this.root) : this.root], lock, options.metadata);
+          return { value, metadata: commitMetadata, baseTransactionId, attempts: 1, lockMode: "pessimistic" };
         } catch (error) {
           this.rootValue = rollback;
           this.bindLazyRefs(this.rootValue);
@@ -601,8 +603,8 @@ export class StorageManager<TRoot = unknown> {
           const value = await this.runInTransactionScope(() => work({ root: this.root, transactionId: baseTransactionId, attempt }));
           return await this.withWriteLock(async (lock) => {
             await this.assertNoExternalChangeLocked(baseTransactionId);
-            const metadata = await this.storeLocked("eager", [options.storeTarget ? options.storeTarget(this.root) : this.root], lock);
-            return { ok: true as const, value, metadata, baseTransactionId };
+            const commitMetadata = await this.storeLocked("eager", [options.storeTarget ? options.storeTarget(this.root) : this.root], lock, options.metadata);
+            return { ok: true as const, value, metadata: commitMetadata, baseTransactionId };
           });
         } catch (error) {
           this.rootValue = rollback;
