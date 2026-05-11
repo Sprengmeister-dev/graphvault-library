@@ -17,6 +17,7 @@ import type {
   GarbageCollectionResult,
   SerializedEnvelope,
   StorageManagerOptions,
+  StorageLockOptions,
   StorageStatus,
   StorageTarget,
   StorageTargetLock,
@@ -434,7 +435,7 @@ export class StorageManager<TRoot = unknown> {
   }
 
   private async acquireLock(): Promise<void> {
-    this.lockHandle = await this.target.acquireLock(this.layout.lockFile, this.options.lockTimeoutMs);
+    this.lockHandle = await this.target.acquireLock(this.layout.lockFile, this.options.lockTimeoutMs, this.lockOptions());
   }
 
   private get lockStrategy(): "startup" | "pessimistic" | "optimistic" {
@@ -588,7 +589,7 @@ export class StorageManager<TRoot = unknown> {
     if (this.lockHandle) {
       return work();
     }
-    const handle = await this.target.acquireLock(this.layout.lockFile, this.options.lockTimeoutMs);
+    const handle = await this.target.acquireLock(this.layout.lockFile, this.options.lockTimeoutMs, this.lockOptions());
     try {
       return await work();
     } finally {
@@ -603,6 +604,10 @@ export class StorageManager<TRoot = unknown> {
         `Store changed concurrently. Expected transaction ${expectedTransactionId}, found ${currentTransactionId}.`,
       );
     }
+  }
+
+  private lockOptions(): StorageLockOptions {
+    return typeof this.options.staleLockTimeoutMs === "number" ? { staleLockTimeoutMs: this.options.staleLockTimeoutMs } : {};
   }
 
   private async readCurrentTransactionId(): Promise<number> {

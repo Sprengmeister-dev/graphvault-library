@@ -79,6 +79,7 @@ For multi-pod deployments where several instances of the same application share 
 
 - `pessimistic` transactions take the writer lock before reading and hold it until commit.
 - `optimistic` transactions read first, then check at commit time whether another pod changed the store meanwhile; conflicts are retried or reported as `OptimisticLockError`.
+- `staleLockTimeoutMs` can recover a lock left behind by a crashed pod; set it above your expected maximum transaction runtime.
 
 For NestJS services, `@GraphVaultTransactional()` wraps a service method in the same commit/rollback and locking behavior.
 

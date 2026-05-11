@@ -54,6 +54,7 @@ import { GraphVaultModule } from "@sprengmeister/graphvault";
         storageDirectory: config.getOrThrow("GRAPHVAULT_DIR"),
         rootFactory: () => ({ documents: [] }),
         lockTimeoutMs: 10_000,
+        staleLockTimeoutMs: 120_000,
       }),
     }),
   ],

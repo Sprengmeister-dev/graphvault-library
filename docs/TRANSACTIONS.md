@@ -48,6 +48,7 @@ const storage = await EmbeddedStorage.start({
   optimisticMaxRetries: 3,
   optimisticRetryDelayMs: 25,
   lockTimeoutMs: 10_000,
+  staleLockTimeoutMs: 120_000,
 });
 ```
 
@@ -56,6 +57,8 @@ Available strategies:
 - `startup`: legacy single-writer mode; acquires the write lock for the whole manager lifetime.
 - `pessimistic`: no startup lock; transactions default to pessimistic commit locking.
 - `optimistic`: no startup lock; transactions default to optimistic conflict detection and retry.
+
+`staleLockTimeoutMs` is optional crash recovery for shared stores. If a pod dies while holding the writer lock, a later writer may break that lock after the configured age. Set this value higher than the longest transaction you expect to allow; too low a value can let another writer break a still-valid long-running transaction.
 
 Direct `store(...)`, `storeRoot()`, and `storeAll(...)` still perform a commit-version check before writing when no startup lock is held. For shared stores, prefer `transaction(...)` because it gives you a fresh root, rollback, retry behavior, and full-graph transactional persistence.
 

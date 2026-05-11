@@ -1,5 +1,5 @@
 import { StorageLockError } from "../../core/errors.js";
-import type { StorageTarget, StorageTargetLock } from "../../core/types.js";
+import type { StorageLockOptions, StorageTarget, StorageTargetLock } from "../../core/types.js";
 
 export interface S3StorageTargetOptions {
   bucket: string;
@@ -160,7 +160,7 @@ export class S3StorageTarget implements StorageTarget {
     await this.client.deleteObject({ bucket: this.bucket, key: this.key(`${path}/.dir`) });
   }
 
-  async acquireLock(path: string, timeoutMs: number): Promise<StorageTargetLock> {
+  async acquireLock(path: string, timeoutMs: number, options: StorageLockOptions = {}): Promise<StorageTargetLock> {
     const key = this.key(path);
     const deadline = Date.now() + timeoutMs;
     while (true) {
@@ -177,6 +177,9 @@ export class S3StorageTarget implements StorageTarget {
           },
         };
       } catch (error) {
+        if (await this.removeStaleLock(key, options.staleLockTimeoutMs)) {
+          continue;
+        }
         if (Date.now() >= deadline) {
           throw new StorageLockError(`Storage is already locked at s3://${this.bucket}/${key}.`, { cause: error });
         }
@@ -189,10 +192,46 @@ export class S3StorageTarget implements StorageTarget {
     const clean = normalizeS3Key(path);
     return this.prefix ? `${this.prefix}/${clean}` : clean;
   }
+
+  private async removeStaleLock(key: string, staleLockTimeoutMs: number | undefined): Promise<boolean> {
+    if (!isPositiveFinite(staleLockTimeoutMs)) {
+      return false;
+    }
+    try {
+      const result = await this.client.getObject({ bucket: this.bucket, key });
+      if (!result.body) {
+        return false;
+      }
+      if (isLockBodyStale((await s3BodyToBuffer(result.body)).toString("utf8"), staleLockTimeoutMs)) {
+        await this.client.deleteObject({ bucket: this.bucket, key });
+        return true;
+      }
+    } catch {
+      return false;
+    }
+    return false;
+  }
 }
 
 function normalizeS3Key(path: string): string {
   return path.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+}
+
+function isLockBodyStale(body: string, staleLockTimeoutMs: number): boolean {
+  try {
+    const parsed = JSON.parse(body) as { createdAt?: unknown };
+    if (typeof parsed.createdAt !== "string") {
+      return false;
+    }
+    const createdAtMs = Date.parse(parsed.createdAt);
+    return Number.isFinite(createdAtMs) && Date.now() - createdAtMs >= staleLockTimeoutMs;
+  } catch {
+    return false;
+  }
+}
+
+function isPositiveFinite(value: number | undefined): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value > 0;
 }
 
 async function s3BodyToBuffer(body: S3Body): Promise<Buffer> {

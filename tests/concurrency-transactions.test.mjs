@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   EmbeddedStorage,
   GraphVaultTransactional,
+  LocalFilesystemTarget,
   MemoryStorageTarget,
   OptimisticLockError,
   TransactionScopeError,
@@ -172,6 +176,23 @@ const afterDecorator = await EmbeddedStorage.start({
 assert.equal(afterDecorator.root.documents[0].status, "approved");
 await afterDecorator.shutdown();
 await decoratorStorage.shutdown();
+
+const staleMemoryLockTarget = new MemoryStorageTarget();
+await staleMemoryLockTarget.acquireLock("locks/stale", 0);
+await new Promise((resolve) => setTimeout(resolve, 5));
+const recoveredMemoryLock = await staleMemoryLockTarget.acquireLock("locks/stale", 20, { staleLockTimeoutMs: 1 });
+await recoveredMemoryLock.release();
+
+const staleLockDirectory = await mkdtemp(join(tmpdir(), "graphvault-stale-lock-"));
+try {
+  const localTarget = new LocalFilesystemTarget();
+  const staleLockPath = join(staleLockDirectory, "store.lock");
+  await writeFile(staleLockPath, JSON.stringify({ createdAt: new Date(Date.now() - 60_000).toISOString() }));
+  const recoveredLocalLock = await localTarget.acquireLock(staleLockPath, 20, { staleLockTimeoutMs: 1_000 });
+  await recoveredLocalLock.release();
+} finally {
+  await rm(staleLockDirectory, { recursive: true, force: true });
+}
 
 await writerB.shutdown();
 await writerA.shutdown();

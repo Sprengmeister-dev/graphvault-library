@@ -1,5 +1,5 @@
 import { StorageLockError } from "../../core/errors.js";
-import type { StorageTarget, StorageTargetLock } from "../../core/types.js";
+import type { StorageLockOptions, StorageTarget, StorageTargetLock } from "../../core/types.js";
 
 export interface SqlStorageTargetOptions {
   client: SqlStorageClient;
@@ -107,7 +107,7 @@ export class SqlStorageTarget implements StorageTarget {
     }
   }
 
-  async acquireLock(path: string, timeoutMs: number): Promise<StorageTargetLock> {
+  async acquireLock(path: string, timeoutMs: number, options: StorageLockOptions = {}): Promise<StorageTargetLock> {
     await this.ensureSchema();
     const key = normalize(path);
     const deadline = Date.now() + timeoutMs;
@@ -123,6 +123,9 @@ export class SqlStorageTarget implements StorageTarget {
           },
         };
       } catch (error) {
+        if (await this.removeStaleLock(key, options.staleLockTimeoutMs)) {
+          continue;
+        }
         if (Date.now() >= deadline) {
           throw new StorageLockError(`Storage is already locked in SQL target at ${path}.`, { cause: error });
         }
@@ -150,6 +153,27 @@ export class SqlStorageTarget implements StorageTarget {
     }
     return work();
   }
+
+  private async removeStaleLock(key: string, staleLockTimeoutMs: number | undefined): Promise<boolean> {
+    if (!isPositiveFinite(staleLockTimeoutMs)) {
+      return false;
+    }
+    try {
+      const result = await this.client.execute(`SELECT created_at FROM ${this.lockTableName} WHERE path = ? LIMIT 1`, [key]);
+      const createdAt = result.rows?.[0]?.created_at;
+      if (typeof createdAt !== "string") {
+        return false;
+      }
+      const createdAtMs = Date.parse(createdAt);
+      if (!Number.isFinite(createdAtMs) || Date.now() - createdAtMs < staleLockTimeoutMs) {
+        return false;
+      }
+      await this.client.execute(`DELETE FROM ${this.lockTableName} WHERE path = ?`, [key]);
+      return true;
+    } catch {
+      return false;
+    }
+  }
 }
 
 function normalize(path: string): string {
@@ -161,6 +185,10 @@ function quoteSqlIdentifier(identifier: string): string {
     throw new Error(`Unsafe SQL identifier "${identifier}".`);
   }
   return `"${identifier}"`;
+}
+
+function isPositiveFinite(value: number | undefined): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value > 0;
 }
 
 function sqlBodyToBuffer(body: unknown): Buffer {

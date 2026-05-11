@@ -2,7 +2,7 @@ import { constants } from "node:fs";
 import { access, mkdir, open, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { StorageLockError } from "../core/errors.js";
-import type { StorageTarget, StorageTargetLock } from "../core/types.js";
+import type { StorageLockOptions, StorageTarget, StorageTargetLock } from "../core/types.js";
 export { S3StorageTarget } from "./targets/s3.js";
 export type {
   S3Body,
@@ -80,7 +80,7 @@ export class LocalFilesystemTarget implements StorageTarget {
     await rm(path, { force: true, recursive: options.recursive ?? false });
   }
 
-  async acquireLock(path: string, timeoutMs: number): Promise<StorageTargetLock> {
+  async acquireLock(path: string, timeoutMs: number, options: StorageLockOptions = {}): Promise<StorageTargetLock> {
     const deadline = Date.now() + timeoutMs;
     while (true) {
       try {
@@ -93,6 +93,9 @@ export class LocalFilesystemTarget implements StorageTarget {
           },
         };
       } catch (error) {
+        if (await removeStaleLocalLock(path, options.staleLockTimeoutMs)) {
+          continue;
+        }
         if (Date.now() >= deadline) {
           throw new StorageLockError(`Storage is already locked at ${path}.`, { cause: error });
         }
@@ -105,7 +108,7 @@ export class LocalFilesystemTarget implements StorageTarget {
 export class MemoryStorageTarget implements StorageTarget {
   private readonly files = new Map<string, Buffer>();
   private readonly directories = new Set<string>();
-  private readonly locks = new Set<string>();
+  private readonly locks = new Map<string, number>();
 
   async ensureDirectory(path: string): Promise<void> {
     this.directories.add(normalize(path));
@@ -190,16 +193,20 @@ export class MemoryStorageTarget implements StorageTarget {
     }
   }
 
-  async acquireLock(path: string, timeoutMs: number): Promise<StorageTargetLock> {
+  async acquireLock(path: string, timeoutMs: number, options: StorageLockOptions = {}): Promise<StorageTargetLock> {
     const key = normalize(path);
     const deadline = Date.now() + timeoutMs;
     while (this.locks.has(key)) {
+      if (isTimestampStale(this.locks.get(key), options.staleLockTimeoutMs)) {
+        this.locks.delete(key);
+        break;
+      }
       if (Date.now() >= deadline) {
         throw new StorageLockError(`Storage is already locked at ${path}.`);
       }
       await new Promise((resolve) => setTimeout(resolve, 10));
     }
-    this.locks.add(key);
+    this.locks.set(key, Date.now());
     return {
       release: async () => {
         this.locks.delete(key);
@@ -268,7 +275,7 @@ export class HttpStorageTarget implements StorageTarget {
     await this.request("DELETE", path, undefined, options.recursive ? { recursive: "1" } : undefined);
   }
 
-  async acquireLock(path: string, timeoutMs: number): Promise<StorageTargetLock> {
+  async acquireLock(path: string, timeoutMs: number, options: StorageLockOptions = {}): Promise<StorageTargetLock> {
     const deadline = Date.now() + timeoutMs;
     while (true) {
       const response = await this.rawRequest("PUT", path, Buffer.from(JSON.stringify({ createdAt: new Date().toISOString() })), {
@@ -280,6 +287,9 @@ export class HttpStorageTarget implements StorageTarget {
             await this.remove(path);
           },
         };
+      }
+      if (await this.removeStaleLock(path, options.staleLockTimeoutMs)) {
+        continue;
       }
       if (Date.now() >= deadline) {
         throw new StorageLockError(`Storage is already locked at ${path}.`);
@@ -306,6 +316,25 @@ export class HttpStorageTarget implements StorageTarget {
       headers: this.headers,
       ...(body ? { body } : {}),
     });
+  }
+
+  private async removeStaleLock(path: string, staleLockTimeoutMs: number | undefined): Promise<boolean> {
+    if (!isPositiveFinite(staleLockTimeoutMs)) {
+      return false;
+    }
+    try {
+      const response = await this.rawRequest("GET", path);
+      if (response.status < 200 || response.status >= 300) {
+        return false;
+      }
+      if (isLockBodyStale(await response.text(), staleLockTimeoutMs)) {
+        await this.remove(path);
+        return true;
+      }
+    } catch {
+      return false;
+    }
+    return false;
   }
 }
 
@@ -353,4 +382,39 @@ function joinTargetPath(root: string, relativePath: string): string {
 
 function normalize(path: string): string {
   return path.replace(/\\/g, "/").replace(/\/+$/, "") || "/";
+}
+
+async function removeStaleLocalLock(path: string, staleLockTimeoutMs: number | undefined): Promise<boolean> {
+  if (!isPositiveFinite(staleLockTimeoutMs)) {
+    return false;
+  }
+  try {
+    if (isLockBodyStale(await readFile(path, "utf8"), staleLockTimeoutMs)) {
+      await rm(path, { force: true });
+      return true;
+    }
+  } catch {
+    return false;
+  }
+  return false;
+}
+
+function isLockBodyStale(body: string, staleLockTimeoutMs: number): boolean {
+  try {
+    const parsed = JSON.parse(body) as { createdAt?: unknown };
+    if (typeof parsed.createdAt !== "string") {
+      return false;
+    }
+    return isTimestampStale(Date.parse(parsed.createdAt), staleLockTimeoutMs);
+  } catch {
+    return false;
+  }
+}
+
+function isTimestampStale(createdAtMs: number | undefined, staleLockTimeoutMs: number | undefined): boolean {
+  return isPositiveFinite(staleLockTimeoutMs) && typeof createdAtMs === "number" && Number.isFinite(createdAtMs) && Date.now() - createdAtMs >= staleLockTimeoutMs;
+}
+
+function isPositiveFinite(value: number | undefined): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value > 0;
 }

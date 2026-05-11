@@ -113,6 +113,7 @@ export type {
   StorageStatus,
   StorageTarget,
   StorageTargetLock,
+  StorageLockOptions,
   StorageLockStrategy,
   StoreMetadata,
   StoreMode,

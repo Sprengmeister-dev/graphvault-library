@@ -120,6 +120,7 @@ export interface StorageManagerOptions<TRoot = unknown> {
   types?: Array<TypeRegistration<any>>;
   readOnly?: boolean;
   lockTimeoutMs?: number;
+  staleLockTimeoutMs?: number;
   housekeepingIntervalMs?: number;
   eagerFieldEvaluator?: EagerFieldEvaluator;
   storageTarget?: StorageTarget;
@@ -145,7 +146,11 @@ export interface StorageTarget {
   writeBufferAtomic(path: string, value: Buffer): Promise<void>;
   appendText(path: string, value: string): Promise<void>;
   remove(path: string, options?: { recursive?: boolean }): Promise<void>;
-  acquireLock(path: string, timeoutMs: number): Promise<StorageTargetLock>;
+  acquireLock(path: string, timeoutMs: number, options?: StorageLockOptions): Promise<StorageTargetLock>;
+}
+
+export interface StorageLockOptions {
+  staleLockTimeoutMs?: number;
 }
 
 export interface StorageTargetLock {

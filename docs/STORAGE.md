@@ -122,12 +122,14 @@ const storage = await EmbeddedStorage.start({
   rootFactory: () => ({ documents: [] }),
   channelCount: 4,
   lockTimeoutMs: 10_000,
+  staleLockTimeoutMs: 120_000,
   housekeepingIntervalMs: 60_000,
 });
 ```
 
 - `channelCount`: distributes object records across channel directories; use a power of two.
 - `lockTimeoutMs`: how long a writer waits for the single-writer lock.
+- `staleLockTimeoutMs`: optional crash recovery; after this age a leftover lock may be removed. Keep it above your longest expected transaction runtime.
 - `lockStrategy`: `startup`, `pessimistic`, or `optimistic`. Use `pessimistic` or `optimistic` for shared stores with several pods.
 - `optimisticMaxRetries` and `optimisticRetryDelayMs`: retry policy for optimistic transactions.
 - `housekeepingIntervalMs`: enables periodic garbage collection and maintenance work.
