@@ -79,6 +79,7 @@ For multi-pod deployments where several instances of the same application share 
 
 - `pessimistic` transactions take the writer lock before reading and hold it until commit.
 - `optimistic` transactions read first, then check at commit time whether another pod changed the store meanwhile; conflicts are retried or reported as `OptimisticLockError`.
+- Every writer lock carries a monotonically increasing fencing token. Before GraphVault publishes commit metadata, it verifies that the token still owns the lock, so a pod that wakes up after its stale lock was replaced cannot publish an old write.
 - `staleLockTimeoutMs` can recover a lock left behind by a crashed pod; set it above your expected maximum transaction runtime.
 
 For NestJS services, `@GraphVaultTransactional()` wraps a service method in the same commit/rollback and locking behavior.

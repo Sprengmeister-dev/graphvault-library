@@ -154,6 +154,8 @@ export interface StorageLockOptions {
 }
 
 export interface StorageTargetLock {
+  fencingToken: number;
+  assertValid(): Promise<void>;
   release(): Promise<void>;
 }
 

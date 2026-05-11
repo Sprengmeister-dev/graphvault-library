@@ -4,6 +4,7 @@ import { SqlStorageTarget } from "../dist/storage/targets/sql.js";
 class MockSqlClient {
   constructor() {
     this.bodyByPath = new Map();
+    this.lockRows = new Map();
     this.lockTableName = "";
     this.lockFailures = 0;
     this.objectWrites = 0;
@@ -15,6 +16,19 @@ class MockSqlClient {
       return this.defaultRows;
     }
 
+    if (sql.includes("ALTER TABLE")) {
+      return this.defaultRows;
+    }
+
+    if (sql.includes("UPDATE") && this.lockTableName && sql.includes(this.lockTableName)) {
+      const key = parameters[2];
+      const current = this.lockRows.get(key);
+      if (current) {
+        this.lockRows.set(key, { created_at: parameters[0], fencing_token: parameters[1] });
+      }
+      return this.defaultRows;
+    }
+
     if (sql.includes("INSERT INTO")) {
       this.objectWrites += 1;
       if (this.lockTableName && sql.includes(this.lockTableName)) {
@@ -22,6 +36,7 @@ class MockSqlClient {
           this.lockFailures -= 1;
           throw new Error("duplicate lock");
         }
+        this.lockRows.set(parameters[0], { created_at: parameters[1], fencing_token: parameters[2] ?? 0 });
         return this.defaultRows;
       }
       const key = parameters[0];
@@ -32,6 +47,13 @@ class MockSqlClient {
 
     if (sql.includes("DELETE FROM")) {
       const key = parameters[0];
+      if (this.lockTableName && sql.includes(this.lockTableName)) {
+        const expectedToken = parameters[1];
+        if (typeof expectedToken === "undefined" || this.lockRows.get(key)?.fencing_token === expectedToken) {
+          this.lockRows.delete(key);
+        }
+        return this.defaultRows;
+      }
       if (sql.includes("LIKE")) {
         const prefix = key.replace("%", "");
         for (const path of Array.from(this.bodyByPath.keys())) {
@@ -43,6 +65,16 @@ class MockSqlClient {
         this.bodyByPath.delete(key);
       }
       return this.defaultRows;
+    }
+
+    if (sql.includes("SELECT created_at") && this.lockTableName && sql.includes(this.lockTableName)) {
+      const row = this.lockRows.get(parameters[0]);
+      return { rows: row ? [{ created_at: row.created_at }] : [] };
+    }
+
+    if (sql.includes("SELECT fencing_token") && this.lockTableName && sql.includes(this.lockTableName)) {
+      const row = this.lockRows.get(parameters[0]);
+      return { rows: row ? [{ fencing_token: row.fencing_token }] : [] };
     }
     
     if (sql.includes("SELECT body")) {

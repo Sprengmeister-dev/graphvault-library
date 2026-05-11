@@ -53,7 +53,7 @@ Main runtime API.
 - `readOnly`: opens without writer lock and rejects writes.
 - `channelCount`: spreads object records across channel folders.
 - `lockTimeoutMs`: writer-lock timeout.
-- `staleLockTimeoutMs`: optional crash recovery for leftover writer locks.
+- `staleLockTimeoutMs`: optional crash recovery for leftover writer locks; recovered locks receive newer fencing tokens.
 - `lockStrategy`: `startup`, `pessimistic`, or `optimistic`.
 - `optimisticMaxRetries` / `optimisticRetryDelayMs`: retry policy for optimistic transactions.
 - `housekeepingIntervalMs`: periodic maintenance interval.

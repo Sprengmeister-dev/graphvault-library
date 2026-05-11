@@ -8,6 +8,7 @@ import {
   LocalFilesystemTarget,
   MemoryStorageTarget,
   OptimisticLockError,
+  StorageLockError,
   TransactionScopeError,
 } from "../dist/index.js";
 
@@ -178,9 +179,14 @@ await afterDecorator.shutdown();
 await decoratorStorage.shutdown();
 
 const staleMemoryLockTarget = new MemoryStorageTarget();
-await staleMemoryLockTarget.acquireLock("locks/stale", 0);
+const oldMemoryLock = await staleMemoryLockTarget.acquireLock("locks/stale", 0);
+assert.equal(oldMemoryLock.fencingToken, 1);
 await new Promise((resolve) => setTimeout(resolve, 5));
 const recoveredMemoryLock = await staleMemoryLockTarget.acquireLock("locks/stale", 20, { staleLockTimeoutMs: 1 });
+assert.equal(recoveredMemoryLock.fencingToken, 2);
+await assert.rejects(() => oldMemoryLock.assertValid(), StorageLockError);
+await oldMemoryLock.release();
+await recoveredMemoryLock.assertValid();
 await recoveredMemoryLock.release();
 
 const staleLockDirectory = await mkdtemp(join(tmpdir(), "graphvault-stale-lock-"));
@@ -189,10 +195,34 @@ try {
   const staleLockPath = join(staleLockDirectory, "store.lock");
   await writeFile(staleLockPath, JSON.stringify({ createdAt: new Date(Date.now() - 60_000).toISOString() }));
   const recoveredLocalLock = await localTarget.acquireLock(staleLockPath, 20, { staleLockTimeoutMs: 1_000 });
+  assert.equal(recoveredLocalLock.fencingToken, 1);
+  await recoveredLocalLock.assertValid();
   await recoveredLocalLock.release();
 } finally {
   await rm(staleLockDirectory, { recursive: true, force: true });
 }
+
+const fencedStoreTarget = new MemoryStorageTarget();
+const staleWriter = await EmbeddedStorage.start({
+  storageDirectory: "fenced-store",
+  storageTarget: fencedStoreTarget,
+  staleLockTimeoutMs: 1,
+  rootFactory: () => ({ events: ["stale"] }),
+});
+await staleWriter.storeRoot();
+await new Promise((resolve) => setTimeout(resolve, 5));
+const freshWriter = await EmbeddedStorage.start({
+  storageDirectory: "fenced-store",
+  storageTarget: fencedStoreTarget,
+  staleLockTimeoutMs: 1,
+  rootFactory: () => ({ events: [] }),
+});
+freshWriter.root.events.push("fresh");
+await freshWriter.storeRoot();
+staleWriter.root.events.push("stale-write");
+await assert.rejects(() => staleWriter.storeRoot(), StorageLockError);
+await freshWriter.shutdown();
+await staleWriter.shutdown();
 
 await writerB.shutdown();
 await writerA.shutdown();

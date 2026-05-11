@@ -113,13 +113,24 @@ export class SqlStorageTarget implements StorageTarget {
     const deadline = Date.now() + timeoutMs;
     while (true) {
       try {
-        await this.client.execute(`INSERT INTO ${this.lockTableName} (path, created_at) VALUES (?, ?)`, [
+        await this.client.execute(`INSERT INTO ${this.lockTableName} (path, created_at, fencing_token) VALUES (?, ?, ?)`, [
           key,
           new Date().toISOString(),
+          0,
+        ]);
+        const fencingToken = await this.nextFencingToken(key);
+        await this.client.execute(`UPDATE ${this.lockTableName} SET created_at = ?, fencing_token = ? WHERE path = ?`, [
+          new Date().toISOString(),
+          fencingToken,
+          key,
         ]);
         return {
+          fencingToken,
+          assertValid: async () => {
+            await this.assertLockToken(key, fencingToken);
+          },
           release: async () => {
-            await this.client.execute(`DELETE FROM ${this.lockTableName} WHERE path = ?`, [key]);
+            await this.client.execute(`DELETE FROM ${this.lockTableName} WHERE path = ? AND fencing_token = ?`, [key, fencingToken]);
           },
         };
       } catch (error) {
@@ -142,8 +153,13 @@ export class SqlStorageTarget implements StorageTarget {
       `CREATE TABLE IF NOT EXISTS ${this.tableName} (path TEXT PRIMARY KEY, body BLOB NOT NULL, updated_at TEXT NOT NULL)`,
     );
     await this.client.execute(
-      `CREATE TABLE IF NOT EXISTS ${this.lockTableName} (path TEXT PRIMARY KEY, created_at TEXT NOT NULL)`,
+      `CREATE TABLE IF NOT EXISTS ${this.lockTableName} (path TEXT PRIMARY KEY, created_at TEXT NOT NULL, fencing_token INTEGER NOT NULL DEFAULT 0)`,
     );
+    try {
+      await this.client.execute(`ALTER TABLE ${this.lockTableName} ADD COLUMN fencing_token INTEGER NOT NULL DEFAULT 0`);
+    } catch {
+      // Existing installations may already have the column.
+    }
     this.schemaReady = true;
   }
 
@@ -172,6 +188,27 @@ export class SqlStorageTarget implements StorageTarget {
       return true;
     } catch {
       return false;
+    }
+  }
+
+  private async nextFencingToken(lockKey: string): Promise<number> {
+    const counterKey = `${lockKey}.__fencing_counter`;
+    const result = await this.client.execute(`SELECT fencing_token FROM ${this.lockTableName} WHERE path = ? LIMIT 1`, [counterKey]);
+    const current = Number(result.rows?.[0]?.fencing_token ?? 0) || 0;
+    const next = current + 1;
+    await this.client.execute(`DELETE FROM ${this.lockTableName} WHERE path = ?`, [counterKey]);
+    await this.client.execute(`INSERT INTO ${this.lockTableName} (path, created_at, fencing_token) VALUES (?, ?, ?)`, [
+      counterKey,
+      new Date().toISOString(),
+      next,
+    ]);
+    return next;
+  }
+
+  private async assertLockToken(key: string, fencingToken: number): Promise<void> {
+    const result = await this.client.execute(`SELECT fencing_token FROM ${this.lockTableName} WHERE path = ? LIMIT 1`, [key]);
+    if (Number(result.rows?.[0]?.fencing_token) !== fencingToken) {
+      throw new StorageLockError(`Storage lock token ${fencingToken} is no longer valid in SQL target at ${key}.`);
     }
   }
 }

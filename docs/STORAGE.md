@@ -129,7 +129,7 @@ const storage = await EmbeddedStorage.start({
 
 - `channelCount`: distributes object records across channel directories; use a power of two.
 - `lockTimeoutMs`: how long a writer waits for the single-writer lock.
-- `staleLockTimeoutMs`: optional crash recovery; after this age a leftover lock may be removed. Keep it above your longest expected transaction runtime.
+- `staleLockTimeoutMs`: optional crash recovery; after this age a leftover lock may be removed. Keep it above your longest expected transaction runtime. Recovered locks get newer fencing tokens, and stale writers are rejected before commit metadata is published.
 - `lockStrategy`: `startup`, `pessimistic`, or `optimistic`. Use `pessimistic` or `optimistic` for shared stores with several pods.
 - `optimisticMaxRetries` and `optimisticRetryDelayMs`: retry policy for optimistic transactions.
 - `housekeepingIntervalMs`: enables periodic garbage collection and maintenance work.

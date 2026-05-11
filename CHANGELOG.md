@@ -6,6 +6,7 @@
 - Add optimistic locking with commit-version checks, rollback, and retry.
 - Add pessimistic transactions with short-lived writer locks for multi-pod writes.
 - Add `@GraphVaultTransactional()` for NestJS service methods.
+- Add fencing tokens for writer locks so stale recovered writers cannot publish old commits or release newer locks.
 - Add concurrency tests that exercise two managers writing to the same store.
 
 ## 0.1.0

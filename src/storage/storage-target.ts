@@ -84,12 +84,17 @@ export class LocalFilesystemTarget implements StorageTarget {
     const deadline = Date.now() + timeoutMs;
     while (true) {
       try {
-        const handle = await open(path, "wx");
-        await handle.writeFile(JSON.stringify({ pid: process.pid, createdAt: new Date().toISOString() }));
+        await mkdir(dirname(path), { recursive: true });
+        await writeFile(path, JSON.stringify({ pid: process.pid, createdAt: new Date().toISOString(), fencingToken: 0 }), { flag: "wx" });
+        const fencingToken = await this.nextFencingToken(path);
+        await this.writeLockRecord(path, fencingToken);
         return {
+          fencingToken,
+          assertValid: async () => {
+            await assertLocalLockToken(path, fencingToken);
+          },
           release: async () => {
-            await handle.close();
-            await rm(path, { force: true });
+            await removeLocalLockIfTokenMatches(path, fencingToken);
           },
         };
       } catch (error) {
@@ -103,12 +108,35 @@ export class LocalFilesystemTarget implements StorageTarget {
       }
     }
   }
+
+  private async nextFencingToken(lockPath: string): Promise<number> {
+    const tokenPath = `${lockPath}.fencing-token`;
+    let current = 0;
+    try {
+      current = Number.parseInt(await readFile(tokenPath, "utf8"), 10) || 0;
+    } catch {
+      current = 0;
+    }
+    const next = current + 1;
+    await this.writeTextAtomic(tokenPath, String(next));
+    return next;
+  }
+
+  private async writeLockRecord(path: string, fencingToken: number): Promise<void> {
+    await this.writeTextAtomic(path, JSON.stringify({ pid: process.pid, createdAt: new Date().toISOString(), fencingToken }));
+  }
+}
+
+interface MemoryLockRecord {
+  createdAtMs: number;
+  fencingToken: number;
 }
 
 export class MemoryStorageTarget implements StorageTarget {
   private readonly files = new Map<string, Buffer>();
   private readonly directories = new Set<string>();
-  private readonly locks = new Map<string, number>();
+  private readonly locks = new Map<string, MemoryLockRecord>();
+  private readonly fencingTokens = new Map<string, number>();
 
   async ensureDirectory(path: string): Promise<void> {
     this.directories.add(normalize(path));
@@ -197,7 +225,7 @@ export class MemoryStorageTarget implements StorageTarget {
     const key = normalize(path);
     const deadline = Date.now() + timeoutMs;
     while (this.locks.has(key)) {
-      if (isTimestampStale(this.locks.get(key), options.staleLockTimeoutMs)) {
+      if (isTimestampStale(this.locks.get(key)?.createdAtMs, options.staleLockTimeoutMs)) {
         this.locks.delete(key);
         break;
       }
@@ -206,10 +234,21 @@ export class MemoryStorageTarget implements StorageTarget {
       }
       await new Promise((resolve) => setTimeout(resolve, 10));
     }
-    this.locks.set(key, Date.now());
+    const fencingToken = (this.fencingTokens.get(key) ?? 0) + 1;
+    this.fencingTokens.set(key, fencingToken);
+    this.locks.set(key, { createdAtMs: Date.now(), fencingToken });
     return {
+      fencingToken,
+      assertValid: async () => {
+        const current = this.locks.get(key);
+        if (current?.fencingToken !== fencingToken) {
+          throw new StorageLockError(`Storage lock token ${fencingToken} is no longer valid at ${path}.`);
+        }
+      },
       release: async () => {
-        this.locks.delete(key);
+        if (this.locks.get(key)?.fencingToken === fencingToken) {
+          this.locks.delete(key);
+        }
       },
     };
   }
@@ -278,13 +317,19 @@ export class HttpStorageTarget implements StorageTarget {
   async acquireLock(path: string, timeoutMs: number, options: StorageLockOptions = {}): Promise<StorageTargetLock> {
     const deadline = Date.now() + timeoutMs;
     while (true) {
-      const response = await this.rawRequest("PUT", path, Buffer.from(JSON.stringify({ createdAt: new Date().toISOString() })), {
+      const response = await this.rawRequest("PUT", path, Buffer.from(JSON.stringify({ createdAt: new Date().toISOString(), fencingToken: 0 })), {
         lock: "1",
       });
       if (response.status >= 200 && response.status < 300) {
+        const fencingToken = await this.nextFencingToken(path);
+        await this.request("PUT", path, Buffer.from(JSON.stringify({ createdAt: new Date().toISOString(), fencingToken })));
         return {
+          fencingToken,
+          assertValid: async () => {
+            await this.assertLockToken(path, fencingToken);
+          },
           release: async () => {
-            await this.remove(path);
+            await this.removeLockIfTokenMatches(path, fencingToken);
           },
         };
       }
@@ -336,6 +381,38 @@ export class HttpStorageTarget implements StorageTarget {
     }
     return false;
   }
+
+  private async nextFencingToken(lockPath: string): Promise<number> {
+    const tokenPath = `${lockPath}.fencing-token`;
+    let current = 0;
+    try {
+      const response = await this.rawRequest("GET", tokenPath);
+      if (response.status >= 200 && response.status < 300) {
+        current = Number.parseInt(await response.text(), 10) || 0;
+      }
+    } catch {
+      current = 0;
+    }
+    const next = current + 1;
+    await this.request("PUT", tokenPath, Buffer.from(String(next)));
+    return next;
+  }
+
+  private async assertLockToken(path: string, fencingToken: number): Promise<void> {
+    const response = await this.rawRequest("GET", path);
+    if (response.status < 200 || response.status >= 300 || lockRecordFromText(await response.text()).fencingToken !== fencingToken) {
+      throw new StorageLockError(`Storage lock token ${fencingToken} is no longer valid at ${path}.`);
+    }
+  }
+
+  private async removeLockIfTokenMatches(path: string, fencingToken: number): Promise<void> {
+    try {
+      await this.assertLockToken(path, fencingToken);
+      await this.remove(path);
+    } catch {
+      // A newer writer may already own the lock; releasing an old token must not remove it.
+    }
+  }
 }
 
 export async function copyStorageTargetTree(
@@ -384,6 +461,21 @@ function normalize(path: string): string {
   return path.replace(/\\/g, "/").replace(/\/+$/, "") || "/";
 }
 
+async function assertLocalLockToken(path: string, fencingToken: number): Promise<void> {
+  if (lockRecordFromText(await readFile(path, "utf8")).fencingToken !== fencingToken) {
+    throw new StorageLockError(`Storage lock token ${fencingToken} is no longer valid at ${path}.`);
+  }
+}
+
+async function removeLocalLockIfTokenMatches(path: string, fencingToken: number): Promise<void> {
+  try {
+    await assertLocalLockToken(path, fencingToken);
+    await rm(path, { force: true });
+  } catch {
+    // A newer writer may already own the lock; releasing an old token must not remove it.
+  }
+}
+
 async function removeStaleLocalLock(path: string, staleLockTimeoutMs: number | undefined): Promise<boolean> {
   if (!isPositiveFinite(staleLockTimeoutMs)) {
     return false;
@@ -400,14 +492,22 @@ async function removeStaleLocalLock(path: string, staleLockTimeoutMs: number | u
 }
 
 function isLockBodyStale(body: string, staleLockTimeoutMs: number): boolean {
-  try {
-    const parsed = JSON.parse(body) as { createdAt?: unknown };
-    if (typeof parsed.createdAt !== "string") {
-      return false;
-    }
-    return isTimestampStale(Date.parse(parsed.createdAt), staleLockTimeoutMs);
-  } catch {
+  const record = lockRecordFromText(body);
+  if (!record.createdAt) {
     return false;
+  }
+  return isTimestampStale(Date.parse(record.createdAt), staleLockTimeoutMs);
+}
+
+function lockRecordFromText(body: string): { createdAt?: string; fencingToken?: number } {
+  try {
+    const parsed = JSON.parse(body) as { createdAt?: unknown; fencingToken?: unknown };
+    return {
+      ...(typeof parsed.createdAt === "string" ? { createdAt: parsed.createdAt } : {}),
+      ...(typeof parsed.fencingToken === "number" && Number.isFinite(parsed.fencingToken) ? { fencingToken: parsed.fencingToken } : {}),
+    };
+  } catch {
+    return {};
   }
 }
 

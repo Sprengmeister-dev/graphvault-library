@@ -168,12 +168,22 @@ export class S3StorageTarget implements StorageTarget {
         await this.client.putObject({
           bucket: this.bucket,
           key,
-          body: Buffer.from(JSON.stringify({ createdAt: new Date().toISOString() })),
+          body: Buffer.from(JSON.stringify({ createdAt: new Date().toISOString(), fencingToken: 0 })),
           ifNoneMatch: "*",
         });
+        const fencingToken = await this.nextFencingToken(key);
+        await this.client.putObject({
+          bucket: this.bucket,
+          key,
+          body: Buffer.from(JSON.stringify({ createdAt: new Date().toISOString(), fencingToken })),
+        });
         return {
+          fencingToken,
+          assertValid: async () => {
+            await this.assertLockToken(key, fencingToken);
+          },
           release: async () => {
-            await this.client.deleteObject({ bucket: this.bucket, key });
+            await this.removeLockIfTokenMatches(key, fencingToken);
           },
         };
       } catch (error) {
@@ -211,6 +221,39 @@ export class S3StorageTarget implements StorageTarget {
     }
     return false;
   }
+
+  private async nextFencingToken(lockKey: string): Promise<number> {
+    const tokenKey = `${lockKey}.fencing-token`;
+    let current = 0;
+    try {
+      const result = await this.client.getObject({ bucket: this.bucket, key: tokenKey });
+      if (result.body) {
+        current = Number.parseInt((await s3BodyToBuffer(result.body)).toString("utf8"), 10) || 0;
+      }
+    } catch {
+      current = 0;
+    }
+    const next = current + 1;
+    await this.client.putObject({ bucket: this.bucket, key: tokenKey, body: Buffer.from(String(next)) });
+    return next;
+  }
+
+  private async assertLockToken(key: string, fencingToken: number): Promise<void> {
+    const result = await this.client.getObject({ bucket: this.bucket, key });
+    const body = result.body ? (await s3BodyToBuffer(result.body)).toString("utf8") : "";
+    if (lockRecordFromText(body).fencingToken !== fencingToken) {
+      throw new StorageLockError(`Storage lock token ${fencingToken} is no longer valid at s3://${this.bucket}/${key}.`);
+    }
+  }
+
+  private async removeLockIfTokenMatches(key: string, fencingToken: number): Promise<void> {
+    try {
+      await this.assertLockToken(key, fencingToken);
+      await this.client.deleteObject({ bucket: this.bucket, key });
+    } catch {
+      // A newer writer may already own the lock; releasing an old token must not remove it.
+    }
+  }
 }
 
 function normalizeS3Key(path: string): string {
@@ -218,15 +261,23 @@ function normalizeS3Key(path: string): string {
 }
 
 function isLockBodyStale(body: string, staleLockTimeoutMs: number): boolean {
-  try {
-    const parsed = JSON.parse(body) as { createdAt?: unknown };
-    if (typeof parsed.createdAt !== "string") {
-      return false;
-    }
-    const createdAtMs = Date.parse(parsed.createdAt);
-    return Number.isFinite(createdAtMs) && Date.now() - createdAtMs >= staleLockTimeoutMs;
-  } catch {
+  const record = lockRecordFromText(body);
+  if (!record.createdAt) {
     return false;
+  }
+  const createdAtMs = Date.parse(record.createdAt);
+  return Number.isFinite(createdAtMs) && Date.now() - createdAtMs >= staleLockTimeoutMs;
+}
+
+function lockRecordFromText(body: string): { createdAt?: string; fencingToken?: number } {
+  try {
+    const parsed = JSON.parse(body) as { createdAt?: unknown; fencingToken?: unknown };
+    return {
+      ...(typeof parsed.createdAt === "string" ? { createdAt: parsed.createdAt } : {}),
+      ...(typeof parsed.fencingToken === "number" && Number.isFinite(parsed.fencingToken) ? { fencingToken: parsed.fencingToken } : {}),
+    };
+  } catch {
+    return {};
   }
 }
 

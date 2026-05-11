@@ -133,7 +133,7 @@ export class StorageManager<TRoot = unknown> {
     this.assertStarted();
     this.assertWritable();
     this.assertOutsideTransaction("store()");
-    return this.mutex.runExclusive(() => this.writeWithConflictCheck(() => this.storeLocked("standard", [_modifiedObject])));
+    return this.mutex.runExclusive(() => this.writeWithConflictCheck((lock) => this.storeLocked("standard", [_modifiedObject], lock)));
   }
 
   async storeAll(instances: Iterable<unknown>): Promise<StoreMetadata>;
@@ -143,7 +143,7 @@ export class StorageManager<TRoot = unknown> {
     this.assertWritable();
     this.assertOutsideTransaction("storeAll()");
     const targets = rest.length > 0 || !isIterable(firstOrInstances) ? [firstOrInstances, ...rest] : Array.from(firstOrInstances);
-    return this.mutex.runExclusive(() => this.writeWithConflictCheck(() => this.storeLocked("standard", targets)));
+    return this.mutex.runExclusive(() => this.writeWithConflictCheck((lock) => this.storeLocked("standard", targets, lock)));
   }
 
   createStorer(): Storer {
@@ -162,7 +162,7 @@ export class StorageManager<TRoot = unknown> {
     this.assertStarted();
     this.assertWritable();
     this.assertOutsideTransaction("storer.commit()");
-    return this.mutex.runExclusive(() => this.writeWithConflictCheck(() => this.storeLocked(mode, targets)));
+    return this.mutex.runExclusive(() => this.writeWithConflictCheck((lock) => this.storeLocked(mode, targets, lock)));
   }
 
   async update<T>(mutator: (root: TRoot) => T | Promise<T>, storeTarget?: (root: TRoot) => unknown): Promise<T> {
@@ -176,7 +176,7 @@ export class StorageManager<TRoot = unknown> {
       this.bindLazyRefs(rollback);
       try {
         const result = await mutator(this.root);
-        await this.writeWithConflictCheck(() => this.storeLocked("standard", [storeTarget ? storeTarget(this.root) : this.root]));
+        await this.writeWithConflictCheck((lock) => this.storeLocked("standard", [storeTarget ? storeTarget(this.root) : this.root], lock));
         return result;
       } catch (error) {
         this.rootValue = rollback;
@@ -304,21 +304,36 @@ export class StorageManager<TRoot = unknown> {
     }
     return this.mutex.runExclusive(async () => {
       const execute = async (): Promise<GvqlResult> => {
-      const envelope = this.serializer.serialize(this.rootValue);
-      const result = executeGvqlStatement(envelope, statement, {
-        ...options,
-        allowMutations: statement.kind === "update" && !options.dryRun,
-      });
-      if (result.kind === "update" && !result.dryRun) {
-        const nextRoot = this.serializer.deserialize<TRoot>(envelope);
-        this.rootValue = this.fillCustomRoot(nextRoot, envelope);
-        this.bindLazyRefs(this.rootValue);
-        result.metadata = await this.storeEnvelopeLocked(envelope, "standard", result.changes.map((change) => change.objectId));
-      }
-      return result;
+        const envelope = this.serializer.serialize(this.rootValue);
+        const result = executeGvqlStatement(envelope, statement, {
+          ...options,
+          allowMutations: statement.kind === "update" && !options.dryRun,
+        });
+        if (result.kind === "update" && !result.dryRun) {
+          const nextRoot = this.serializer.deserialize<TRoot>(envelope);
+          this.rootValue = this.fillCustomRoot(nextRoot, envelope);
+          this.bindLazyRefs(this.rootValue);
+          result.metadata = await this.withWriteLock(async (lock) =>
+            this.storeEnvelopeLocked(envelope, "standard", result.changes.map((change) => change.objectId), lock),
+          );
+        }
+        return result;
       };
       if (statement.kind === "update" && !options.dryRun) {
-        return this.writeWithConflictCheck(execute);
+        return this.writeWithConflictCheck(async (lock) => {
+          const envelope = this.serializer.serialize(this.rootValue);
+          const result = executeGvqlStatement(envelope, statement, {
+            ...options,
+            allowMutations: true,
+          });
+          if (result.kind === "update" && !result.dryRun) {
+            const nextRoot = this.serializer.deserialize<TRoot>(envelope);
+            this.rootValue = this.fillCustomRoot(nextRoot, envelope);
+            this.bindLazyRefs(this.rootValue);
+            result.metadata = await this.storeEnvelopeLocked(envelope, "standard", result.changes.map((change) => change.objectId), lock);
+          }
+          return result;
+        });
       }
       return execute();
     });
@@ -484,7 +499,7 @@ export class StorageManager<TRoot = unknown> {
     }
   }
 
-  private async storeLocked(mode: StoreMode, targets: readonly unknown[]): Promise<StoreMetadata> {
+  private async storeLocked(mode: StoreMode, targets: readonly unknown[], lock: StorageTargetLock): Promise<StoreMetadata> {
     this.bindLazyRefs(this.rootValue);
     await this.storeLoadedLazyRefs(this.rootValue);
     const nextTransactionId = this.transactionId + 1;
@@ -494,12 +509,15 @@ export class StorageManager<TRoot = unknown> {
     const objectIds = mode === "eager" ? Object.keys(envelope.nodes) : this.collectObjectIds(envelope, targets);
     await this.writer.writeObjectRecords(envelope, nextTransactionId, objectIds);
     await this.writeTypeDictionaryIfChanged();
+    await lock.assertValid();
     await this.writer.writeManifest(envelope, nextTransactionId);
     await this.writer.writeParentIndex(envelope, nextTransactionId);
     if (this.writeOptions.writeSnapshots) {
       await this.writer.writeJson(snapshotPath, envelope);
+      await lock.assertValid();
       await this.target.writeTextAtomic(this.layout.currentFile, snapshotFile);
     }
+    await lock.assertValid();
     const journalFile = await this.writer.writeTransactionRecord({
       format: "graphvault-transaction",
       version: 1,
@@ -520,13 +538,13 @@ export class StorageManager<TRoot = unknown> {
     options: GraphVaultTransactionOptions<TRoot>,
   ): Promise<GraphVaultTransactionResult<T>> {
     return this.mutex.runExclusive(() =>
-      this.withWriteLock(async () => {
+      this.withWriteLock(async (lock) => {
         await this.reloadLatestLocked();
         const baseTransactionId = this.transactionId;
         const rollback = this.cloneRoot();
         try {
           const value = await this.runInTransactionScope(() => work({ root: this.root, transactionId: baseTransactionId, attempt: 1 }));
-          const metadata = await this.storeLocked("eager", [options.storeTarget ? options.storeTarget(this.root) : this.root]);
+          const metadata = await this.storeLocked("eager", [options.storeTarget ? options.storeTarget(this.root) : this.root], lock);
           return { value, metadata, baseTransactionId, attempts: 1, lockMode: "pessimistic" };
         } catch (error) {
           this.rootValue = rollback;
@@ -551,9 +569,9 @@ export class StorageManager<TRoot = unknown> {
         const rollback = this.cloneRoot();
         try {
           const value = await this.runInTransactionScope(() => work({ root: this.root, transactionId: baseTransactionId, attempt }));
-          return await this.withWriteLock(async () => {
+          return await this.withWriteLock(async (lock) => {
             await this.assertNoExternalChangeLocked(baseTransactionId);
-            const metadata = await this.storeLocked("eager", [options.storeTarget ? options.storeTarget(this.root) : this.root]);
+            const metadata = await this.storeLocked("eager", [options.storeTarget ? options.storeTarget(this.root) : this.root], lock);
             return { ok: true as const, value, metadata, baseTransactionId };
           });
         } catch (error) {
@@ -576,22 +594,22 @@ export class StorageManager<TRoot = unknown> {
     throw lastConflict ?? new OptimisticLockError("Optimistic transaction failed because the store changed concurrently.");
   }
 
-  private async writeWithConflictCheck<T>(work: () => Promise<T>): Promise<T> {
-    return this.withWriteLock(async () => {
+  private async writeWithConflictCheck<T>(work: (lock: StorageTargetLock) => Promise<T>): Promise<T> {
+    return this.withWriteLock(async (lock) => {
       if (!this.lockHandle) {
         await this.assertNoExternalChangeLocked(this.transactionId);
       }
-      return work();
+      return work(lock);
     });
   }
 
-  private async withWriteLock<T>(work: () => Promise<T>): Promise<T> {
+  private async withWriteLock<T>(work: (lock: StorageTargetLock) => Promise<T>): Promise<T> {
     if (this.lockHandle) {
-      return work();
+      return work(this.lockHandle);
     }
     const handle = await this.target.acquireLock(this.layout.lockFile, this.options.lockTimeoutMs, this.lockOptions());
     try {
-      return await work();
+      return await work(handle);
     } finally {
       await handle.release();
     }
@@ -641,19 +659,27 @@ export class StorageManager<TRoot = unknown> {
     return clone;
   }
 
-  private async storeEnvelopeLocked(envelope: SerializedEnvelope, mode: StoreMode, changedObjectIds: string[]): Promise<StoreMetadata> {
+  private async storeEnvelopeLocked(
+    envelope: SerializedEnvelope,
+    mode: StoreMode,
+    changedObjectIds: string[],
+    lock: StorageTargetLock,
+  ): Promise<StoreMetadata> {
     const nextTransactionId = this.transactionId + 1;
     const snapshotFile = `snapshot-${String(nextTransactionId).padStart(12, "0")}.json`;
     const snapshotPath = join(this.layout.snapshotsDirectory, snapshotFile);
     const objectIds = Array.from(new Set(changedObjectIds.length ? changedObjectIds : Object.keys(envelope.nodes))).sort((a, b) => Number(a) - Number(b));
     await this.writer.writeObjectRecords(envelope, nextTransactionId, objectIds);
     await this.writeTypeDictionaryIfChanged();
+    await lock.assertValid();
     await this.writer.writeManifest(envelope, nextTransactionId);
     await this.writer.writeParentIndex(envelope, nextTransactionId);
     if (this.writeOptions.writeSnapshots) {
       await this.writer.writeJson(snapshotPath, envelope);
+      await lock.assertValid();
       await this.target.writeTextAtomic(this.layout.currentFile, snapshotFile);
     }
+    await lock.assertValid();
     const journalFile = await this.writer.writeTransactionRecord({
       format: "graphvault-transaction",
       version: 1,
