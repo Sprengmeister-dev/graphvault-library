@@ -7,6 +7,10 @@ on:
         description: "Git tag to publish, for example v0.1.0"
         required: true
         type: string
+      confirm:
+        description: "Type PUBLISH to confirm this intentional npm release"
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -17,6 +21,10 @@ jobs:
     name: Publish npm package
     runs-on: ubuntu-latest
     steps:
+      - name: Confirm release intent
+        env:
+          RELEASE_CONFIRMATION: ${{ inputs.confirm }}
+        run: test "$RELEASE_CONFIRMATION" = "PUBLISH"
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.tag }}
