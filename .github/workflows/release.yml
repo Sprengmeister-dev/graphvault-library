@@ -27,7 +27,7 @@ jobs:
           registry-url: https://registry.npmjs.org
       - run: npm ci
       - run: npm test
-      - run: npm run benchmark
+      - run: npm run benchmark:check
       - run: npm run pack:dry-run
       - run: npm publish --provenance
         env:
