@@ -3,9 +3,11 @@ import type {
   SerializedEnvelope,
   StorageTarget,
   StorageTargetLock,
+  TransactionRecord,
   StoreMetadata,
   StoreMode,
 } from "../core/types.js";
+import { envelopeHash, transactionRecordHash } from "../core/integrity.js";
 import type { StorageLayout } from "./storage-layout.js";
 import type { StorageWriter } from "./storage-writer.js";
 import type { ResolvedStorageWriteOptions } from "./storage-write-options.js";
@@ -19,6 +21,7 @@ export interface StorageCommitterDependencies {
   validateCommit: (envelope: SerializedEnvelope, transactionId: number) => Promise<void>;
   beforePublish: () => Promise<void>;
   commitState: (transactionId: number, objectVersions: ReadonlyMap<string, number>) => void;
+  readLatestTransactionRecord: () => Promise<TransactionRecord | undefined>;
 }
 
 export interface CommitEnvelopeOptions {
@@ -108,7 +111,10 @@ export class StorageCommitter {
     const objectIds = sortedObjectIds(envelope);
     const objectVersions = options.objectVersions ?? new Map(objectIds.map((objectId) => [objectId, transactionId]));
     await lock.assertValid();
-    const journalFile = await this.dependencies.writer.writeTransactionRecord({
+    const previousTransaction = await this.dependencies.readLatestTransactionRecord();
+    const existingRecord = previousTransaction?.transactionId === transactionId ? previousTransaction : undefined;
+    const previousHash = previousTransaction && previousTransaction.transactionId < transactionId ? previousTransaction.transactionHash : undefined;
+    const transactionRecord: TransactionRecord = existingRecord ?? {
       format: "graphvault-transaction",
       version: 1,
       transactionId,
@@ -117,14 +123,18 @@ export class StorageCommitter {
       objectIds,
       mode,
       targetCount,
-    });
+      envelopeHash: envelopeHash(envelope),
+      ...(previousHash ? { previousHash } : {}),
+    };
+    transactionRecord.transactionHash ??= transactionRecordHash(transactionRecord);
+    const journalFile = existingRecord ? transactionRecordName(transactionId) : await this.dependencies.writer.writeTransactionRecord(transactionRecord);
     await lock.assertValid();
     await this.dependencies.writer.writeParentIndex(envelope, transactionId);
     if (this.dependencies.writeOptions.writeSnapshots) {
       await lock.assertValid();
       await this.dependencies.target.writeTextAtomic(this.dependencies.layout.currentFile, snapshotFile);
     }
-    await this.dependencies.writer.writeManifest(envelope, transactionId, objectVersions);
+    await this.dependencies.writer.writeManifest(envelope, transactionId, objectVersions, transactionRecord.transactionHash);
     this.dependencies.commitState(transactionId, objectVersions);
     return journalFile;
   }
@@ -136,6 +146,10 @@ export function sortedObjectIds(envelope: SerializedEnvelope): string[] {
 
 function snapshotName(transactionId: number): string {
   return `snapshot-${String(transactionId).padStart(12, "0")}.json`;
+}
+
+function transactionRecordName(transactionId: number): string {
+  return `transaction-${String(transactionId).padStart(12, "0")}.json`;
 }
 
 function objectIdsToWrite(

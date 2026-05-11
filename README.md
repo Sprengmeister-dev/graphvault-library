@@ -36,6 +36,7 @@ await storage.shutdown();
 - explicit persistence instead of hidden ORM-style unit-of-work magic
 - GVQL query language for graph traversal, indexed filters, grouping, aggregate analysis, execution plans, and safe batch-update previews
 - explicit transactions with rollback plus optimistic or pessimistic locking for shared stores
+- WAL recovery, fencing tokens, transaction-versioned object records, and a tamper-evident SHA-256 transaction hash chain for audit-oriented deployments
 - local filesystem, memory, HTTP, S3-compatible, and SQL-backed storage targets
 - NestJS provider integration
 - separate graphical admin tool: [GraphVault Studio](https://github.com/Sprengmeister-dev/graphvault-studio)

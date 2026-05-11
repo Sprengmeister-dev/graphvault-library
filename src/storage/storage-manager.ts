@@ -73,6 +73,7 @@ export class StorageManager<TRoot = unknown> {
       transactionLogEnabled: () => this.transactionLogEnabled,
       validateCommit: (envelope, transactionId) => this.runCommitValidators(envelope, transactionId),
       beforePublish: () => this.writeTypeDictionaryIfChanged(),
+      readLatestTransactionRecord: () => this.reader.readLatestTransactionRecord(),
       commitState: (transactionId, objectVersions) => {
         this.transactionId = transactionId;
         this.replacePersistedObjectVersions(objectVersions);
@@ -308,7 +309,9 @@ export class StorageManager<TRoot = unknown> {
       walDirectory: this.layout.walDirectory,
       readManifest: () => this.reader.readManifest(),
       readLatestTransactionRecord: () => this.reader.readLatestTransactionRecord(),
+      readTransactionRecords: () => this.reader.readTransactionRecords(),
       readObjectRecord: (objectId, transactionId) => this.reader.readObjectRecord(objectId, transactionId),
+      readSnapshotEnvelope: async (snapshotFile) => JSON.parse(await this.target.readText(join(this.layout.snapshotsDirectory, snapshotFile))) as SerializedEnvelope,
     });
   }
 

@@ -80,6 +80,11 @@ export class StorageReader {
   }
 
   async readLatestTransactionRecord(): Promise<TransactionRecord | undefined> {
+    const records = await this.readTransactionRecords();
+    return records.sort((a, b) => b.transactionId - a.transactionId)[0];
+  }
+
+  async readTransactionRecords(): Promise<TransactionRecord[]> {
     const records: TransactionRecord[] = [];
     for (const file of await this.readDirectoryIfExists(this.layout.transactionsDirectory)) {
       if (!file.endsWith(".json")) {
@@ -94,7 +99,7 @@ export class StorageReader {
         // Ignore incomplete transaction files; only complete records count.
       }
     }
-    return records.sort((a, b) => b.transactionId - a.transactionId)[0];
+    return records.sort((a, b) => a.transactionId - b.transactionId);
   }
 
   async readCommittedWalRecords(): Promise<WalCommitRecord[]> {

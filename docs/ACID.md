@@ -32,6 +32,7 @@ const storage = await EmbeddedStorage.start({
 - GraphVault writes a commit marker only after the graph data has been written.
 - After the commit marker, GraphVault writes the transaction record, parent index, and `CURRENT` pointer before publishing `manifest.json` last.
 - Object records are transaction-versioned and the manifest points to the exact object version for every live object. A crash cannot make an old manifest accidentally read a newly overwritten child record.
+- Every transaction record stores a SHA-256 envelope hash, its predecessor hash, and its own transaction hash. This creates a tamper-evident commit chain that `verify()` can check during audits and restore drills.
 - On restart, `recoverCommittedWal: true` finishes any committed-but-not-published WAL entry under the shared writer lock.
 - `readCommittedWal: true` lets read-only managers see the latest committed WAL entry even before a writer has repaired the manifest.
 - `verify()` checks WAL prepare/commit pairs and reports committed WAL entries that are recoverable but not yet published through manifest metadata.
@@ -46,7 +47,7 @@ Use `commitValidators` as hard commit gates for application invariants. Validato
 
 Typical validators enforce required IDs, unique keys, reference integrity, allowed state transitions, or application-specific schema rules.
 
-Verification returns `checkedWalRecords`, `pendingWalCommits`, and `warnings` in addition to object and transaction checks. A non-zero `pendingWalCommits` value means the store has durable committed work that a writer can publish during recovery.
+Verification returns `checkedWalRecords`, `checkedIntegrityHashes`, `pendingWalCommits`, and `warnings` in addition to object and transaction checks. A non-zero `pendingWalCommits` value means the store has durable committed work that a writer can publish during recovery.
 
 ## Isolation
 

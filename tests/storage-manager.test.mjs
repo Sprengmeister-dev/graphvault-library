@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm, readFile, access, readdir } from "node:fs/promises";
+import { mkdtemp, rm, readFile, writeFile, access, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { EmbeddedStorage, MemoryStorageTarget, StorageLockError } from "../dist/index.js";
@@ -9,6 +9,7 @@ const backupDirectory = await mkdtemp(join(tmpdir(), "graphvault-storage-backup-
 const maximumWriteDirectory = await mkdtemp(join(tmpdir(), "graphvault-storage-maximum-"));
 const nestedMutationDirectory = await mkdtemp(join(tmpdir(), "graphvault-storage-nested-"));
 const consistentBackupDirectory = await mkdtemp(join(tmpdir(), "graphvault-storage-consistent-backup-"));
+const integrityDirectory = await mkdtemp(join(tmpdir(), "graphvault-storage-integrity-"));
 
 try {
   const writeable = await EmbeddedStorage.start({
@@ -144,10 +145,31 @@ try {
   });
   assert.equal(consistentBackup.consistent, true);
   await lockedBackupStore.shutdown();
+
+  const auditedStore = await EmbeddedStorage.start({
+    storageDirectory: integrityDirectory,
+    rootFactory: () => ({ ledger: [] }),
+  });
+  auditedStore.root.ledger.push({ id: "entry-1", amount: 100 });
+  await auditedStore.storeRoot();
+  auditedStore.root.ledger.push({ id: "entry-2", amount: -15 });
+  await auditedStore.storeRoot();
+  const auditedVerification = await auditedStore.verify();
+  assert.equal(auditedVerification.ok, true);
+  assert.equal(auditedVerification.checkedIntegrityHashes >= 3, true);
+  const secondTransactionPath = join(integrityDirectory, "transactions", "transaction-000000000002.json");
+  const secondTransaction = JSON.parse(await readFile(secondTransactionPath, "utf8"));
+  secondTransaction.targetCount += 1;
+  await writeFile(secondTransactionPath, `${JSON.stringify(secondTransaction, null, 2)}\n`);
+  const tamperedVerification = await auditedStore.verify();
+  assert.equal(tamperedVerification.ok, false);
+  assert.equal(tamperedVerification.errors.some((error) => error.includes("invalid transactionHash")), true);
+  await auditedStore.shutdown();
 } finally {
   await rm(workingDirectory, { recursive: true, force: true });
   await rm(backupDirectory, { recursive: true, force: true });
   await rm(maximumWriteDirectory, { recursive: true, force: true });
   await rm(nestedMutationDirectory, { recursive: true, force: true });
   await rm(consistentBackupDirectory, { recursive: true, force: true });
+  await rm(integrityDirectory, { recursive: true, force: true });
 }

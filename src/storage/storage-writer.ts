@@ -68,7 +68,12 @@ export class StorageWriter {
     });
   }
 
-  async writeManifest(envelope: SerializedEnvelope, transactionId: number, objectVersions?: ReadonlyMap<string, number> | Record<string, number>): Promise<void> {
+  async writeManifest(
+    envelope: SerializedEnvelope,
+    transactionId: number,
+    objectVersions?: ReadonlyMap<string, number> | Record<string, number>,
+    latestTransactionHash?: string,
+  ): Promise<void> {
     const versions =
       objectVersions instanceof Map
         ? Object.fromEntries([...objectVersions.entries()].sort((a, b) => Number(a[0]) - Number(b[0])))
@@ -81,6 +86,7 @@ export class StorageWriter {
       root: envelope.root,
       objectIds: Object.keys(envelope.nodes).sort((a, b) => Number(a) - Number(b)),
       ...(versions ? { objectVersions: versions } : {}),
+      ...(latestTransactionHash ? { latestTransactionHash } : {}),
     } satisfies StorageManifest);
   }
 

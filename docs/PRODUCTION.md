@@ -96,11 +96,13 @@ With `transactionLog: "full"`, a commit follows this order:
 5. Write the snapshot when snapshots are enabled.
 6. Validate the lock fencing token.
 7. Write the WAL commit marker.
-8. Write the transaction record.
+8. Write the transaction record with envelope hash, previous hash, and transaction hash.
 9. Publish parent index and `CURRENT`.
-10. Publish `manifest.json` last.
+10. Publish `manifest.json` last, including the latest transaction hash.
 
 If the process crashes after the WAL commit marker but before manifest publication, GraphVault can recover the committed transaction. The next writer repairs the metadata under the shared lock. Readers can also see the committed WAL envelope when `readCommittedWal` is enabled. Because object records are versioned and `manifest.json` selects the exact live version, old manifests do not accidentally read partially written newer child records. The normal test suite includes a WAL crash matrix that exercises failures before the commit marker and at every post-marker publication step.
+
+Transaction records form a tamper-evident SHA-256 hash chain. `verify()` recomputes transaction hashes, checks predecessor links, compares snapshot envelope hashes when snapshots exist, and checks that `manifest.json` points at the latest transaction hash. This is meant for auditability and corruption detection; it does not replace external signatures, immutable object-lock storage, or replicated consensus.
 
 ## Backup And Restore
 
@@ -139,6 +141,7 @@ Important fields:
 - `checkedObjects`: object records checked against the manifest.
 - `checkedTransactions`: transaction records checked.
 - `checkedWalRecords`: WAL prepare/commit records checked.
+- `checkedIntegrityHashes`: transaction-chain, manifest, and snapshot hashes checked.
 - `pendingWalCommits`: committed WAL entries that can be published by recovery.
 - `warnings`: recoverable or operationally interesting conditions.
 - `errors`: structural integrity failures.
@@ -147,6 +150,7 @@ Alert if:
 
 - `ok` is false
 - `pendingWalCommits` stays above zero after a writer restart
+- `checkedIntegrityHashes` unexpectedly drops to zero on a critical store
 - lock acquisition times out repeatedly
 - stale-lock recovery happens unexpectedly often
 - object storage or SQL target operations return consistency or conditional-write errors

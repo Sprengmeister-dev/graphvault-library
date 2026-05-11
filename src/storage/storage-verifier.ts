@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import type { ObjectRecord, StorageManifest, StorageTarget, TransactionRecord, VerificationResult, WalCommitRecord, WalPrepareRecord } from "../core/types.js";
+import { envelopeHash, transactionHashPayload, transactionRecordHash } from "../core/integrity.js";
 import { objectVersionsFromManifest } from "./storage-reader.js";
 
 export interface StorageVerifierOptions {
@@ -8,7 +9,9 @@ export interface StorageVerifierOptions {
   walDirectory?: string;
   readManifest: () => Promise<StorageManifest | undefined>;
   readLatestTransactionRecord: () => Promise<TransactionRecord | undefined>;
+  readTransactionRecords?: () => Promise<TransactionRecord[]>;
   readObjectRecord: (objectId: string, transactionId?: number) => Promise<ObjectRecord>;
+  readSnapshotEnvelope?: (snapshotFile: string) => Promise<import("../core/types.js").SerializedEnvelope>;
 }
 
 export async function verifyStorage(options: StorageVerifierOptions): Promise<VerificationResult> {
@@ -17,6 +20,7 @@ export async function verifyStorage(options: StorageVerifierOptions): Promise<Ve
   let checkedObjects = 0;
   let checkedTransactions = 0;
   let checkedWalRecords = 0;
+  let checkedIntegrityHashes = 0;
   let pendingWalCommits = 0;
 
   const manifest = await options.readManifest();
@@ -33,7 +37,7 @@ export async function verifyStorage(options: StorageVerifierOptions): Promise<Ve
     } else {
       warnings.push("Manifest is missing, but committed WAL recovery data is available.");
     }
-    return { ok: errors.length === 0, checkedObjects, checkedTransactions, checkedWalRecords, pendingWalCommits, warnings, errors };
+    return { ok: errors.length === 0, checkedObjects, checkedTransactions, checkedWalRecords, checkedIntegrityHashes, pendingWalCommits, warnings, errors };
   }
 
   if (options.walDirectory) {
@@ -57,6 +61,11 @@ export async function verifyStorage(options: StorageVerifierOptions): Promise<Ve
       }
     }
   }
+  const transactionIntegrity = await verifyTransactionIntegrity(options, manifest);
+  checkedTransactions = Math.max(checkedTransactions, transactionIntegrity.checkedTransactions);
+  checkedIntegrityHashes = transactionIntegrity.checkedIntegrityHashes;
+  warnings.push(...transactionIntegrity.warnings);
+  errors.push(...transactionIntegrity.errors);
 
   const knownObjects = new Set(manifest.objectIds);
   const objectVersions = objectVersionsFromManifest(manifest);
@@ -93,7 +102,58 @@ export async function verifyStorage(options: StorageVerifierOptions): Promise<Ve
     }
   }
 
-  return { ok: errors.length === 0, checkedObjects, checkedTransactions, checkedWalRecords, pendingWalCommits, warnings, errors };
+  return { ok: errors.length === 0, checkedObjects, checkedTransactions, checkedWalRecords, checkedIntegrityHashes, pendingWalCommits, warnings, errors };
+}
+
+async function verifyTransactionIntegrity(
+  options: StorageVerifierOptions,
+  manifest: StorageManifest,
+): Promise<{ checkedTransactions: number; checkedIntegrityHashes: number; warnings: string[]; errors: string[] }> {
+  const warnings: string[] = [];
+  const errors: string[] = [];
+  const records = options.readTransactionRecords ? await options.readTransactionRecords() : [];
+  let checkedIntegrityHashes = 0;
+  let previousHash: string | undefined;
+  for (const record of records.sort((a, b) => a.transactionId - b.transactionId)) {
+    if (record.previousHash || record.transactionHash) {
+      if (record.previousHash !== previousHash) {
+        errors.push(`Transaction ${record.transactionId} has an invalid previousHash.`);
+      }
+      if (!record.transactionHash) {
+        errors.push(`Transaction ${record.transactionId} is missing transactionHash.`);
+      } else {
+        const expected = transactionRecordHash(transactionHashPayload(record));
+        checkedIntegrityHashes++;
+        if (record.transactionHash !== expected) {
+          errors.push(`Transaction ${record.transactionId} has an invalid transactionHash.`);
+        }
+      }
+    }
+    if (record.envelopeHash && options.readSnapshotEnvelope) {
+      try {
+        const snapshotHash = envelopeHash(await options.readSnapshotEnvelope(record.snapshotFile));
+        checkedIntegrityHashes++;
+        if (record.envelopeHash !== snapshotHash) {
+          errors.push(`Transaction ${record.transactionId} envelopeHash does not match ${record.snapshotFile}.`);
+        }
+      } catch {
+        // Snapshot-free write profiles are valid; object-record verification still covers the live manifest.
+      }
+    }
+    previousHash = record.transactionHash ?? previousHash;
+  }
+  const publishedRecord = records.find((record) => record.transactionId === manifest.transactionId);
+  if (manifest.latestTransactionHash && publishedRecord?.transactionHash && manifest.latestTransactionHash !== publishedRecord.transactionHash) {
+    errors.push(`Manifest latestTransactionHash does not match transaction ${publishedRecord.transactionId}.`);
+  }
+  if (manifest.latestTransactionHash) {
+    checkedIntegrityHashes++;
+  }
+  const latest = records.at(-1);
+  if (records.length > 0 && !latest?.transactionHash) {
+    warnings.push("Latest transaction record has no transactionHash; integrity-chain verification is limited for legacy data.");
+  }
+  return { checkedTransactions: records.length, checkedIntegrityHashes, warnings, errors };
 }
 
 async function verifyWal(

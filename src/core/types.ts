@@ -35,6 +35,7 @@ export interface StorageManifest {
   root: EncodedValue;
   objectIds: string[];
   objectVersions?: Record<string, number>;
+  latestTransactionHash?: string;
 }
 
 export interface TransactionRecord {
@@ -46,6 +47,9 @@ export interface TransactionRecord {
   objectIds: string[];
   mode: StoreMode;
   targetCount: number;
+  envelopeHash?: string;
+  previousHash?: string;
+  transactionHash?: string;
 }
 
 export interface WalPrepareRecord {
@@ -263,6 +267,7 @@ export interface VerificationResult {
   checkedObjects: number;
   checkedTransactions: number;
   checkedWalRecords: number;
+  checkedIntegrityHashes: number;
   pendingWalCommits: number;
   warnings: string[];
   errors: string[];
