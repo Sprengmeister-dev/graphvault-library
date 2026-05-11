@@ -80,6 +80,23 @@ const storage = await EmbeddedStorage.start({
 });
 ```
 
+The HTTP service must implement the same contract as the built-in targets:
+
+- `PUT ?directory=1` creates a logical directory.
+- `HEAD` reports file or directory existence.
+- `GET ?list=1` returns direct child names.
+- `GET` returns the object body.
+- `PUT` atomically replaces an object.
+- `POST ?append=1` appends text for journal-style writes.
+- `DELETE` removes an object, and `DELETE ?recursive=1` removes a subtree.
+- `PUT ?lock=1` creates a lock only if it does not already exist.
+
+The shared storage-target conformance test exercises local filesystem, memory, and HTTP implementations for file semantics, recursive deletion, tree copy, lock conflicts, stale-lock recovery, token-aware release, and monotonically increasing fencing tokens. Run it when implementing a custom target or storage gateway:
+
+```sh
+node tests/storage-target-conformance.test.mjs
+```
+
 ### S3-Compatible Storage
 
 Use `S3StorageTarget` with an adapter for AWS S3, MinIO, Cloudflare R2, or another compatible object store.

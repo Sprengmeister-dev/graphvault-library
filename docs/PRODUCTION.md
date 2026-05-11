@@ -83,7 +83,7 @@ For production shared stores, the target must provide:
 - token-aware lock release so stale writers cannot delete a newer lock
 - read-after-write consistency for commit metadata
 
-The local filesystem target is suitable for a single host or a filesystem that preserves these semantics. Object-storage and SQL-backed targets should be tested in the exact infrastructure configuration you will run in production.
+The local filesystem target is suitable for a single host or a filesystem that preserves these semantics. Object-storage, HTTP, and SQL-backed targets should be tested in the exact infrastructure configuration you will run in production. The repository includes `tests/storage-target-conformance.test.mjs` as a shared contract test for local filesystem, memory, and HTTP-style targets; custom gateways should pass an equivalent suite before they hold critical data.
 
 ## Commit Path
 
