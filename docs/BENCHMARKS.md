@@ -6,6 +6,21 @@ GraphVault ships with a reproducible benchmark so performance claims can be chec
 npm run benchmark
 ```
 
+For automation, the same benchmark can emit JSON and run a small regression gate:
+
+```bash
+npm run benchmark:json
+npm run benchmark:check
+```
+
+`benchmark:json` writes `benchmark-results.json`. `benchmark:check` runs a shorter 100-document profile against memory and `filesystem/maximum`, writes `benchmark-check.json`, and fails if conservative latency budgets are exceeded. Both JSON files are ignored by Git so they can be collected by CI without dirtying the tree.
+
+The underlying script also supports direct options:
+
+```bash
+node benchmarks/object-graph.mjs --sizes 100,300 --targets memory,filesystem/maximum --json --output results.json
+```
+
 The benchmark creates a typed object graph with:
 
 - registered classes

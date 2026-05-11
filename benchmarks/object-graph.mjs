@@ -1,10 +1,16 @@
-import { mkdtemp, rm, stat, readdir } from "node:fs/promises";
+import { mkdtemp, rm, stat, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { performance } from "node:perf_hooks";
 import { EmbeddedStorage, MemoryStorageTarget } from "../dist/index.js";
 
-const sizes = [100, 300, 750];
+const defaultSizes = [100, 300, 750];
+const allTargets = ["memory", "filesystem", "filesystem/maximum"];
+const performanceBudgets = {
+  memory: { storeMs: 250, loadMs: 150, gvqlIndexedMs: 100 },
+  filesystem: { storeMs: 8_000, loadMs: 500, gvqlIndexedMs: 150 },
+  "filesystem/maximum": { storeMs: 1_500, loadMs: 500, gvqlIndexedMs: 150 },
+};
 
 class Owner {
   constructor(id, name) {
@@ -295,23 +301,124 @@ function formatBytes(value) {
   return `${mib.toFixed(2)} MiB`;
 }
 
+const options = parseArgs(process.argv.slice(2));
 const rows = [];
-for (const count of sizes) {
-  rows.push(await benchmarkMemory(count));
-  rows.push(await benchmarkFilesystem(count));
-  rows.push(await benchmarkFilesystem(count, { target: "filesystem/maximum", storageOptions: { writeProfile: "maximum" } }));
+for (const count of options.sizes) {
+  if (options.targets.includes("memory")) {
+    rows.push(await benchmarkMemory(count));
+  }
+  if (options.targets.includes("filesystem")) {
+    rows.push(await benchmarkFilesystem(count));
+  }
+  if (options.targets.includes("filesystem/maximum")) {
+    rows.push(await benchmarkFilesystem(count, { target: "filesystem/maximum", storageOptions: { writeProfile: "maximum" } }));
+  }
 }
 
-console.log(`# GraphVault object graph benchmark`);
-console.log();
-console.log(`Runtime: ${process.version}`);
-console.log(`Platform: ${process.platform} ${process.arch}`);
-console.log(`Date: ${new Date().toISOString()}`);
-console.log();
-console.log(`| target | documents | storeRoot | GVQL traversal | GVQL multi-match join | GVQL optional match | GVQL indexed aggregate | GVQL multi-index lookup | GVQL indexed IN lookup | GVQL indexed OR lookup | GVQL computed return | GVQL scalar functions | GVQL CASE expression | GVQL WITH pipeline | GVQL CREATE preview | GVQL MERGE preview | GVQL DELETE preview | reload | storage size |`);
-console.log(`| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |`);
-for (const row of rows) {
-  console.log(
-    `| ${row.target} | ${row.count.toLocaleString("en-US")} | ${formatMs(row.storeMs)} | ${formatMs(row.gvqlMs)} | ${formatMs(row.gvqlMultiMatchMs)} | ${formatMs(row.gvqlOptionalMatchMs)} | ${formatMs(row.gvqlIndexedMs)} | ${formatMs(row.gvqlMultiIndexMs)} | ${formatMs(row.gvqlIndexedInMs)} | ${formatMs(row.gvqlIndexedOrMs)} | ${formatMs(row.gvqlComputedReturnMs)} | ${formatMs(row.gvqlScalarFunctionsMs)} | ${formatMs(row.gvqlCaseExpressionMs)} | ${formatMs(row.gvqlWithPipelineMs)} | ${formatMs(row.gvqlCreatePreviewMs)} | ${formatMs(row.gvqlMergePreviewMs)} | ${formatMs(row.gvqlDeletePreviewMs)} | ${formatMs(row.loadMs)} | ${formatBytes(row.bytes)} |`,
-  );
+const result = {
+  metadata: {
+    runtime: process.version,
+    platform: process.platform,
+    arch: process.arch,
+    date: new Date().toISOString(),
+    sizes: options.sizes,
+    targets: options.targets,
+  },
+  rows,
+};
+
+if (options.assertBudgets) {
+  assertPerformanceBudgets(rows);
+}
+
+const output = options.json ? `${JSON.stringify(result, null, 2)}\n` : markdownReport(result);
+if (options.output) {
+  await writeFile(options.output, output);
+} else {
+  process.stdout.write(output);
+}
+
+function markdownReport(result) {
+  const lines = [
+    "# GraphVault object graph benchmark",
+    "",
+    `Runtime: ${result.metadata.runtime}`,
+    `Platform: ${result.metadata.platform} ${result.metadata.arch}`,
+    `Date: ${result.metadata.date}`,
+    "",
+    "| target | documents | storeRoot | GVQL traversal | GVQL multi-match join | GVQL optional match | GVQL indexed aggregate | GVQL multi-index lookup | GVQL indexed IN lookup | GVQL indexed OR lookup | GVQL computed return | GVQL scalar functions | GVQL CASE expression | GVQL WITH pipeline | GVQL CREATE preview | GVQL MERGE preview | GVQL DELETE preview | reload | storage size |",
+    "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+  ];
+  for (const row of result.rows) {
+    lines.push(
+      `| ${row.target} | ${row.count.toLocaleString("en-US")} | ${formatMs(row.storeMs)} | ${formatMs(row.gvqlMs)} | ${formatMs(row.gvqlMultiMatchMs)} | ${formatMs(row.gvqlOptionalMatchMs)} | ${formatMs(row.gvqlIndexedMs)} | ${formatMs(row.gvqlMultiIndexMs)} | ${formatMs(row.gvqlIndexedInMs)} | ${formatMs(row.gvqlIndexedOrMs)} | ${formatMs(row.gvqlComputedReturnMs)} | ${formatMs(row.gvqlScalarFunctionsMs)} | ${formatMs(row.gvqlCaseExpressionMs)} | ${formatMs(row.gvqlWithPipelineMs)} | ${formatMs(row.gvqlCreatePreviewMs)} | ${formatMs(row.gvqlMergePreviewMs)} | ${formatMs(row.gvqlDeletePreviewMs)} | ${formatMs(row.loadMs)} | ${formatBytes(row.bytes)} |`,
+    );
+  }
+  return `${lines.join("\n")}\n`;
+}
+
+function parseArgs(args) {
+  const options = {
+    sizes: defaultSizes,
+    targets: allTargets,
+    json: false,
+    output: undefined,
+    assertBudgets: false,
+  };
+  for (let index = 0; index < args.length; index++) {
+    const arg = args[index];
+    if (arg === "--json") {
+      options.json = true;
+      continue;
+    }
+    if (arg === "--assert") {
+      options.assertBudgets = true;
+      continue;
+    }
+    if (arg === "--output") {
+      options.output = readArgValue(args, ++index, arg);
+      continue;
+    }
+    if (arg === "--sizes") {
+      options.sizes = readArgValue(args, ++index, arg).split(",").map((value) => Number.parseInt(value.trim(), 10)).filter(Number.isFinite);
+      continue;
+    }
+    if (arg === "--targets") {
+      options.targets = readArgValue(args, ++index, arg).split(",").map((value) => value.trim()).filter(Boolean);
+      continue;
+    }
+    throw new Error(`Unknown benchmark option: ${arg}`);
+  }
+  if (options.sizes.length === 0) {
+    throw new Error("At least one benchmark size is required.");
+  }
+  for (const target of options.targets) {
+    if (!allTargets.includes(target)) {
+      throw new Error(`Unknown benchmark target: ${target}`);
+    }
+  }
+  return options;
+}
+
+function readArgValue(args, index, option) {
+  const value = args[index];
+  if (!value) {
+    throw new Error(`${option} requires a value.`);
+  }
+  return value;
+}
+
+function assertPerformanceBudgets(rows) {
+  const failures = [];
+  for (const row of rows) {
+    const budget = performanceBudgets[row.target];
+    for (const [metric, maximum] of Object.entries(budget ?? {})) {
+      if (row[metric] > maximum) {
+        failures.push(`${row.target}/${row.count} ${metric} ${row[metric].toFixed(1)} ms > ${maximum} ms`);
+      }
+    }
+  }
+  if (failures.length > 0) {
+    throw new Error(`Performance budget exceeded:\n${failures.join("\n")}`);
+  }
 }

@@ -5,3 +5,4 @@ dist/
 .npm-cache/
 graphvault-example-store/
 coverage/
+benchmark-*.json

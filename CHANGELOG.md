@@ -18,6 +18,7 @@
 - Add transaction metadata for actor, reason, source, trace ID, tags, and audit attributes protected by the transaction hash.
 - Add a shared StorageTarget conformance suite for file, tree-copy, lock, stale-lock, and fencing-token behavior.
 - Add `operations()` for lightweight production monitoring of WAL, recovery, manifest, journal, lock, and object-count state.
+- Add JSON benchmark output and a conservative `benchmark:check` regression gate.
 - Refresh benchmark documentation with GraphVault 0.2.0 WAL and versioned-object-record numbers.
 - Make application-level backups consistent by default, writer-lock protected, WAL-aware, and free of volatile lock files.
 - Add `commitValidators` for application-level consistency gates before WAL prepare.
