@@ -102,13 +102,6 @@ export class StorageCommitter {
     const { envelope, transactionId, snapshotFile, mode, targetCount, lock } = options;
     const objectIds = sortedObjectIds(envelope);
     await lock.assertValid();
-    await this.dependencies.writer.writeParentIndex(envelope, transactionId);
-    await this.dependencies.writer.writeManifest(envelope, transactionId);
-    if (this.dependencies.writeOptions.writeSnapshots) {
-      await lock.assertValid();
-      await this.dependencies.target.writeTextAtomic(this.dependencies.layout.currentFile, snapshotFile);
-    }
-    await lock.assertValid();
     const journalFile = await this.dependencies.writer.writeTransactionRecord({
       format: "graphvault-transaction",
       version: 1,
@@ -119,6 +112,13 @@ export class StorageCommitter {
       mode,
       targetCount,
     });
+    await lock.assertValid();
+    await this.dependencies.writer.writeParentIndex(envelope, transactionId);
+    if (this.dependencies.writeOptions.writeSnapshots) {
+      await lock.assertValid();
+      await this.dependencies.target.writeTextAtomic(this.dependencies.layout.currentFile, snapshotFile);
+    }
+    await this.dependencies.writer.writeManifest(envelope, transactionId);
     this.dependencies.commitState(transactionId, objectIds);
     return journalFile;
   }

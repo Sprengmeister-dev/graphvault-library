@@ -35,20 +35,26 @@ export async function verifyStorage(options: StorageVerifierOptions): Promise<Ve
     return { ok: errors.length === 0, checkedObjects, checkedTransactions, checkedWalRecords, pendingWalCommits, warnings, errors };
   }
 
-  const latestTransaction = await options.readLatestTransactionRecord();
-  if (latestTransaction) {
-    checkedTransactions++;
-    if (latestTransaction.transactionId > manifest.transactionId) {
-      errors.push(`Manifest transaction ${manifest.transactionId} is behind latest transaction ${latestTransaction.transactionId}.`);
-    }
-  }
-
   if (options.walDirectory) {
     const wal = await verifyWal(options.target, options.walDirectory, manifest.transactionId);
     checkedWalRecords = wal.checkedWalRecords;
     pendingWalCommits = wal.pendingWalCommits;
     warnings.push(...wal.warnings);
     errors.push(...wal.errors);
+  }
+
+  const latestTransaction = await options.readLatestTransactionRecord();
+  if (latestTransaction) {
+    checkedTransactions++;
+    if (latestTransaction.transactionId > manifest.transactionId) {
+      if (pendingWalCommits > 0) {
+        warnings.push(
+          `Manifest transaction ${manifest.transactionId} is behind latest transaction ${latestTransaction.transactionId}, but committed WAL recovery data is available.`,
+        );
+      } else {
+        errors.push(`Manifest transaction ${manifest.transactionId} is behind latest transaction ${latestTransaction.transactionId}.`);
+      }
+    }
   }
 
   const knownObjects = new Set(manifest.objectIds);
