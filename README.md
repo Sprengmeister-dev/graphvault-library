@@ -176,6 +176,7 @@ Then open `http://127.0.0.1:4177`.
 
 - [Usage guide](./docs/USAGE.md) - modeling roots, registering classes, writing data, lazy data, verification, and lifecycle.
 - [ACID configuration](./docs/ACID.md) - WAL, recovery, fencing tokens, validators, and durability tradeoffs.
+- [Production operations](./docs/PRODUCTION.md) - production profiles, backup/restore, verification, monitoring, and known boundaries.
 - [GVQL guide](./docs/GVQL.md) - graph queries, indexed filtering, aggregates, execution plans, and mutation previews.
 - [Transactions and concurrency](./docs/TRANSACTIONS.md) - optimistic and pessimistic locking for multi-pod writers.
 - [Storage configuration](./docs/STORAGE.md) - local filesystem, memory, HTTP, S3-compatible, SQL, and operational options.
