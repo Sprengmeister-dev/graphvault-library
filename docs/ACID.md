@@ -60,3 +60,5 @@ Every writer lock has a fencing token. If a stale lock is recovered and a newer 
 ## Remaining Boundary
 
 GraphVault does not implement replicated consensus. If several machines can lose network connectivity from each other but still write to different storage primaries, use a database or coordination layer that provides consensus, such as PostgreSQL with a proper HA setup, etcd, or a database designed for distributed consensus.
+
+Lazy values are stored as separate payload files. The WAL protects the object graph commit metadata and can recover the graph state after a crash. For strict ACID workflows, keep transactional state in the main graph or use immutable/versioned lazy keys for large payloads. Treat in-place updates to existing lazy payload keys as external blob writes, not as fully atomic graph transaction data.
