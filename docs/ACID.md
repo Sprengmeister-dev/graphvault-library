@@ -33,6 +33,7 @@ const storage = await EmbeddedStorage.start({
 - Manifest, parent index, `CURRENT`, and transaction records are published after the commit marker.
 - On restart, `recoverCommittedWal: true` finishes any committed-but-not-published WAL entry under the shared writer lock.
 - `readCommittedWal: true` lets read-only managers see the latest committed WAL entry even before a writer has repaired the manifest.
+- `verify()` checks WAL prepare/commit pairs and reports committed WAL entries that are recoverable but not yet published through manifest metadata.
 
 Set `transactionLog: "off"` only for caches, tests, or stores where maximum throughput is more important than crash recovery.
 
@@ -41,6 +42,8 @@ Set `transactionLog: "off"` only for caches, tests, or stores where maximum thro
 Use `commitValidators` as hard commit gates for application invariants. Validators run before WAL prepare; if a validator throws, GraphVault writes no prepare record and publishes no commit.
 
 Typical validators enforce required IDs, unique keys, reference integrity, allowed state transitions, or application-specific schema rules.
+
+Verification returns `checkedWalRecords`, `pendingWalCommits`, and `warnings` in addition to object and transaction checks. A non-zero `pendingWalCommits` value means the store has durable committed work that a writer can publish during recovery.
 
 ## Isolation
 

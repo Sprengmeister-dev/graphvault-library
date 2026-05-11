@@ -266,6 +266,7 @@ export class StorageManager<TRoot = unknown> {
     return verifyStorage({
       target: this.target,
       lazyDirectory: this.layout.lazyDirectory,
+      walDirectory: this.layout.walDirectory,
       readManifest: () => this.reader.readManifest(),
       readLatestTransactionRecord: () => this.reader.readLatestTransactionRecord(),
       readObjectRecord: (objectId) => this.reader.readObjectRecord(objectId),

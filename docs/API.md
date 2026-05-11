@@ -29,7 +29,7 @@ Main runtime API.
 - `createStorer()`: batches several store targets into one commit.
 - `createLazyRef(key, value)`: creates and stores lazy data.
 - `loadLazy(key)` / `storeLazy(key, value)`: low-level lazy value access.
-- `verify()`: validates manifest, transactions, object records, and lazy files.
+- `verify()`: validates manifest, transactions, WAL prepare/commit records, object records, references, and lazy files.
 - `maintain(options)`: garbage collection, compaction, and optional verification.
 - `compact(keepLatest)`: removes older snapshots.
 - `collectGarbage()`: removes unreferenced object records.

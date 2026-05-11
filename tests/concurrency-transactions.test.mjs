@@ -252,6 +252,10 @@ const crashingWriter = await EmbeddedStorage.start({
 });
 crashingWriter.root.items.push("committed-via-wal");
 await assert.rejects(() => crashingWriter.storeRoot(), /simulated crash after WAL commit/);
+const recoverableVerification = await crashingWriter.verify();
+assert.equal(recoverableVerification.ok, true);
+assert.equal(recoverableVerification.pendingWalCommits, 1);
+assert.equal(recoverableVerification.warnings.some((warning) => warning.includes("committed WAL")), true);
 await crashingWriter.shutdown();
 
 const readOnlyWalView = await EmbeddedStorage.start({
@@ -270,6 +274,10 @@ const recoveringWriter = await EmbeddedStorage.start({
   rootFactory: () => ({ items: [] }),
 });
 assert.deepEqual(recoveringWriter.root.items, ["committed-via-wal"]);
+const recoveredVerification = await recoveringWriter.verify();
+assert.equal(recoveredVerification.ok, true);
+assert.equal(recoveredVerification.pendingWalCommits, 0);
+assert.equal(recoveredVerification.checkedWalRecords >= 2, true);
 await recoveringWriter.shutdown();
 
 const validatorTarget = new MemoryStorageTarget();

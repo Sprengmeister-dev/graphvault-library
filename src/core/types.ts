@@ -260,6 +260,9 @@ export interface VerificationResult {
   ok: boolean;
   checkedObjects: number;
   checkedTransactions: number;
+  checkedWalRecords: number;
+  pendingWalCommits: number;
+  warnings: string[];
   errors: string[];
 }
 
