@@ -1,4 +1,5 @@
 import { constants } from "node:fs";
+import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 import { access, mkdir, open, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { StorageLockError } from "../core/errors.js";
@@ -15,6 +16,10 @@ export type {
 } from "./targets/s3.js";
 export { SqlStorageTarget } from "./targets/sql.js";
 export type { SqlQueryResult, SqlStorageClient, SqlStorageTargetOptions } from "./targets/sql.js";
+
+const ENCRYPTED_STORAGE_MAGIC = Buffer.from("GVENC1");
+const ENCRYPTED_STORAGE_IV_BYTES = 12;
+const ENCRYPTED_STORAGE_TAG_BYTES = 16;
 
 export interface LocalFilesystemTargetOptions {
   syncWrites?: boolean;
@@ -258,6 +263,67 @@ export class MemoryStorageTarget implements StorageTarget {
   }
 }
 
+export interface EncryptedStorageTargetOptions {
+  target: StorageTarget;
+  key: string | Buffer;
+}
+
+export class EncryptedStorageTarget implements StorageTarget {
+  private readonly target: StorageTarget;
+  private readonly key: Buffer;
+
+  constructor(options: EncryptedStorageTargetOptions) {
+    this.target = options.target;
+    this.key = normalizeEncryptionKey(options.key);
+  }
+
+  async ensureDirectory(path: string): Promise<void> {
+    await this.target.ensureDirectory(path);
+  }
+
+  async exists(path: string): Promise<boolean> {
+    return this.target.exists(path);
+  }
+
+  async list(path: string): Promise<string[]> {
+    return this.target.list(path);
+  }
+
+  async readText(path: string): Promise<string> {
+    return (await this.readBuffer(path)).toString("utf8");
+  }
+
+  async readBuffer(path: string): Promise<Buffer> {
+    return decryptStorageBuffer(await this.target.readBuffer(path), this.key);
+  }
+
+  async writeTextAtomic(path: string, value: string): Promise<void> {
+    await this.writeBufferAtomic(path, Buffer.from(value));
+  }
+
+  async writeBufferAtomic(path: string, value: Buffer): Promise<void> {
+    await this.target.writeBufferAtomic(path, encryptStorageBuffer(value, this.key));
+  }
+
+  async appendText(path: string, value: string): Promise<void> {
+    let current: Buffer = Buffer.alloc(0);
+    try {
+      current = await this.readBuffer(path);
+    } catch {
+      current = Buffer.alloc(0);
+    }
+    await this.writeBufferAtomic(path, Buffer.concat([current, Buffer.from(value)]));
+  }
+
+  async remove(path: string, options: { recursive?: boolean } = {}): Promise<void> {
+    await this.target.remove(path, options);
+  }
+
+  async acquireLock(path: string, timeoutMs: number, options: StorageLockOptions = {}): Promise<StorageTargetLock> {
+    return this.target.acquireLock(path, timeoutMs, options);
+  }
+}
+
 export interface HttpStorageTargetOptions {
   baseUrl: string;
   headers?: Record<string, string>;
@@ -463,6 +529,39 @@ function joinTargetPath(root: string, relativePath: string): string {
 
 function normalize(path: string): string {
   return path.replace(/\\/g, "/").replace(/\/+$/, "") || "/";
+}
+
+function normalizeEncryptionKey(key: string | Buffer): Buffer {
+  if (typeof key === "string") {
+    return createHash("sha256").update(key).digest();
+  }
+  if (key.length !== 32) {
+    throw new Error("EncryptedStorageTarget requires a 32-byte Buffer key or a string passphrase.");
+  }
+  return Buffer.from(key);
+}
+
+function encryptStorageBuffer(value: Buffer, key: Buffer): Buffer {
+  const iv = randomBytes(ENCRYPTED_STORAGE_IV_BYTES);
+  const cipher = createCipheriv("aes-256-gcm", key, iv);
+  const encrypted = Buffer.concat([cipher.update(value), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return Buffer.concat([ENCRYPTED_STORAGE_MAGIC, iv, tag, encrypted]);
+}
+
+function decryptStorageBuffer(value: Buffer, key: Buffer): Buffer {
+  if (!value.subarray(0, ENCRYPTED_STORAGE_MAGIC.length).equals(ENCRYPTED_STORAGE_MAGIC)) {
+    throw new Error("Storage object is not encrypted with GraphVault encrypted storage format.");
+  }
+  const ivStart = ENCRYPTED_STORAGE_MAGIC.length;
+  const tagStart = ivStart + ENCRYPTED_STORAGE_IV_BYTES;
+  const encryptedStart = tagStart + ENCRYPTED_STORAGE_TAG_BYTES;
+  const iv = value.subarray(ivStart, tagStart);
+  const tag = value.subarray(tagStart, encryptedStart);
+  const encrypted = value.subarray(encryptedStart);
+  const decipher = createDecipheriv("aes-256-gcm", key, iv);
+  decipher.setAuthTag(tag);
+  return Buffer.concat([decipher.update(encrypted), decipher.final()]);
 }
 
 async function assertLocalLockToken(path: string, fencingToken: number): Promise<void> {

@@ -38,6 +38,8 @@ await storage.shutdown();
 - explicit transactions with rollback plus optimistic or pessimistic locking for shared stores
 - WAL recovery, fencing tokens, transaction-versioned object records, and a tamper-evident SHA-256 transaction hash chain for audit-oriented deployments
 - transaction metadata for actor, reason, source, trace ID, tags, and audit attributes
+- depth-limited subtree loading for bounded REST/API graph exposure
+- optional AES-256-GCM encrypted storage-target wrapper for data at rest
 - local filesystem, memory, HTTP, S3-compatible, and SQL-backed storage targets
 - NestJS provider integration
 - separate graphical admin tool: [GraphVault Studio](https://github.com/Sprengmeister-dev/graphvault-studio)
@@ -95,6 +97,22 @@ For ACID-oriented deployments, use `transactionLog: "full"`, `recoverCommittedWa
 
 For NestJS services, `@GraphVaultTransactional()` wraps a service method in the same commit/rollback and locking behavior.
 
+## Bounded Subtree Exports
+
+GraphVault can load only a bounded part of the stored object graph. This is useful for REST endpoints that should expose a focused subgraph without materializing or returning the whole store.
+
+```ts
+const subtree = await storage.loadSubtree("object-id", { depth: 2 });
+
+return {
+  graph: subtree.envelope,
+  complete: subtree.complete,
+  truncatedReferences: subtree.truncatedReferences,
+};
+```
+
+`depth: 0` includes only the start object, `depth: 1` includes its direct referenced children, and so on. `truncatedReferences` tells callers which outgoing object references were intentionally left out at the boundary.
+
 ## Why Use This Instead Of A Normal Database?
 
 Relational and document databases are excellent when your application is primarily about querying independent records. They become awkward when the important shape is an in-memory domain model with identity, links, and behavior. GraphVault is for cases where you want to keep that model intact and persist it deliberately.
@@ -126,6 +144,8 @@ GraphVault is not trying to replace Postgres, SQLite, MongoDB, or Redis. It is f
 - lazy references and segmented lazy arrays
 - atomic commits, explicit transactions, manifest, transaction journal, verification, compaction, backup, and garbage collection
 - optimistic and pessimistic locking for several pods/users writing to the same store
+- depth-limited subtree loading for REST/API exports
+- optional encrypted storage-target wrapper
 - pluggable storage targets for local filesystem, memory, HTTP, S3-compatible clients, and SQL adapters
 - optional NestJS integration
 

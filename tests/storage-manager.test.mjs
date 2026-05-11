@@ -33,6 +33,30 @@ try {
   assert.equal(operations.walCommitFiles, 1);
   assert.equal(operations.objectCount >= 2, true);
   assert.equal(typeof operations.latestTransactionHash, "string");
+
+  const rootOnlySubtree = await writeable.loadSubtree({ depth: 0 });
+  assert.equal(rootOnlySubtree.depth, 0);
+  assert.equal(rootOnlySubtree.objectIds.length, 1);
+  assert.equal(rootOnlySubtree.complete, false);
+  assert.equal(typeof rootOnlySubtree.rootObjectId, "string");
+  assert.equal(Object.keys(rootOnlySubtree.envelope.nodes).length, 1);
+  const docsReference = rootOnlySubtree.truncatedReferences.find((reference) => reference.path === "docs");
+  assert.ok(docsReference);
+  assert.equal(docsReference.fromObjectId, rootOnlySubtree.rootObjectId);
+
+  const rootWithChildren = await writeable.loadSubtree(rootOnlySubtree.rootObjectId, { depth: 1 });
+  assert.equal(rootWithChildren.objectIds.includes(rootOnlySubtree.rootObjectId), true);
+  assert.equal(rootWithChildren.objectIds.includes(docsReference.toObjectId), true);
+  assert.equal(rootWithChildren.truncatedReferences.some((reference) => reference.fromObjectId === docsReference.toObjectId), true);
+
+  const docsSubtree = await writeable.loadSubtree(docsReference.toObjectId, { depth: 1 });
+  assert.equal(docsSubtree.rootObjectId, docsReference.toObjectId);
+  assert.deepEqual(docsSubtree.envelope.root, { $ref: docsReference.toObjectId });
+  assert.equal(docsSubtree.objectIds.length, 3);
+  assert.equal(docsSubtree.complete, true);
+  await assert.rejects(() => writeable.loadSubtree({ depth: -1 }), /non-negative integer/);
+  await assert.rejects(() => writeable.loadSubtree("missing", { depth: 1 }), /not present in the current manifest/);
+
   await writeable.gvql('MATCH (doc) WHERE doc.id = "doc-1" SET doc.title = "First updated"');
   const updated = await writeable.gvql('MATCH (doc) WHERE doc.id = "doc-1" RETURN doc.title AS title');
   assert.equal(updated.rows[0].title, "First updated");

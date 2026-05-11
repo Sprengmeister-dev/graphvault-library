@@ -105,6 +105,28 @@ export interface ParentReference {
   path: string;
 }
 
+export interface SubtreeLoadOptions {
+  depth?: number;
+  rootObjectId?: string;
+}
+
+export interface SubtreeReference {
+  fromObjectId: string;
+  toObjectId: string;
+  path: string;
+  depth: number;
+}
+
+export interface SubtreeLoadResult {
+  envelope: SerializedEnvelope;
+  transactionId: number;
+  depth: number;
+  complete: boolean;
+  objectIds: string[];
+  truncatedReferences: SubtreeReference[];
+  rootObjectId?: string;
+}
+
 export interface TypeDictionaryEntry {
   name: string;
   version: number;

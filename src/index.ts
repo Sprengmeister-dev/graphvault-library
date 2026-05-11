@@ -71,6 +71,7 @@ export type { PersistentCacheRoot } from "./cache/persistent-cache.js";
 export { GraphSerializer, ObjectIdRegistry, TypeRegistry } from "./core/serializer.js";
 export {
   copyStorageTargetTree,
+  EncryptedStorageTarget,
   HttpStorageTarget,
   LocalFilesystemTarget,
   MemoryStorageTarget,
@@ -79,6 +80,7 @@ export {
 } from "./storage/storage-target.js";
 export type {
   HttpStorageTargetOptions,
+  EncryptedStorageTargetOptions,
   LocalFilesystemTargetOptions,
   S3Body,
   S3ListObjectsRequest,
@@ -116,6 +118,9 @@ export type {
   StorageCommitValidator,
   StorageOperationsStatus,
   StorageStatus,
+  SubtreeLoadOptions,
+  SubtreeLoadResult,
+  SubtreeReference,
   StorageTarget,
   StorageTargetLock,
   StorageLockOptions,

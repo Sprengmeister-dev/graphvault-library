@@ -115,6 +115,20 @@ await storage.store(document);
 await storage.storeAll(storage.root.documents);
 ```
 
+### Bounded Subtree Loading
+
+Use `loadSubtree(...)` when an API should expose only a bounded part of the graph instead of returning the whole root.
+
+```ts
+const subtree = await storage.loadSubtree({ depth: 1 });
+const documentSubtree = await storage.loadSubtree("document-object-id", { depth: 2 });
+
+console.log(documentSubtree.envelope.nodes);
+console.log(documentSubtree.truncatedReferences);
+```
+
+`depth: 0` loads only the start object. `depth: 1` adds its directly referenced child objects. The result is a serialized graph envelope plus metadata, so REST clients can see whether the response is complete or where the server intentionally stopped traversal.
+
 ### Batch Writes With A Storer
 
 Storers are useful when a workflow touches several objects and you want one commit at the end.

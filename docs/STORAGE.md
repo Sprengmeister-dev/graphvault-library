@@ -63,6 +63,25 @@ const storage = await EmbeddedStorage.start({
 });
 ```
 
+### Encrypted Storage Wrapper
+
+Wrap any storage target with `EncryptedStorageTarget` when the target should only see encrypted object payloads at rest. The wrapper uses AES-256-GCM and accepts either a 32-byte key or a passphrase string that is hashed to a 256-bit key.
+
+```ts
+import { EmbeddedStorage, EncryptedStorageTarget, LocalFilesystemTarget } from "@sprengmeister/graphvault";
+
+const storage = await EmbeddedStorage.start({
+  storageDirectory: "./data",
+  storageTarget: new EncryptedStorageTarget({
+    target: new LocalFilesystemTarget(),
+    key: process.env.GRAPHVAULT_STORAGE_KEY!,
+  }),
+  rootFactory: () => ({ documents: [] }),
+});
+```
+
+Store and rotate keys through your deployment secrets manager. GraphVault cannot recover encrypted payloads if the key is lost.
+
 ### HTTP Remote Storage
 
 `HttpStorageTarget` expects a storage service that exposes GraphVault-style object operations. Use this when your storage is behind an internal service or gateway.

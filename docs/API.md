@@ -29,6 +29,7 @@ Main runtime API.
 - `createStorer()`: batches several store targets into one commit.
 - `createLazyRef(key, value)`: creates and stores lazy data.
 - `loadLazy(key)` / `storeLazy(key, value)`: low-level lazy value access.
+- `loadSubtree(options)` / `loadSubtree(objectId, options)`: loads a bounded object subgraph from the persisted store. `depth: 0` returns only the start object, `depth: 1` includes direct referenced objects, and higher values expand further. The result includes a `SerializedEnvelope`, loaded `objectIds`, `complete`, and `truncatedReferences`.
 - `operations()`: returns lightweight monitoring state such as WAL counts, pending recovery, latest manifest/journal transaction ids, lock strategy, and object count.
 - `verify()`: validates manifest, transactions, transaction hash chain, WAL prepare/commit records, object records, references, and lazy files.
 - `maintain(options)`: garbage collection, compaction, and optional verification.
@@ -36,10 +37,22 @@ Main runtime API.
 - `collectGarbage()`: removes unreferenced object records.
 - `backup(destination)`: copies the store to another directory or target. Consistent by default; takes the writer lock and excludes volatile lock files.
 
+### Subtree Loading
+
+```ts
+const rootSlice = await storage.loadSubtree({ depth: 1 });
+const objectSlice = await storage.loadSubtree("42", { depth: 2 });
+```
+
+`loadSubtree(...)` reads object records through the manifest and does not deserialize the full application root when a manifest exists. This makes it suitable for REST handlers, admin previews, and API responses where callers need a bounded part of the graph. The default depth is `1`.
+
+The returned `truncatedReferences` array contains `{ fromObjectId, toObjectId, path, depth }` entries for outgoing object references that were outside the requested depth. A response with `complete: false` is intentionally partial, not corrupt.
+
 ### Storage Targets
 
 - `LocalFilesystemTarget`: default target for file-based embedded storage.
 - `MemoryStorageTarget`: in-memory target for tests.
+- `EncryptedStorageTarget`: AES-256-GCM wrapper around another target for encrypted object payloads at rest.
 - `HttpStorageTarget`: remote service target.
 - `S3StorageTarget`: S3-compatible object storage target.
 - `SqlStorageTarget`: SQL-row-backed target.

@@ -111,3 +111,26 @@ export class DocumentService {
   }
 }
 ```
+
+### REST Subtree Endpoints
+
+For APIs that expose a graph fragment, keep the response bounded with `loadSubtree(...)` instead of serializing the full root.
+
+```ts
+import { Controller, Get, Param, Query } from "@nestjs/common";
+import { StorageManager } from "@sprengmeister/graphvault";
+
+@Controller("graph")
+export class GraphController {
+  constructor(private readonly storage: StorageManager<AppRoot>) {}
+
+  @Get(":objectId")
+  async getSubtree(@Param("objectId") objectId: string, @Query("depth") depth = "2") {
+    return this.storage.loadSubtree(objectId, {
+      depth: Number.parseInt(depth, 10),
+    });
+  }
+}
+```
+
+The response includes the bounded `envelope`, loaded `objectIds`, and `truncatedReferences` so clients can request deeper slices deliberately.

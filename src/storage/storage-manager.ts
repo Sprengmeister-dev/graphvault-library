@@ -8,6 +8,7 @@ import { StorageWriter } from "./storage-writer.js";
 import { StorageCommitter, sortedObjectIds } from "./storage-committer.js";
 import { resolveStorageWriteOptions, type ResolvedStorageWriteOptions } from "./storage-write-options.js";
 import { copyStorageTargetTree, LocalFilesystemTarget } from "./storage-target.js";
+import { loadSubtreeFromEnvelope, loadSubtreeFromManifest } from "./storage-subtree.js";
 import { Storer } from "./storer.js";
 import { LazyRef } from "../lazy/lazy-ref.js";
 import { OptimisticLockError, ReadonlyStorageError, StorageNotStartedError, TransactionScopeError } from "../core/errors.js";
@@ -22,6 +23,8 @@ import type {
   StorageLockOptions,
   StorageStatus,
   StorageOperationsStatus,
+  SubtreeLoadOptions,
+  SubtreeLoadResult,
   StorageTarget,
   StorageTargetLock,
   StoreMetadata,
@@ -392,6 +395,20 @@ export class StorageManager<TRoot = unknown> {
 
   async previewGvql(query: string, options: Omit<GvqlExecutionOptions, "dryRun"> = {}): Promise<GvqlResult> {
     return this.gvql(query, { ...options, dryRun: true });
+  }
+
+  async loadSubtree(options?: SubtreeLoadOptions): Promise<SubtreeLoadResult>;
+  async loadSubtree(rootObjectId: string, options?: SubtreeLoadOptions): Promise<SubtreeLoadResult>;
+  async loadSubtree(rootObjectIdOrOptions: string | SubtreeLoadOptions = {}, options: SubtreeLoadOptions = {}): Promise<SubtreeLoadResult> {
+    this.assertStarted();
+    const subtreeOptions = typeof rootObjectIdOrOptions === "string" ? { ...options, rootObjectId: rootObjectIdOrOptions } : rootObjectIdOrOptions;
+    return this.mutex.runExclusive(async () => {
+      const manifest = await this.reader.readManifest();
+      if (manifest) {
+        return loadSubtreeFromManifest(this.reader, manifest, subtreeOptions);
+      }
+      return loadSubtreeFromEnvelope(this.serializer.serialize(this.rootValue), subtreeOptions, this.transactionId);
+    });
   }
 
   private async collectGarbageLocked(): Promise<GarbageCollectionResult> {

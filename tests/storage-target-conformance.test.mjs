@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import {
   HttpStorageTarget,
+  EncryptedStorageTarget,
   LocalFilesystemTarget,
   MemoryStorageTarget,
   StorageLockError,
@@ -14,10 +15,28 @@ const localRoot = await mkdtemp(join(tmpdir(), "graphvault-target-contract-"));
 
 try {
   await assertStorageTargetContract("memory", () => new MemoryStorageTarget(), "contract/memory");
+  await assertStorageTargetContract(
+    "encrypted-memory",
+    () => new EncryptedStorageTarget({ target: new MemoryStorageTarget(), key: "contract-key" }),
+    "contract/encrypted-memory",
+  );
   await assertStorageTargetContract("local", () => new LocalFilesystemTarget(), localRoot);
   await assertStorageTargetContract("http", () => new HttpStorageTarget({ baseUrl: "https://graphvault.test", fetch: createMemoryFetch() }), "contract/http");
+  await assertEncryptedStorageTarget();
 } finally {
   await rm(localRoot, { recursive: true, force: true });
+}
+
+async function assertEncryptedStorageTarget() {
+  const raw = new MemoryStorageTarget();
+  const encrypted = new EncryptedStorageTarget({ target: raw, key: "correct-key" });
+  await encrypted.writeTextAtomic("secure/value.txt", "sensitive ledger value");
+  assert.equal(await encrypted.readText("secure/value.txt"), "sensitive ledger value");
+  assert.equal((await raw.readText("secure/value.txt")).includes("sensitive ledger value"), false, "encrypted raw payload");
+  await encrypted.appendText("secure/value.txt", "!");
+  assert.equal(await encrypted.readText("secure/value.txt"), "sensitive ledger value!");
+  const wrongKey = new EncryptedStorageTarget({ target: raw, key: "wrong-key" });
+  await assert.rejects(() => wrongKey.readText("secure/value.txt"), undefined, "wrong key rejects");
 }
 
 async function assertStorageTargetContract(name, factory, root) {
