@@ -420,6 +420,7 @@ export async function copyStorageTargetTree(
   destination: StorageTarget,
   sourceRoot: string,
   destinationRoot: string,
+  options: { exclude?: (relativePath: string) => boolean } = {},
 ): Promise<number> {
   let filesCopied = 0;
 
@@ -429,6 +430,9 @@ export async function copyStorageTargetTree(
     await destination.ensureDirectory(destinationDirectory);
     for (const name of await listOrEmpty(source, sourceDirectory)) {
       const childRelativePath = relativePath ? `${relativePath}/${name}` : name;
+      if (options.exclude?.(childRelativePath)) {
+        continue;
+      }
       const sourcePath = joinTargetPath(sourceRoot, childRelativePath);
       const destinationPath = joinTargetPath(destinationRoot, childRelativePath);
       try {

@@ -255,6 +255,7 @@ export interface GarbageCollectionResult {
 export interface BackupResult {
   filesCopied: number;
   transactionId: number;
+  consistent: boolean;
 }
 
 export interface VerificationResult {

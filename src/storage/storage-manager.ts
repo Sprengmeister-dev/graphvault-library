@@ -271,15 +271,34 @@ export class StorageManager<TRoot = unknown> {
     return this.mutex.runExclusive(() => this.collectGarbageLocked());
   }
 
-  async backup(destination: { storageDirectory: string; storageTarget?: StorageTarget }): Promise<BackupResult> {
+  async backup(destination: { storageDirectory: string; storageTarget?: StorageTarget; consistent?: boolean }): Promise<BackupResult> {
     this.assertStarted();
-    const filesCopied = await copyStorageTargetTree(
-      this.target,
-      destination.storageTarget ?? new LocalFilesystemTarget(),
-      this.options.storageDirectory,
-      destination.storageDirectory,
+    this.assertOutsideTransaction("backup()");
+    const consistent = destination.consistent ?? true;
+    const copy = async (): Promise<BackupResult> => {
+      const filesCopied = await copyStorageTargetTree(
+        this.target,
+        destination.storageTarget ?? new LocalFilesystemTarget(),
+        this.options.storageDirectory,
+        destination.storageDirectory,
+        { exclude: (relativePath) => relativePath === "LOCK" || relativePath === "LOCK.fencing-token" },
+      );
+      return { filesCopied, transactionId: this.transactionId, consistent };
+    };
+    if (!consistent) {
+      return copy();
+    }
+    return this.mutex.runExclusive(() =>
+      this.withWriteLock(async (lock) => {
+        if (this.shouldRecoverCommittedWal) {
+          await this.recoverCommittedWalLocked(lock);
+        }
+        await lock.assertValid();
+        const result = await copy();
+        await lock.assertValid();
+        return result;
+      }),
     );
-    return { filesCopied, transactionId: this.transactionId };
   }
 
   async verify(): Promise<VerificationResult> {

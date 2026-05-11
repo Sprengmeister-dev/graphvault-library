@@ -154,6 +154,8 @@ await storage.backup({
 });
 ```
 
+`backup(...)` is consistent by default: it takes the writer lock, repairs committed WAL if needed, copies the store, and leaves volatile lock files out of the backup. Use `{ consistent: false }` only for disposable stores or when an infrastructure-level snapshot already provides point-in-time consistency.
+
 ### Read-Only Access
 
 Read-only mode is useful for admin jobs, export scripts, and safety checks. It does not acquire the writer lock and refuses mutations.

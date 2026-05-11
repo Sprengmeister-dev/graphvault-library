@@ -33,7 +33,7 @@ Main runtime API.
 - `maintain(options)`: garbage collection, compaction, and optional verification.
 - `compact(keepLatest)`: removes older snapshots.
 - `collectGarbage()`: removes unreferenced object records.
-- `backup(destination)`: copies the store to another directory or target.
+- `backup(destination)`: copies the store to another directory or target. Consistent by default; takes the writer lock and excludes volatile lock files.
 
 ### Storage Targets
 

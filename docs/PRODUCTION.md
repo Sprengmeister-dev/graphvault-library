@@ -104,15 +104,15 @@ If the process crashes after the WAL commit marker but before manifest publicati
 
 ## Backup And Restore
 
-Take backups while the application is quiescent, or take them through application code while holding the writer lock.
+Application-level backups are consistent by default. `backup(...)` takes the shared writer lock, repairs committed WAL entries if needed, copies the store, and excludes volatile lock files from the destination.
 
 ```ts
-await storage.transaction(async () => {
-  await storage.backup({
-    storageDirectory: "graphvault-backups/2026-05-11",
-  });
+await storage.backup({
+  storageDirectory: "graphvault-backups/2026-05-11",
 });
 ```
+
+Do not call `backup(...)` from inside an active `transaction(...)`; both operations need the same consistency boundary. If your infrastructure provides a point-in-time snapshot for the complete storage prefix, you can also use that directly.
 
 For shared storage targets, prefer infrastructure-native snapshots when they preserve point-in-time consistency across the whole storage prefix.
 
