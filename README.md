@@ -35,6 +35,7 @@ await storage.shutdown();
 - preserves object identity, cycles, `Map`, `Set`, classes, and rich JS values
 - explicit persistence instead of hidden ORM-style unit-of-work magic
 - GVQL query language for graph traversal, indexed filters, grouping, aggregate analysis, execution plans, and safe batch-update previews
+- explicit transactions with rollback plus optimistic or pessimistic locking for shared stores
 - local filesystem, memory, HTTP, S3-compatible, and SQL-backed storage targets
 - NestJS provider integration
 - separate graphical admin tool: [GraphVault Studio](https://github.com/Sprengmeister-dev/graphvault-studio)
@@ -59,6 +60,28 @@ const result = await storage.gvql(`
 
 GVQL supports graph traversal, comma-separated `MATCH` patterns for joins, `OPTIONAL MATCH` for left-join style graph expansion, indexed metadata and property filters, indexed equality/`IN` intersections and `OR` unions, parenthesized `WHERE`/`HAVING` logic with `NOT` and SQL-style `AND` precedence, `WITH` pipelines, computed `RETURN` expressions, scalar functions, conditional `CASE` expressions, grouping, aggregates, `RETURN DISTINCT`, `count(DISTINCT path)`, pagination, execution plans, and preview-first batch updates with `CREATE`, idempotent `MERGE`, `SET`, arithmetic/conditional `SET` expressions, `REMOVE`, and `DELETE`. It is also what powers GraphVault Studio's search, inspection, and manipulation workflows.
 
+## Transactions And Concurrent Writers
+
+Use `transaction(...)` when several related changes must succeed or fail as one unit. If the callback throws, GraphVault restores the previous in-memory root and does not commit the partial mutation.
+
+```ts
+await storage.transaction(
+  ({ root }) => {
+    const invoice = root.invoices.find((item) => item.id === "inv-1");
+    invoice.status = "paid";
+    root.auditLog.push({ type: "invoice-paid", invoiceId: invoice.id });
+  },
+  { mode: "pessimistic" },
+);
+```
+
+For multi-pod deployments where several instances of the same application share one store, the transaction boundary is also the concurrency boundary:
+
+- `pessimistic` transactions take the writer lock before reading and hold it until commit.
+- `optimistic` transactions read first, then check at commit time whether another pod changed the store meanwhile; conflicts are retried or reported as `OptimisticLockError`.
+
+For NestJS services, `@GraphVaultTransactional()` wraps a service method in the same commit/rollback and locking behavior.
+
 ## Why Use This Instead Of A Normal Database?
 
 Relational and document databases are excellent when your application is primarily about querying independent records. They become awkward when the important shape is an in-memory domain model with identity, links, and behavior. GraphVault is for cases where you want to keep that model intact and persist it deliberately.
@@ -73,7 +96,7 @@ Use GraphVault when:
 
 Use a normal database when:
 
-- many independent clients write concurrently
+- many independent clients outside one application boundary write concurrently
 - ad-hoc querying, joins, indexes, reporting, and analytics are central
 - you need SQL compatibility, database roles, replication, or mature DBA tooling
 - the data model is naturally record-oriented rather than graph-oriented
@@ -88,7 +111,8 @@ GraphVault is not trying to replace Postgres, SQLite, MongoDB, or Redis. It is f
 - `Map`, `Set`, `Date`, `Buffer`, `bigint`, symbols, typed arrays, and other built-in JS values
 - class registration, hydration, custom handlers, and schema migration hooks
 - lazy references and segmented lazy arrays
-- atomic commits, manifest, transaction journal, verification, compaction, backup, and garbage collection
+- atomic commits, explicit transactions, manifest, transaction journal, verification, compaction, backup, and garbage collection
+- optimistic and pessimistic locking for several pods/users writing to the same store
 - pluggable storage targets for local filesystem, memory, HTTP, S3-compatible clients, and SQL adapters
 - optional NestJS integration
 
