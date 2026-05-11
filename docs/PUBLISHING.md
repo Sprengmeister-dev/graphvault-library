@@ -18,9 +18,10 @@ npm ci
 npm test
 npm run benchmark:check
 npm run pack:dry-run
+npm run package:smoke
 ```
 
-Inspect the dry-run file list and confirm it contains `README.md`, `LICENSE`, `CHANGELOG.md`, `CONTRIBUTING.md`, `docs`, `dist`, `examples`, `benchmarks`, and the logo asset.
+Inspect the dry-run file list and confirm it contains `README.md`, `LICENSE`, `CHANGELOG.md`, `CONTRIBUTING.md`, `docs`, `dist`, `examples`, `benchmarks`, and the logo asset. `npm run package:smoke` installs the generated tarball into a fresh temporary project and imports the public API plus internal subpath exports used by GraphVault Studio.
 
 ## Tagging
 
@@ -42,7 +43,7 @@ git push origin v0.2.0
 
 Use the GitHub Actions `Release` workflow with the matching tag input, for example `v0.2.0`.
 
-The workflow checks out the tag, installs with `npm ci`, runs tests, runs the benchmark regression gate, validates the npm tarball with `npm run pack:dry-run`, and publishes with npm provenance.
+The workflow checks out the tag, installs with `npm ci`, runs tests, runs the benchmark regression gate, validates the npm tarball with `npm run pack:dry-run`, installs the tarball in a clean smoke project, and publishes with npm provenance.
 
 ## Repository Visibility
 

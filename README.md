@@ -231,11 +231,12 @@ Latest local results are documented in [docs/BENCHMARKS.md](./docs/BENCHMARKS.md
 ```bash
 npm ci
 npm test
-npm run benchmark
+npm run benchmark:check
 npm run pack:dry-run
+npm run package:smoke
 ```
 
-The smoke test stores and reloads a real object graph with class instances, shared references, maps, sets, and cycles. CI runs on Node.js 20 and 22.
+The smoke test stores and reloads a real object graph with class instances, shared references, maps, sets, and cycles. The package smoke test installs the generated tarball into a clean temporary project and verifies public and Studio-facing subpath imports. CI runs on Node.js 20 and 22.
 
 ## Admin UI
 

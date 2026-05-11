@@ -22,6 +22,7 @@
 - Refresh benchmark documentation with GraphVault 0.2.0 WAL and versioned-object-record numbers.
 - Add depth-limited subtree loading for bounded REST/API graph exposure.
 - Add an optional AES-256-GCM encrypted storage-target wrapper for encrypted payloads at rest.
+- Add a tarball install smoke test for public API and Studio-facing subpath exports.
 - Make application-level backups consistent by default, writer-lock protected, WAL-aware, and free of volatile lock files.
 - Add `commitValidators` for application-level consistency gates before WAL prepare.
 - Add concurrency tests that exercise two managers writing to the same store.

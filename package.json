@@ -78,6 +78,7 @@
     "benchmark:json": "npm run build && node benchmarks/object-graph.mjs --json --output benchmark-results.json",
     "benchmark:check": "npm run build && node benchmarks/object-graph.mjs --sizes 100 --targets memory,filesystem/maximum --assert --json --output benchmark-check.json",
     "pack:dry-run": "npm pack --dry-run --cache ./.npm-cache",
+    "package:smoke": "node scripts/package-smoke.mjs",
     "prepare": "npm run build",
     "prepack": "npm run build"
   },
