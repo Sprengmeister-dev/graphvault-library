@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.1
+
+- Add `safetyProfile()` for production-readiness checks across WAL, durability, stale-lock recovery, read-committed WAL behavior, snapshots, commit validators, pending recovery, and the transaction hash chain.
+- Export `assessStorageSafety(...)` for tools that want to classify GraphVault operational state without opening a full manager.
+
 ## 0.2.0
 
 - Add explicit GraphVault transactions for shared stores.

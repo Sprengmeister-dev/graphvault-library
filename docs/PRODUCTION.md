@@ -139,6 +139,18 @@ if (ops.status !== "healthy" || ops.pendingWalCommits > 0) {
 
 `operations()` does not replace `verify()`. It is intended for frequent operational signals: WAL prepare/commit counts, pending committed WAL, latest manifest and journal transaction ids, lock strategy, transaction-log mode, object count, and the latest transaction hash.
 
+Use `safetyProfile()` for a higher-level production gate:
+
+```ts
+const safety = await storage.safetyProfile();
+if (safety.status !== "production-ready") {
+  console.warn(safety.summary);
+  console.warn(safety.issues.map((issue) => `${issue.severity}: ${issue.code}`).join("\n"));
+}
+```
+
+`safetyProfile()` classifies local configuration and store state as `production-ready`, `warning`, or `unsafe`. It checks WAL mode, pending committed WAL recovery, durability, snapshot availability, stale-lock recovery, read-committed WAL behavior, commit validators, and the transaction hash-chain head. It cannot prove that an external storage service is correctly deployed; custom HTTP, S3, and SQL gateways should still pass the storage-target conformance tests in production-like infrastructure.
+
 Run `verify()`:
 
 - after restore

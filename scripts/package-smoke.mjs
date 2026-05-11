@@ -35,6 +35,7 @@ import {
   EncryptedStorageTarget,
   GraphSerializer,
   MemoryStorageTarget,
+  assessStorageSafety,
   startStorage,
 } from "@sprengmeister/graphvault";
 import { referencedEdges } from "@sprengmeister/graphvault/internal/gvql/gvql";
@@ -50,7 +51,37 @@ const storage = await EmbeddedStorage.start({
 await storage.storeRoot();
 const subtree = await storage.loadSubtree({ depth: 1 });
 assert.equal(subtree.objectIds.length >= 2, true);
+const safety = await storage.safetyProfile();
+assert.equal(["production-ready", "warning", "unsafe"].includes(safety.status), true);
 await storage.shutdown();
+
+const assessed = assessStorageSafety({
+  operations: {
+    status: "healthy",
+    storageDirectory: "package-smoke",
+    readOnly: false,
+    lockStrategy: "pessimistic",
+    transactionLog: "full",
+    lockTimeoutMs: 5000,
+    staleLockTimeoutMs: 60000,
+    channelCount: 1,
+    publishedTransactionId: 1,
+    latestJournalTransactionId: 1,
+    latestWalTransactionId: 1,
+    pendingWalCommits: 0,
+    walPrepareFiles: 1,
+    walCommitFiles: 1,
+    objectCount: 1,
+    latestTransactionHash: "hash",
+  },
+  writeProfile: "standard",
+  durability: "strict",
+  writeSnapshots: true,
+  recoverCommittedWal: true,
+  readCommittedWal: true,
+  commitValidatorCount: 1,
+});
+assert.equal(assessed.status, "production-ready");
 
 const encryptedRaw = new MemoryStorageTarget();
 const encrypted = new EncryptedStorageTarget({ target: encryptedRaw, key: "package-smoke-key" });

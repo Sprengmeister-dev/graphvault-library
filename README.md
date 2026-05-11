@@ -38,6 +38,7 @@ await storage.shutdown();
 - explicit transactions with rollback plus optimistic or pessimistic locking for shared stores
 - WAL recovery, fencing tokens, transaction-versioned object records, and a tamper-evident SHA-256 transaction hash chain for audit-oriented deployments
 - transaction metadata for actor, reason, source, trace ID, tags, and audit attributes
+- production safety profile API for WAL, durability, stale-lock recovery, hash-chain, and validator checks
 - depth-limited subtree loading for bounded REST/API graph exposure
 - optional AES-256-GCM encrypted storage-target wrapper for data at rest
 - local filesystem, memory, HTTP, S3-compatible, and SQL-backed storage targets

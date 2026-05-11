@@ -159,6 +159,11 @@ attachment.clear();
 const operations = await storage.operations();
 console.log(operations.status, operations.pendingWalCommits);
 
+const safety = await storage.safetyProfile();
+if (safety.status === "unsafe") {
+  throw new Error(safety.issues.map((issue) => issue.message).join("\n"));
+}
+
 const verification = await storage.verify();
 if (!verification.ok) {
   throw new Error(verification.errors.join("\n"));

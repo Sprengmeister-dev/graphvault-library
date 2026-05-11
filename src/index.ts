@@ -94,6 +94,8 @@ export type {
   SqlStorageTargetOptions,
 } from "./storage/storage-target.js";
 export { StorageManager } from "./storage/storage-manager.js";
+export { assessStorageSafety } from "./storage/storage-safety.js";
+export type { StorageSafetyAssessmentInput } from "./storage/storage-safety.js";
 export { Storer } from "./storage/storer.js";
 export type {
   ClassConstructor,
@@ -117,6 +119,10 @@ export type {
   StorageManagerOptions,
   StorageCommitValidator,
   StorageOperationsStatus,
+  StorageSafetyIssue,
+  StorageSafetyProfile,
+  StorageSafetySeverity,
+  StorageSafetyStatus,
   StorageStatus,
   SubtreeLoadOptions,
   SubtreeLoadResult,

@@ -31,6 +31,7 @@ Main runtime API.
 - `loadLazy(key)` / `storeLazy(key, value)`: low-level lazy value access.
 - `loadSubtree(options)` / `loadSubtree(objectId, options)`: loads a bounded object subgraph from the persisted store. `depth: 0` returns only the start object, `depth: 1` includes direct referenced objects, and higher values expand further. The result includes a `SerializedEnvelope`, loaded `objectIds`, `complete`, and `truncatedReferences`.
 - `operations()`: returns lightweight monitoring state such as WAL counts, pending recovery, latest manifest/journal transaction ids, lock strategy, and object count.
+- `safetyProfile()`: returns a production-readiness summary with `production-ready`, `warning`, or `unsafe` status plus concrete issues and recommendations for WAL, durability, stale-lock recovery, read-committed WAL behavior, snapshots, validators, pending recovery, and the transaction hash chain.
 - `verify()`: validates manifest, transactions, transaction hash chain, WAL prepare/commit records, object records, references, and lazy files.
 - `maintain(options)`: garbage collection, compaction, and optional verification.
 - `compact(keepLatest)`: removes older snapshots.

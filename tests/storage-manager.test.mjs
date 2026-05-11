@@ -10,6 +10,8 @@ const maximumWriteDirectory = await mkdtemp(join(tmpdir(), "graphvault-storage-m
 const nestedMutationDirectory = await mkdtemp(join(tmpdir(), "graphvault-storage-nested-"));
 const consistentBackupDirectory = await mkdtemp(join(tmpdir(), "graphvault-storage-consistent-backup-"));
 const integrityDirectory = await mkdtemp(join(tmpdir(), "graphvault-storage-integrity-"));
+const productionSafetyDirectory = await mkdtemp(join(tmpdir(), "graphvault-storage-safety-production-"));
+const unsafeSafetyDirectory = await mkdtemp(join(tmpdir(), "graphvault-storage-safety-unsafe-"));
 
 try {
   const writeable = await EmbeddedStorage.start({
@@ -33,6 +35,10 @@ try {
   assert.equal(operations.walCommitFiles, 1);
   assert.equal(operations.objectCount >= 2, true);
   assert.equal(typeof operations.latestTransactionHash, "string");
+  const defaultSafety = await writeable.safetyProfile();
+  assert.equal(defaultSafety.status, "warning");
+  assert.equal(defaultSafety.issues.some((issue) => issue.code === "stale-lock-recovery-disabled"), true);
+  assert.equal(defaultSafety.hashChain, "present");
 
   const rootOnlySubtree = await writeable.loadSubtree({ depth: 0 });
   assert.equal(rootOnlySubtree.depth, 0);
@@ -215,6 +221,42 @@ try {
   assert.equal(tamperedVerification.ok, false);
   assert.equal(tamperedVerification.errors.some((error) => error.includes("invalid transactionHash")), true);
   await auditedStore.shutdown();
+
+  const productionSafe = await EmbeddedStorage.start({
+    storageDirectory: productionSafetyDirectory,
+    rootFactory: () => ({ ledger: [{ id: "entry-1", amount: 100 }] }),
+    staleLockTimeoutMs: 60_000,
+    transactionLog: "full",
+    writeDurability: "strict",
+    commitValidators: [
+      ({ root }) => {
+        assert.equal(Array.isArray(root.ledger), true);
+      },
+    ],
+  });
+  await productionSafe.storeRoot();
+  const safeProfile = await productionSafe.safetyProfile();
+  assert.equal(safeProfile.status, "production-ready");
+  assert.equal(safeProfile.score, 100);
+  assert.equal(safeProfile.pendingRecovery, false);
+  assert.equal(safeProfile.staleLockRecovery, true);
+  assert.deepEqual(safeProfile.issues, []);
+  await productionSafe.shutdown();
+
+  const unsafeStore = await EmbeddedStorage.start({
+    storageDirectory: unsafeSafetyDirectory,
+    rootFactory: () => ({ cache: [{ id: "cache-1" }] }),
+    transactionLog: "off",
+    writeProfile: "maximum",
+  });
+  await unsafeStore.storeRoot();
+  const unsafeProfile = await unsafeStore.safetyProfile();
+  assert.equal(unsafeProfile.status, "unsafe");
+  assert.equal(unsafeProfile.durability, "relaxed");
+  assert.equal(unsafeProfile.writeSnapshots, false);
+  assert.equal(unsafeProfile.issues.some((issue) => issue.code === "transaction-log-disabled" && issue.severity === "critical"), true);
+  assert.equal(unsafeProfile.issues.some((issue) => issue.code === "relaxed-durability"), true);
+  await unsafeStore.shutdown();
 } finally {
   await rm(workingDirectory, { recursive: true, force: true });
   await rm(backupDirectory, { recursive: true, force: true });
@@ -222,4 +264,6 @@ try {
   await rm(nestedMutationDirectory, { recursive: true, force: true });
   await rm(consistentBackupDirectory, { recursive: true, force: true });
   await rm(integrityDirectory, { recursive: true, force: true });
+  await rm(productionSafetyDirectory, { recursive: true, force: true });
+  await rm(unsafeSafetyDirectory, { recursive: true, force: true });
 }

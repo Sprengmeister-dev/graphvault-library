@@ -9,6 +9,7 @@ import { StorageCommitter, sortedObjectIds } from "./storage-committer.js";
 import { resolveStorageWriteOptions, type ResolvedStorageWriteOptions } from "./storage-write-options.js";
 import { copyStorageTargetTree, LocalFilesystemTarget } from "./storage-target.js";
 import { loadSubtreeFromEnvelope, loadSubtreeFromManifest } from "./storage-subtree.js";
+import { assessStorageSafety } from "./storage-safety.js";
 import { Storer } from "./storer.js";
 import { LazyRef } from "../lazy/lazy-ref.js";
 import { OptimisticLockError, ReadonlyStorageError, StorageNotStartedError, TransactionScopeError } from "../core/errors.js";
@@ -23,6 +24,7 @@ import type {
   StorageLockOptions,
   StorageStatus,
   StorageOperationsStatus,
+  StorageSafetyProfile,
   SubtreeLoadOptions,
   SubtreeLoadResult,
   StorageTarget,
@@ -525,6 +527,18 @@ export class StorageManager<TRoot = unknown> {
       objectCount: manifest?.objectIds.length ?? 0,
       ...(manifest?.latestTransactionHash ? { latestTransactionHash: manifest.latestTransactionHash } : {}),
     };
+  }
+
+  async safetyProfile(): Promise<StorageSafetyProfile> {
+    return assessStorageSafety({
+      operations: await this.operations(),
+      writeProfile: this.writeOptions.profile,
+      durability: this.writeOptions.durability,
+      writeSnapshots: this.writeOptions.writeSnapshots,
+      recoverCommittedWal: this.shouldRecoverCommittedWal,
+      readCommittedWal: this.shouldReadCommittedWal,
+      commitValidatorCount: this.options.commitValidators?.length ?? 0,
+    });
   }
 
   getRoot(): TRoot {

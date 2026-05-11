@@ -296,6 +296,37 @@ export interface StorageOperationsStatus {
   latestTransactionHash?: string;
 }
 
+export type StorageSafetyStatus = "production-ready" | "warning" | "unsafe";
+
+export type StorageSafetySeverity = "info" | "warning" | "critical";
+
+export interface StorageSafetyIssue {
+  code: string;
+  severity: StorageSafetySeverity;
+  message: string;
+  recommendation: string;
+}
+
+export interface StorageSafetyProfile {
+  status: StorageSafetyStatus;
+  score: number;
+  summary: string;
+  storageDirectory: string;
+  readOnly: boolean;
+  lockStrategy: StorageLockStrategy;
+  transactionLog: StorageTransactionLogMode;
+  durability: StorageWriteDurability;
+  writeProfile: StorageWriteProfile;
+  staleLockRecovery: boolean;
+  recoverCommittedWal: boolean;
+  readCommittedWal: boolean;
+  writeSnapshots: boolean;
+  commitValidatorCount: number;
+  pendingRecovery: boolean;
+  hashChain: "present" | "missing" | "empty-store";
+  issues: StorageSafetyIssue[];
+}
+
 export interface CompactionResult {
   kept: number;
   removed: number;
