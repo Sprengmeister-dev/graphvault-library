@@ -34,6 +34,7 @@ export interface StorageManifest {
   createdAt: string;
   root: EncodedValue;
   objectIds: string[];
+  objectVersions?: Record<string, number>;
 }
 
 export interface TransactionRecord {

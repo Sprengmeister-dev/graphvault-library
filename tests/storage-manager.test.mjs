@@ -7,6 +7,7 @@ import { EmbeddedStorage } from "../dist/index.js";
 const workingDirectory = await mkdtemp(join(tmpdir(), "graphvault-storage-tests-"));
 const backupDirectory = await mkdtemp(join(tmpdir(), "graphvault-storage-backup-"));
 const maximumWriteDirectory = await mkdtemp(join(tmpdir(), "graphvault-storage-maximum-"));
+const nestedMutationDirectory = await mkdtemp(join(tmpdir(), "graphvault-storage-nested-"));
 
 try {
   const writeable = await EmbeddedStorage.start({
@@ -84,8 +85,40 @@ try {
   });
   assert.equal(maximumRestored.root.docs[0].title, "Binary only");
   await maximumRestored.shutdown();
+
+  const nestedMutations = await EmbeddedStorage.start({
+    storageDirectory: nestedMutationDirectory,
+    rootFactory: () => ({ items: [], nested: { count: 1 } }),
+  });
+  nestedMutations.root.items.push("a");
+  await nestedMutations.storeRoot();
+  nestedMutations.root.items.push("b");
+  await nestedMutations.storeRoot();
+  await nestedMutations.update((root) => {
+    root.nested.count = 2;
+  });
+  await nestedMutations.shutdown();
+
+  const nestedMaintainer = await EmbeddedStorage.start({
+    storageDirectory: nestedMutationDirectory,
+    rootFactory: () => ({ items: [], nested: { count: 0 } }),
+  });
+  const nestedMaintenance = await nestedMaintainer.maintain({ keepSnapshots: 2 });
+  assert.equal(nestedMaintenance.verification.ok, true);
+  await nestedMaintainer.shutdown();
+
+  const nestedReloaded = await EmbeddedStorage.start({
+    storageDirectory: nestedMutationDirectory,
+    rootFactory: () => ({ items: [], nested: { count: 0 } }),
+    readOnly: true,
+    readCommittedWal: false,
+  });
+  assert.deepEqual(nestedReloaded.root.items, ["a", "b"]);
+  assert.equal(nestedReloaded.root.nested.count, 2);
+  await nestedReloaded.shutdown();
 } finally {
   await rm(workingDirectory, { recursive: true, force: true });
   await rm(backupDirectory, { recursive: true, force: true });
   await rm(maximumWriteDirectory, { recursive: true, force: true });
+  await rm(nestedMutationDirectory, { recursive: true, force: true });
 }

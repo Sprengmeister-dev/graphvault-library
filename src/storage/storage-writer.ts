@@ -59,16 +59,20 @@ export class StorageWriter {
       };
       const writes: Array<Promise<void>> = [];
       if (this.objectRecordFormat !== "json") {
-        writes.push(this.target.writeBufferAtomic(this.layout.binaryObjectPath(objectId), encodeBinaryRecord(record)));
+        writes.push(this.target.writeBufferAtomic(this.layout.binaryObjectPath(objectId, transactionId), encodeBinaryRecord(record)));
       }
       if (this.objectRecordFormat !== "binary") {
-        writes.push(this.writeJson(this.layout.objectRecordPath(objectId), record));
+        writes.push(this.writeJson(this.layout.objectRecordPath(objectId, transactionId), record));
       }
       await Promise.all(writes);
     });
   }
 
-  async writeManifest(envelope: SerializedEnvelope, transactionId: number): Promise<void> {
+  async writeManifest(envelope: SerializedEnvelope, transactionId: number, objectVersions?: ReadonlyMap<string, number> | Record<string, number>): Promise<void> {
+    const versions =
+      objectVersions instanceof Map
+        ? Object.fromEntries([...objectVersions.entries()].sort((a, b) => Number(a[0]) - Number(b[0])))
+        : objectVersions;
     await this.writeJson(this.layout.manifestFile, {
       format: "graphvault-manifest",
       version: 1,
@@ -76,6 +80,7 @@ export class StorageWriter {
       createdAt: new Date().toISOString(),
       root: envelope.root,
       objectIds: Object.keys(envelope.nodes).sort((a, b) => Number(a) - Number(b)),
+      ...(versions ? { objectVersions: versions } : {}),
     } satisfies StorageManifest);
   }
 

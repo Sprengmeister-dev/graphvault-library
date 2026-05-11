@@ -88,7 +88,7 @@ You can version and migrate classes:
 
 ### Read And Write Data
 
-Mutate your root like normal TypeScript objects, then store explicitly.
+Mutate your root like normal TypeScript objects, then store explicitly. `storeRoot()` writes the full reachable root graph, so nested changes in arrays, maps, sets, and child objects are durable even when the root object identity did not change.
 
 ```ts
 const document = new Document("doc-1", "Storage design");
@@ -98,7 +98,7 @@ storage.root.documents.push(document);
 await storage.storeRoot();
 ```
 
-For service methods, `update(...)` is the most convenient shape. It stores after the mutator succeeds and rolls the in-memory root back if the mutator throws.
+For service methods, `update(...)` is the most convenient shape. Without a `storeTarget`, it stores the full root graph after the mutator succeeds and rolls the in-memory root back if the mutator throws.
 
 ```ts
 await storage.update((root) => {
@@ -106,7 +106,7 @@ await storage.update((root) => {
 });
 ```
 
-When you only want to mark specific objects as the write target, use `store(object)` or `storeAll(...)`.
+When you only want to mark specific objects as the write target, use `store(object)`, `storeAll(...)`, or an explicit `storeTarget` for `update(...)`.
 
 ```ts
 document.title = "Storage design v2";

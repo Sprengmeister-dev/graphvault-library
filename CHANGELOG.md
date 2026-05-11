@@ -12,6 +12,8 @@
 - Split commit/WAL publishing and write-profile resolution into dedicated storage modules.
 - Add a production operations guide with deployment profiles, backup/restore, monitoring, and financial-workload guidance.
 - Publish `manifest.json` last in the commit path and add a WAL crash matrix for recovery-sensitive failure phases.
+- Make `storeRoot()` and default `update(...)` commits persist the full reachable root graph, including nested mutable objects.
+- Add transaction-versioned object records so old manifests cannot observe partially written newer object records.
 - Add `commitValidators` for application-level consistency gates before WAL prepare.
 - Add concurrency tests that exercise two managers writing to the same store.
 

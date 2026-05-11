@@ -92,7 +92,7 @@ With `transactionLog: "full"`, a commit follows this order:
 1. Serialize the in-memory graph.
 2. Run `commitValidators`.
 3. Write a WAL prepare record containing the full envelope.
-4. Write changed object records.
+4. Write changed object records under transaction-versioned record names.
 5. Write the snapshot when snapshots are enabled.
 6. Validate the lock fencing token.
 7. Write the WAL commit marker.
@@ -100,7 +100,7 @@ With `transactionLog: "full"`, a commit follows this order:
 9. Publish parent index and `CURRENT`.
 10. Publish `manifest.json` last.
 
-If the process crashes after the WAL commit marker but before manifest publication, GraphVault can recover the committed transaction. The next writer repairs the metadata under the shared lock. Readers can also see the committed WAL envelope when `readCommittedWal` is enabled. The normal test suite includes a WAL crash matrix that exercises failures before the commit marker and at every post-marker publication step.
+If the process crashes after the WAL commit marker but before manifest publication, GraphVault can recover the committed transaction. The next writer repairs the metadata under the shared lock. Readers can also see the committed WAL envelope when `readCommittedWal` is enabled. Because object records are versioned and `manifest.json` selects the exact live version, old manifests do not accidentally read partially written newer child records. The normal test suite includes a WAL crash matrix that exercises failures before the commit marker and at every post-marker publication step.
 
 ## Backup And Restore
 

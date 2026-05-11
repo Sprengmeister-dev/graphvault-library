@@ -13,9 +13,9 @@ import type {
 } from "../core/types.js";
 
 export type LoadedEnvelope =
-  | { source: "manifest"; envelope: SerializedEnvelope; transactionId: number }
-  | { source: "snapshot"; envelope: SerializedEnvelope; transactionId: number }
-  | { source: "wal"; envelope: SerializedEnvelope; transactionId: number };
+  | { source: "manifest"; envelope: SerializedEnvelope; transactionId: number; objectVersions: Map<string, number> }
+  | { source: "snapshot"; envelope: SerializedEnvelope; transactionId: number; objectVersions: Map<string, number> }
+  | { source: "wal"; envelope: SerializedEnvelope; transactionId: number; objectVersions: Map<string, number> };
 
 export class StorageReader {
   constructor(
@@ -41,6 +41,7 @@ export class StorageReader {
           source: "manifest",
           envelope: await this.envelopeFromManifest(manifest),
           transactionId: manifest.transactionId,
+          objectVersions: objectVersionsFromManifest(manifest),
         };
       } catch {
         // Fall back to the checkpoint snapshot below.
@@ -52,10 +53,13 @@ export class StorageReader {
       return undefined;
     }
     const content = await this.target.readText(join(this.layout.snapshotsDirectory, current));
+    const envelope = JSON.parse(content) as SerializedEnvelope;
+    const transactionId = this.layout.parseTransactionId(current);
     return {
       source: "snapshot",
-      envelope: JSON.parse(content) as SerializedEnvelope,
-      transactionId: this.layout.parseTransactionId(current),
+      envelope,
+      transactionId,
+      objectVersions: objectVersionsForEnvelope(envelope, transactionId),
     };
   }
 
@@ -64,7 +68,12 @@ export class StorageReader {
     for (const commit of commits.sort((a, b) => b.transactionId - a.transactionId)) {
       const prepare = await this.readWalPrepareRecord(commit.prepareFile);
       if (prepare && prepare.transactionId === commit.transactionId) {
-        return { source: "wal", envelope: prepare.envelope, transactionId: prepare.transactionId };
+        return {
+          source: "wal",
+          envelope: prepare.envelope,
+          transactionId: prepare.transactionId,
+          objectVersions: objectVersionsForEnvelope(prepare.envelope, prepare.transactionId),
+        };
       }
     }
     return undefined;
@@ -154,8 +163,9 @@ export class StorageReader {
 
   async envelopeFromManifest(manifest: StorageManifest): Promise<SerializedEnvelope> {
     const nodes: SerializedEnvelope["nodes"] = {};
+    const objectVersions = objectVersionsFromManifest(manifest);
     for (const objectId of manifest.objectIds) {
-      const record = await this.readObjectRecord(objectId);
+      const record = await this.readObjectRecord(objectId, objectVersions.get(objectId));
       nodes[objectId] = record.node;
     }
     return {
@@ -167,11 +177,18 @@ export class StorageReader {
     };
   }
 
-  async readObjectRecord(objectId: string): Promise<ObjectRecord> {
+  async readObjectRecord(objectId: string, transactionId?: number): Promise<ObjectRecord> {
     try {
-      return decodeBinaryRecord<ObjectRecord>(await this.target.readBuffer(this.layout.binaryObjectPath(objectId)));
+      return decodeBinaryRecord<ObjectRecord>(await this.target.readBuffer(this.layout.binaryObjectPath(objectId, transactionId)));
     } catch {
-      return JSON.parse(await this.target.readText(this.layout.objectRecordPath(objectId))) as ObjectRecord;
+      try {
+        return JSON.parse(await this.target.readText(this.layout.objectRecordPath(objectId, transactionId))) as ObjectRecord;
+      } catch (error) {
+        if (transactionId) {
+          return this.readObjectRecord(objectId);
+        }
+        throw error;
+      }
     }
   }
 
@@ -182,4 +199,16 @@ export class StorageReader {
       return [];
     }
   }
+}
+
+export function objectVersionsFromManifest(manifest: StorageManifest): Map<string, number> {
+  const versions = new Map<string, number>();
+  for (const objectId of manifest.objectIds) {
+    versions.set(objectId, manifest.objectVersions?.[objectId] ?? manifest.transactionId);
+  }
+  return versions;
+}
+
+function objectVersionsForEnvelope(envelope: SerializedEnvelope, transactionId: number): Map<string, number> {
+  return new Map(Object.keys(envelope.nodes).map((objectId) => [objectId, transactionId]));
 }

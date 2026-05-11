@@ -18,7 +18,7 @@ export interface StorageCommitterDependencies {
   transactionLogEnabled: () => boolean;
   validateCommit: (envelope: SerializedEnvelope, transactionId: number) => Promise<void>;
   beforePublish: () => Promise<void>;
-  commitState: (transactionId: number, objectIds: readonly string[]) => void;
+  commitState: (transactionId: number, objectVersions: ReadonlyMap<string, number>) => void;
 }
 
 export interface CommitEnvelopeOptions {
@@ -27,6 +27,7 @@ export interface CommitEnvelopeOptions {
   mode: StoreMode;
   objectIds: readonly string[];
   allObjectIds: readonly string[];
+  baseObjectVersions: ReadonlyMap<string, number>;
   targetCount: number;
   lock: StorageTargetLock;
 }
@@ -35,10 +36,12 @@ export class StorageCommitter {
   constructor(private readonly dependencies: StorageCommitterDependencies) {}
 
   async commitEnvelope(options: CommitEnvelopeOptions): Promise<StoreMetadata> {
-    const { envelope, baseTransactionId, mode, objectIds, allObjectIds, targetCount, lock } = options;
+    const { envelope, baseTransactionId, mode, allObjectIds, targetCount, lock } = options;
     const nextTransactionId = baseTransactionId + 1;
     const snapshotFile = snapshotName(nextTransactionId);
     const snapshotPath = join(this.dependencies.layout.snapshotsDirectory, snapshotFile);
+    const objectVersions = nextObjectVersions(options.baseObjectVersions, allObjectIds, options.objectIds, nextTransactionId);
+    const objectIds = objectIdsToWrite(options.baseObjectVersions, allObjectIds, options.objectIds);
     await this.dependencies.validateCommit(envelope, nextTransactionId);
     let prepareFile: string | undefined;
     if (this.dependencies.transactionLogEnabled()) {
@@ -79,6 +82,7 @@ export class StorageCommitter {
       mode,
       targetCount,
       lock,
+      objectVersions,
     });
     return {
       transactionId: nextTransactionId,
@@ -98,9 +102,11 @@ export class StorageCommitter {
     mode: StoreMode;
     targetCount: number;
     lock: StorageTargetLock;
+    objectVersions?: ReadonlyMap<string, number>;
   }): Promise<string> {
     const { envelope, transactionId, snapshotFile, mode, targetCount, lock } = options;
     const objectIds = sortedObjectIds(envelope);
+    const objectVersions = options.objectVersions ?? new Map(objectIds.map((objectId) => [objectId, transactionId]));
     await lock.assertValid();
     const journalFile = await this.dependencies.writer.writeTransactionRecord({
       format: "graphvault-transaction",
@@ -118,8 +124,8 @@ export class StorageCommitter {
       await lock.assertValid();
       await this.dependencies.target.writeTextAtomic(this.dependencies.layout.currentFile, snapshotFile);
     }
-    await this.dependencies.writer.writeManifest(envelope, transactionId);
-    this.dependencies.commitState(transactionId, objectIds);
+    await this.dependencies.writer.writeManifest(envelope, transactionId, objectVersions);
+    this.dependencies.commitState(transactionId, objectVersions);
     return journalFile;
   }
 }
@@ -130,4 +136,32 @@ export function sortedObjectIds(envelope: SerializedEnvelope): string[] {
 
 function snapshotName(transactionId: number): string {
   return `snapshot-${String(transactionId).padStart(12, "0")}.json`;
+}
+
+function objectIdsToWrite(
+  baseObjectVersions: ReadonlyMap<string, number>,
+  allObjectIds: readonly string[],
+  requestedObjectIds: readonly string[],
+): string[] {
+  const objectIds = new Set(requestedObjectIds);
+  for (const objectId of allObjectIds) {
+    if (!baseObjectVersions.has(objectId)) {
+      objectIds.add(objectId);
+    }
+  }
+  return [...objectIds].sort((a, b) => Number(a) - Number(b));
+}
+
+function nextObjectVersions(
+  baseObjectVersions: ReadonlyMap<string, number>,
+  allObjectIds: readonly string[],
+  writtenObjectIds: readonly string[],
+  transactionId: number,
+): Map<string, number> {
+  const versions = new Map<string, number>();
+  const written = new Set(writtenObjectIds);
+  for (const objectId of allObjectIds) {
+    versions.set(objectId, written.has(objectId) || !baseObjectVersions.has(objectId) ? transactionId : baseObjectVersions.get(objectId) as number);
+  }
+  return versions;
 }

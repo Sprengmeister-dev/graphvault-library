@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import type { ObjectRecord, StorageManifest, StorageTarget, TransactionRecord, VerificationResult, WalCommitRecord, WalPrepareRecord } from "../core/types.js";
+import { objectVersionsFromManifest } from "./storage-reader.js";
 
 export interface StorageVerifierOptions {
   target: StorageTarget;
@@ -7,7 +8,7 @@ export interface StorageVerifierOptions {
   walDirectory?: string;
   readManifest: () => Promise<StorageManifest | undefined>;
   readLatestTransactionRecord: () => Promise<TransactionRecord | undefined>;
-  readObjectRecord: (objectId: string) => Promise<ObjectRecord>;
+  readObjectRecord: (objectId: string, transactionId?: number) => Promise<ObjectRecord>;
 }
 
 export async function verifyStorage(options: StorageVerifierOptions): Promise<VerificationResult> {
@@ -58,6 +59,7 @@ export async function verifyStorage(options: StorageVerifierOptions): Promise<Ve
   }
 
   const knownObjects = new Set(manifest.objectIds);
+  const objectVersions = objectVersionsFromManifest(manifest);
   const referencedObjects = new Set<string>();
   const referencedLazyFiles = new Set<string>();
   if (manifest.root && typeof manifest.root === "object" && "$ref" in manifest.root) {
@@ -67,7 +69,7 @@ export async function verifyStorage(options: StorageVerifierOptions): Promise<Ve
   for (const objectId of manifest.objectIds) {
     let record: ObjectRecord;
     try {
-      record = await options.readObjectRecord(objectId);
+      record = await options.readObjectRecord(objectId, objectVersions.get(objectId));
       checkedObjects++;
     } catch {
       errors.push(`Missing or unreadable object record ${objectId}.`);

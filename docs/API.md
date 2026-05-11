@@ -21,10 +21,10 @@ Main runtime API.
 - `start()`: opens the store and loads or creates the root.
 - `shutdown()`: releases timers and writer lock.
 - `onApplicationShutdown()`: Nest-compatible shutdown hook that delegates to `shutdown()`.
-- `storeRoot()`: stores the full root graph.
-- `store(object)`: stores after a specific object changed.
+- `storeRoot()`: stores the full reachable root graph, including nested mutable objects.
+- `store(object)`: stores after a specific object changed. Passing the current root stores the full root graph.
 - `storeAll(objects)` / `storeAll(...objects)`: stores after several objects changed.
-- `update(mutator, storeTarget?)`: mutates and stores in one safe operation.
+- `update(mutator, storeTarget?)`: mutates and stores in one safe operation. Without `storeTarget`, it stores the full root graph.
 - `transaction(work, options)`: groups related mutations into one commit with rollback plus pessimistic or optimistic multi-writer locking.
 - `createStorer()`: batches several store targets into one commit.
 - `createLazyRef(key, value)`: creates and stores lazy data.

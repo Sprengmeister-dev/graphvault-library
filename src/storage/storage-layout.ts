@@ -65,18 +65,20 @@ export class StorageLayout {
     return join(this.storageDirectory, "LOCK");
   }
 
-  objectRecordPath(objectId: string): string {
+  objectRecordPath(objectId: string, transactionId?: number): string {
+    const fileName = transactionId ? `${objectId}.${transactionId}.json` : `${objectId}.json`;
     if (this.channelCount === 1) {
-      return join(this.objectsDirectory, `${objectId}.json`);
+      return join(this.objectsDirectory, fileName);
     }
-    return join(this.channelDirectoryFor(objectId), "objects", `${objectId}.json`);
+    return join(this.channelDirectoryFor(objectId), "objects", fileName);
   }
 
-  binaryObjectPath(objectId: string): string {
+  binaryObjectPath(objectId: string, transactionId?: number): string {
+    const fileName = transactionId ? `${objectId}.${transactionId}.bin` : `${objectId}.bin`;
     if (this.channelCount === 1) {
-      return join(this.binaryObjectsDirectory, `${objectId}.bin`);
+      return join(this.binaryObjectsDirectory, fileName);
     }
-    return join(this.channelDirectoryFor(objectId), "objects-bin", `${objectId}.bin`);
+    return join(this.channelDirectoryFor(objectId), "objects-bin", fileName);
   }
 
   objectRecordDirectories(kind: ObjectRecordKind): string[] {

@@ -51,6 +51,7 @@ export class StorageManager<TRoot = unknown> {
   private transactionId = 0;
   private recoveredFrom: "manifest" | "snapshot" | "wal" | "empty" | undefined;
   private readonly persistedObjectIds = new Set<string>();
+  private readonly persistedObjectVersions = new Map<string, number>();
   private typeDictionarySignature = "";
   private lockHandle: StorageTargetLock | undefined;
   private housekeepingTimer: NodeJS.Timeout | undefined;
@@ -72,9 +73,9 @@ export class StorageManager<TRoot = unknown> {
       transactionLogEnabled: () => this.transactionLogEnabled,
       validateCommit: (envelope, transactionId) => this.runCommitValidators(envelope, transactionId),
       beforePublish: () => this.writeTypeDictionaryIfChanged(),
-      commitState: (transactionId, objectIds) => {
+      commitState: (transactionId, objectVersions) => {
         this.transactionId = transactionId;
-        this.replacePersistedObjectIds(objectIds);
+        this.replacePersistedObjectVersions(objectVersions);
       },
     });
   }
@@ -116,7 +117,7 @@ export class StorageManager<TRoot = unknown> {
       this.rootValue = this.fillCustomRoot(loadedRoot, loaded.envelope);
       this.transactionId = loaded.transactionId;
       this.recoveredFrom = loaded.source;
-      this.replacePersistedObjectIds(Object.keys(loaded.envelope.nodes));
+      this.replacePersistedObjectVersions(loaded.objectVersions);
       if (loaded.source === "snapshot" && !this.options.readOnly) {
         await this.repairObjectStoreFromEnvelope(loaded.envelope, loaded.transactionId);
       }
@@ -144,14 +145,18 @@ export class StorageManager<TRoot = unknown> {
   }
 
   async storeRoot(): Promise<StoreMetadata> {
-    return this.store(this.root);
+    this.assertStarted();
+    this.assertWritable();
+    this.assertOutsideTransaction("storeRoot()");
+    return this.mutex.runExclusive(() => this.writeWithConflictCheck((lock) => this.storeLocked("eager", [this.root], lock)));
   }
 
   async store(_modifiedObject: unknown): Promise<StoreMetadata> {
     this.assertStarted();
     this.assertWritable();
     this.assertOutsideTransaction("store()");
-    return this.mutex.runExclusive(() => this.writeWithConflictCheck((lock) => this.storeLocked("standard", [_modifiedObject], lock)));
+    const mode: StoreMode = _modifiedObject === this.rootValue ? "eager" : "standard";
+    return this.mutex.runExclusive(() => this.writeWithConflictCheck((lock) => this.storeLocked(mode, [_modifiedObject], lock)));
   }
 
   async storeAll(instances: Iterable<unknown>): Promise<StoreMetadata>;
@@ -194,7 +199,10 @@ export class StorageManager<TRoot = unknown> {
       this.bindLazyRefs(rollback);
       try {
         const result = await mutator(this.root);
-        await this.writeWithConflictCheck((lock) => this.storeLocked("standard", [storeTarget ? storeTarget(this.root) : this.root], lock));
+        await this.writeWithConflictCheck((lock) => {
+          const target = storeTarget ? storeTarget(this.root) : this.root;
+          return this.storeLocked(storeTarget ? "standard" : "eager", [target], lock);
+        });
         return result;
       } catch (error) {
         this.rootValue = rollback;
@@ -281,7 +289,7 @@ export class StorageManager<TRoot = unknown> {
       walDirectory: this.layout.walDirectory,
       readManifest: () => this.reader.readManifest(),
       readLatestTransactionRecord: () => this.reader.readLatestTransactionRecord(),
-      readObjectRecord: (objectId) => this.reader.readObjectRecord(objectId),
+      readObjectRecord: (objectId, transactionId) => this.reader.readObjectRecord(objectId, transactionId),
     });
   }
 
@@ -375,7 +383,8 @@ export class StorageManager<TRoot = unknown> {
       };
     }
 
-    const liveObjects = new Set(manifest.objectIds);
+    const liveJsonRecords = liveObjectRecordFiles(manifest, "json");
+    const liveBinaryRecords = liveObjectRecordFiles(manifest, "bin");
     const liveLazyFiles = new Set<string>();
     const envelope = await this.reader.envelopeFromManifest(manifest);
     for (const node of Object.values(envelope.nodes)) {
@@ -391,12 +400,10 @@ export class StorageManager<TRoot = unknown> {
         if (!file.endsWith(".json")) {
           continue;
         }
-        const objectId = file.slice(0, -".json".length);
-        if (liveObjects.has(objectId)) {
+        if (liveJsonRecords.has(file)) {
           keptObjects++;
         } else {
           await this.target.remove(join(directory, file));
-          this.persistedObjectIds.delete(objectId);
           removedObjects++;
         }
       }
@@ -409,8 +416,7 @@ export class StorageManager<TRoot = unknown> {
         if (!file.endsWith(".bin")) {
           continue;
         }
-        const objectId = file.slice(0, -".bin".length);
-        if (liveObjects.has(objectId)) {
+        if (liveBinaryRecords.has(file)) {
           keptBinaryObjects++;
         } else {
           await this.target.remove(join(directory, file));
@@ -529,6 +535,7 @@ export class StorageManager<TRoot = unknown> {
       mode,
       objectIds,
       allObjectIds: sortedObjectIds(envelope),
+      baseObjectVersions: this.persistedObjectVersions,
       targetCount: targets.length,
       lock,
     });
@@ -673,6 +680,7 @@ export class StorageManager<TRoot = unknown> {
         mode: prepare.mode,
         targetCount: prepare.targetCount,
         lock,
+        objectVersions: new Map(Object.keys(prepare.envelope.nodes).map((objectId) => [objectId, prepare.transactionId])),
       });
       this.recoveredFrom = "wal";
     }
@@ -685,12 +693,12 @@ export class StorageManager<TRoot = unknown> {
       this.rootValue = this.fillCustomRoot(loadedRoot, loaded.envelope);
       this.transactionId = loaded.transactionId;
       this.recoveredFrom = loaded.source;
-      this.replacePersistedObjectIds(Object.keys(loaded.envelope.nodes));
+      this.replacePersistedObjectVersions(loaded.objectVersions);
     } else {
       this.rootValue = this.options.rootFactory();
       this.transactionId = 0;
       this.recoveredFrom = "empty";
-      this.replacePersistedObjectIds([]);
+      this.replacePersistedObjectVersions(new Map());
     }
     this.bindLazyRefs(this.rootValue);
   }
@@ -714,6 +722,7 @@ export class StorageManager<TRoot = unknown> {
       mode,
       objectIds,
       allObjectIds: sortedObjectIds(envelope),
+      baseObjectVersions: this.persistedObjectVersions,
       targetCount: objectIds.length,
       lock,
     });
@@ -768,15 +777,18 @@ export class StorageManager<TRoot = unknown> {
   private async repairObjectStoreFromEnvelope(envelope: SerializedEnvelope, transactionId: number): Promise<void> {
     const objectIds = Object.keys(envelope.nodes);
     await this.writer.writeObjectRecords(envelope, transactionId, objectIds);
-    await this.writer.writeManifest(envelope, transactionId);
+    const objectVersions = new Map(objectIds.map((objectId) => [objectId, transactionId]));
+    await this.writer.writeManifest(envelope, transactionId, objectVersions);
     await this.writer.writeParentIndex(envelope, transactionId);
-    this.replacePersistedObjectIds(objectIds);
+    this.replacePersistedObjectVersions(objectVersions);
   }
 
-  private replacePersistedObjectIds(objectIds: Iterable<string>): void {
+  private replacePersistedObjectVersions(objectVersions: ReadonlyMap<string, number>): void {
     this.persistedObjectIds.clear();
-    for (const objectId of objectIds) {
+    this.persistedObjectVersions.clear();
+    for (const [objectId, transactionId] of objectVersions) {
       this.persistedObjectIds.add(objectId);
+      this.persistedObjectVersions.set(objectId, transactionId);
     }
   }
 
@@ -905,4 +917,13 @@ function replaceObjectContents(target: object, source: object): void {
     delete (target as Record<string, unknown>)[key];
   }
   Object.assign(target, source);
+}
+
+function liveObjectRecordFiles(manifest: { objectIds: string[]; transactionId: number; objectVersions?: Record<string, number> }, extension: "json" | "bin"): Set<string> {
+  const files = new Set<string>();
+  for (const objectId of manifest.objectIds) {
+    files.add(`${objectId}.${extension}`);
+    files.add(`${objectId}.${manifest.objectVersions?.[objectId] ?? manifest.transactionId}.${extension}`);
+  }
+  return files;
 }

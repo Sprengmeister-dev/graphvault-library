@@ -8,6 +8,8 @@ GraphVault always has a logical `storageDirectory`. With the default local targe
 
 This is the default. It writes manifests, object records, binary object records, snapshots, transactions, and lock files below the directory.
 
+Object records are transaction-versioned. The manifest stores the live object id list plus the transaction version to read for each object, which lets garbage collection remove old versions while preserving crash-safe manifest reads.
+
 ```ts
 const storage = await EmbeddedStorage.start({
   storageDirectory: "./data",

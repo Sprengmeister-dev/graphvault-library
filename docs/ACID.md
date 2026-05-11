@@ -31,6 +31,7 @@ const storage = await EmbeddedStorage.start({
 - `transactionLog: "full"` writes a WAL prepare record with the serialized graph before publishing commit metadata.
 - GraphVault writes a commit marker only after the graph data has been written.
 - After the commit marker, GraphVault writes the transaction record, parent index, and `CURRENT` pointer before publishing `manifest.json` last.
+- Object records are transaction-versioned and the manifest points to the exact object version for every live object. A crash cannot make an old manifest accidentally read a newly overwritten child record.
 - On restart, `recoverCommittedWal: true` finishes any committed-but-not-published WAL entry under the shared writer lock.
 - `readCommittedWal: true` lets read-only managers see the latest committed WAL entry even before a writer has repaired the manifest.
 - `verify()` checks WAL prepare/commit pairs and reports committed WAL entries that are recoverable but not yet published through manifest metadata.
