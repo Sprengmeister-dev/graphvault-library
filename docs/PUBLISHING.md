@@ -2,6 +2,20 @@
 
 This checklist keeps package releases boring and repeatable.
 
+## Release Discipline
+
+Do not publish every fix immediately. Normal feature work and UI/product polish should stay as regular commits on `main` until a maintainer explicitly asks for a release.
+
+Use this rhythm:
+
+1. Implement one or more changes.
+2. Run the relevant local checks.
+3. Commit and push to `main`.
+4. Keep `package.json` at the latest published version until release preparation starts.
+5. Only when a release is requested, bump the package version, update the changelog/release notes, tag the exact commit, and publish once.
+
+This avoids noisy npm patch releases and keeps the installable package aligned with intentional release milestones instead of every small iteration.
+
 ## Preconditions
 
 - The package name is final for the release.
@@ -44,6 +58,8 @@ git push origin v0.2.0
 Use the GitHub Actions `Release` workflow with the matching tag input, for example `v0.2.0`.
 
 The workflow checks out the tag, installs with `npm ci`, runs tests, runs the benchmark regression gate, validates the npm tarball with `npm run pack:dry-run`, installs the tarball in a clean smoke project, and publishes with npm provenance.
+
+Only run the release workflow after the tag is intentionally created for a batched release. Do not use it as part of ordinary development or small follow-up fixes.
 
 ## Repository Visibility
 
