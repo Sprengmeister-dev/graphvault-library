@@ -10,6 +10,8 @@ import type {
   StorageTarget,
   TransactionRecord,
   TypeDictionaryEntry,
+  WalCommitRecord,
+  WalPrepareRecord,
 } from "../core/types.js";
 
 const OBJECT_RECORD_WRITE_CONCURRENCY = 32;
@@ -86,6 +88,18 @@ export class StorageWriter {
     await this.writeJson(join(this.layout.transactionsDirectory, journalFile), record);
     await this.target.appendText(this.layout.journalFile, `${JSON.stringify(record)}\n`);
     return journalFile;
+  }
+
+  async writeWalPrepare(record: WalPrepareRecord): Promise<string> {
+    const file = `transaction-${String(record.transactionId).padStart(12, "0")}.prepare.json`;
+    await this.writeJson(join(this.layout.walDirectory, file), record);
+    return file;
+  }
+
+  async writeWalCommit(record: WalCommitRecord): Promise<string> {
+    const file = `transaction-${String(record.transactionId).padStart(12, "0")}.commit.json`;
+    await this.writeJson(join(this.layout.walDirectory, file), record);
+    return file;
   }
 
   async writeTypeDictionary(types: TypeDictionaryEntry[]): Promise<void> {

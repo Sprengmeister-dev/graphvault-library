@@ -6,7 +6,7 @@ export class Storer {
   private committed = false;
 
   constructor(
-    private readonly manager: StorageManager,
+    private readonly manager: StorageManager<any>,
     readonly mode: StoreMode,
   ) {}
 

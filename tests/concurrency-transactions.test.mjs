@@ -224,5 +224,82 @@ await assert.rejects(() => staleWriter.storeRoot(), StorageLockError);
 await freshWriter.shutdown();
 await staleWriter.shutdown();
 
+class FailManifestAfterWalTarget extends MemoryStorageTarget {
+  constructor() {
+    super();
+    this.commitMarkerWritten = false;
+    this.failedManifest = false;
+  }
+
+  async writeTextAtomic(path, value) {
+    if (path.includes("/wal/") && path.endsWith(".commit.json")) {
+      this.commitMarkerWritten = true;
+    }
+    if (this.commitMarkerWritten && !this.failedManifest && path.endsWith("manifest.json")) {
+      this.failedManifest = true;
+      throw new Error("simulated crash after WAL commit");
+    }
+    await super.writeTextAtomic(path, value);
+  }
+}
+
+const walRecoveryTarget = new FailManifestAfterWalTarget();
+const crashingWriter = await EmbeddedStorage.start({
+  storageDirectory: "wal-recovery",
+  storageTarget: walRecoveryTarget,
+  lockStrategy: "pessimistic",
+  rootFactory: () => ({ items: [] }),
+});
+crashingWriter.root.items.push("committed-via-wal");
+await assert.rejects(() => crashingWriter.storeRoot(), /simulated crash after WAL commit/);
+await crashingWriter.shutdown();
+
+const readOnlyWalView = await EmbeddedStorage.start({
+  storageDirectory: "wal-recovery",
+  storageTarget: walRecoveryTarget,
+  readOnly: true,
+  rootFactory: () => ({ items: [] }),
+});
+assert.deepEqual(readOnlyWalView.root.items, ["committed-via-wal"]);
+await readOnlyWalView.shutdown();
+
+const recoveringWriter = await EmbeddedStorage.start({
+  storageDirectory: "wal-recovery",
+  storageTarget: walRecoveryTarget,
+  lockStrategy: "pessimistic",
+  rootFactory: () => ({ items: [] }),
+});
+assert.deepEqual(recoveringWriter.root.items, ["committed-via-wal"]);
+await recoveringWriter.shutdown();
+
+const validatorTarget = new MemoryStorageTarget();
+const validatedStorage = await EmbeddedStorage.start({
+  storageDirectory: "commit-validator",
+  storageTarget: validatorTarget,
+  rootFactory: () => ({ documents: [{ id: "doc-1", status: "draft" }] }),
+  commitValidators: [
+    ({ root }) => {
+      if (root.documents.some((document) => document.status === "invalid")) {
+        throw new Error("invalid document status");
+      }
+    },
+  ],
+});
+validatedStorage.root.documents[0].status = "invalid";
+await assert.rejects(() => validatedStorage.storeRoot(), /invalid document status/);
+assert.deepEqual(await validatorTarget.list("commit-validator/wal"), []);
+await validatedStorage.shutdown();
+
+const walOffTarget = new MemoryStorageTarget();
+const walOffStorage = await EmbeddedStorage.start({
+  storageDirectory: "wal-off",
+  storageTarget: walOffTarget,
+  transactionLog: "off",
+  rootFactory: () => ({ value: 1 }),
+});
+await walOffStorage.storeRoot();
+assert.deepEqual(await walOffTarget.list("wal-off/wal"), []);
+await walOffStorage.shutdown();
+
 await writerB.shutdown();
 await writerA.shutdown();

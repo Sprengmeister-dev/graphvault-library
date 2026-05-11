@@ -56,6 +56,10 @@ Main runtime API.
 - `staleLockTimeoutMs`: optional crash recovery for leftover writer locks; recovered locks receive newer fencing tokens.
 - `lockStrategy`: `startup`, `pessimistic`, or `optimistic`.
 - `optimisticMaxRetries` / `optimisticRetryDelayMs`: retry policy for optimistic transactions.
+- `transactionLog`: `full` by default for WAL-based crash recovery, or `off` for disposable high-throughput stores.
+- `recoverCommittedWal`: finishes committed WAL entries at startup; defaults to `true` when WAL is enabled.
+- `readCommittedWal`: allows readers to load committed WAL entries before manifest repair; defaults to `true`.
+- `commitValidators`: application invariants that must pass before WAL prepare and commit.
 - `housekeepingIntervalMs`: periodic maintenance interval.
 - `writeProfile`: `standard`, `fast`, or `maximum` write throughput profile.
 - `writeDurability`: `strict` for fsynced local atomic writes, `relaxed` for higher throughput.

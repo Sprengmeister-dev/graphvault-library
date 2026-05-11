@@ -7,6 +7,8 @@
 - Add pessimistic transactions with short-lived writer locks for multi-pod writes.
 - Add `@GraphVaultTransactional()` for NestJS service methods.
 - Add fencing tokens for writer locks so stale recovered writers cannot publish old commits or release newer locks.
+- Add configurable WAL-based crash recovery with `transactionLog`, `recoverCommittedWal`, and `readCommittedWal`.
+- Add `commitValidators` for application-level consistency gates before WAL prepare.
 - Add concurrency tests that exercise two managers writing to the same store.
 
 ## 0.1.0

@@ -1,11 +1,21 @@
 import { join } from "node:path";
 import { decodeBinaryRecord } from "../core/binary-codec.js";
 import type { StorageLayout } from "./storage-layout.js";
-import type { ObjectRecord, ParentIndexRecord, SerializedEnvelope, StorageManifest, StorageTarget, TransactionRecord } from "../core/types.js";
+import type {
+  ObjectRecord,
+  ParentIndexRecord,
+  SerializedEnvelope,
+  StorageManifest,
+  StorageTarget,
+  TransactionRecord,
+  WalCommitRecord,
+  WalPrepareRecord,
+} from "../core/types.js";
 
 export type LoadedEnvelope =
   | { source: "manifest"; envelope: SerializedEnvelope; transactionId: number }
-  | { source: "snapshot"; envelope: SerializedEnvelope; transactionId: number };
+  | { source: "snapshot"; envelope: SerializedEnvelope; transactionId: number }
+  | { source: "wal"; envelope: SerializedEnvelope; transactionId: number };
 
 export class StorageReader {
   constructor(
@@ -13,8 +23,14 @@ export class StorageReader {
     private readonly layout: StorageLayout,
   ) {}
 
-  async loadExistingEnvelope(): Promise<LoadedEnvelope | undefined> {
+  async loadExistingEnvelope(options: { includeWal?: boolean } = {}): Promise<LoadedEnvelope | undefined> {
     const manifest = await this.readManifest();
+    if (options.includeWal ?? true) {
+      const latestWal = await this.readLatestCommittedWalEnvelope();
+      if (latestWal && latestWal.transactionId > (manifest?.transactionId ?? 0)) {
+        return latestWal;
+      }
+    }
     if (manifest) {
       try {
         const transaction = await this.readLatestTransactionRecord();
@@ -43,6 +59,17 @@ export class StorageReader {
     };
   }
 
+  private async readLatestCommittedWalEnvelope(): Promise<LoadedEnvelope | undefined> {
+    const commits = await this.readCommittedWalRecords();
+    for (const commit of commits.sort((a, b) => b.transactionId - a.transactionId)) {
+      const prepare = await this.readWalPrepareRecord(commit.prepareFile);
+      if (prepare && prepare.transactionId === commit.transactionId) {
+        return { source: "wal", envelope: prepare.envelope, transactionId: prepare.transactionId };
+      }
+    }
+    return undefined;
+  }
+
   async readLatestTransactionRecord(): Promise<TransactionRecord | undefined> {
     const records: TransactionRecord[] = [];
     for (const file of await this.readDirectoryIfExists(this.layout.transactionsDirectory)) {
@@ -59,6 +86,36 @@ export class StorageReader {
       }
     }
     return records.sort((a, b) => b.transactionId - a.transactionId)[0];
+  }
+
+  async readCommittedWalRecords(): Promise<WalCommitRecord[]> {
+    const records: WalCommitRecord[] = [];
+    for (const file of await this.readDirectoryIfExists(this.layout.walDirectory)) {
+      if (!file.endsWith(".commit.json")) {
+        continue;
+      }
+      try {
+        const record = JSON.parse(await this.target.readText(join(this.layout.walDirectory, file))) as WalCommitRecord;
+        if (record.format === "graphvault-wal" && record.status === "committed") {
+          records.push(record);
+        }
+      } catch {
+        // Ignore incomplete WAL commit files.
+      }
+    }
+    return records.sort((a, b) => a.transactionId - b.transactionId);
+  }
+
+  async readWalPrepareRecord(file: string): Promise<WalPrepareRecord | undefined> {
+    try {
+      const record = JSON.parse(await this.target.readText(join(this.layout.walDirectory, file))) as WalPrepareRecord;
+      if (record.format === "graphvault-wal" && record.status === "prepared") {
+        return record;
+      }
+    } catch {
+      return undefined;
+    }
+    return undefined;
   }
 
   async readCurrentPointer(): Promise<string | undefined> {

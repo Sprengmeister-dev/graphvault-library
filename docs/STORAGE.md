@@ -123,6 +123,10 @@ const storage = await EmbeddedStorage.start({
   channelCount: 4,
   lockTimeoutMs: 10_000,
   staleLockTimeoutMs: 120_000,
+  transactionLog: "full",
+  recoverCommittedWal: true,
+  readCommittedWal: true,
+  writeDurability: "strict",
   housekeepingIntervalMs: 60_000,
 });
 ```
@@ -131,6 +135,10 @@ const storage = await EmbeddedStorage.start({
 - `lockTimeoutMs`: how long a writer waits for the single-writer lock.
 - `staleLockTimeoutMs`: optional crash recovery; after this age a leftover lock may be removed. Keep it above your longest expected transaction runtime. Recovered locks get newer fencing tokens, and stale writers are rejected before commit metadata is published.
 - `lockStrategy`: `startup`, `pessimistic`, or `optimistic`. Use `pessimistic` or `optimistic` for shared stores with several pods.
+- `transactionLog`: `full` enables WAL prepare/commit records; `off` skips WAL for disposable high-throughput stores.
+- `recoverCommittedWal`: repairs committed-but-not-published WAL entries under the writer lock.
+- `readCommittedWal`: lets readers load the newest committed WAL entry even before repair has published manifest metadata.
+- `commitValidators`: application-level consistency checks that run before WAL prepare.
 - `optimisticMaxRetries` and `optimisticRetryDelayMs`: retry policy for optimistic transactions.
 - `housekeepingIntervalMs`: enables periodic garbage collection and maintenance work.
 - `readOnly`: opens a store without acquiring a writer lock or mutating files.

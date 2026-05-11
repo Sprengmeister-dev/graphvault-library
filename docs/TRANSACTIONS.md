@@ -49,6 +49,9 @@ const storage = await EmbeddedStorage.start({
   optimisticRetryDelayMs: 25,
   lockTimeoutMs: 10_000,
   staleLockTimeoutMs: 120_000,
+  transactionLog: "full",
+  recoverCommittedWal: true,
+  readCommittedWal: true,
 });
 ```
 
@@ -61,6 +64,8 @@ Available strategies:
 `staleLockTimeoutMs` is optional crash recovery for shared stores. If a pod dies while holding the writer lock, a later writer may break that lock after the configured age. Set this value higher than the longest transaction you expect to allow; too low a value can let another writer break a still-valid long-running transaction.
 
 Every acquired writer lock also receives a monotonically increasing fencing token. GraphVault validates that token before publishing commit metadata. If a paused pod continues after another writer has recovered the stale lock and acquired a newer token, the old pod fails with `StorageLockError` instead of publishing an outdated commit. Lock release is token-aware too, so an old writer cannot accidentally delete a newer writer's lock.
+
+With `transactionLog: "full"`, GraphVault uses WAL prepare/commit records for crash recovery. A committed WAL entry is durable even if the process crashes before manifest metadata is published; the next writer repairs it under the shared lock, and readers can load the committed WAL envelope when `readCommittedWal` is enabled.
 
 Direct `store(...)`, `storeRoot()`, and `storeAll(...)` still perform a commit-version check before writing when no startup lock is held. For shared stores, prefer `transaction(...)` because it gives you a fresh root, rollback, retry behavior, and full-graph transactional persistence.
 

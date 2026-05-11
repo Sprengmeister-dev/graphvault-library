@@ -82,6 +82,8 @@ For multi-pod deployments where several instances of the same application share 
 - Every writer lock carries a monotonically increasing fencing token. Before GraphVault publishes commit metadata, it verifies that the token still owns the lock, so a pod that wakes up after its stale lock was replaced cannot publish an old write.
 - `staleLockTimeoutMs` can recover a lock left behind by a crashed pod; set it above your expected maximum transaction runtime.
 
+For ACID-oriented deployments, use `transactionLog: "full"`, `recoverCommittedWal: true`, `readCommittedWal: true`, `writeDurability: "strict"`, and application-specific `commitValidators`.
+
 For NestJS services, `@GraphVaultTransactional()` wraps a service method in the same commit/rollback and locking behavior.
 
 ## Why Use This Instead Of A Normal Database?
@@ -173,6 +175,7 @@ Then open `http://127.0.0.1:4177`.
 ## Documentation
 
 - [Usage guide](./docs/USAGE.md) - modeling roots, registering classes, writing data, lazy data, verification, and lifecycle.
+- [ACID configuration](./docs/ACID.md) - WAL, recovery, fencing tokens, validators, and durability tradeoffs.
 - [GVQL guide](./docs/GVQL.md) - graph queries, indexed filtering, aggregates, execution plans, and mutation previews.
 - [Transactions and concurrency](./docs/TRANSACTIONS.md) - optimistic and pessimistic locking for multi-pod writers.
 - [Storage configuration](./docs/STORAGE.md) - local filesystem, memory, HTTP, S3-compatible, SQL, and operational options.

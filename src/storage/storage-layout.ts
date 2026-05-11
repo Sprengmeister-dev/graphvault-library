@@ -53,6 +53,10 @@ export class StorageLayout {
     return join(this.storageDirectory, "transactions");
   }
 
+  get walDirectory(): string {
+    return join(this.storageDirectory, "wal");
+  }
+
   get channelsDirectory(): string {
     return join(this.storageDirectory, "channels");
   }
@@ -95,6 +99,14 @@ export class StorageLayout {
       throw new CorruptStorageError(`Invalid snapshot pointer "${snapshotFile}".`);
     }
     return Number(match[1]);
+  }
+
+  walPrepareFile(transactionId: number): string {
+    return join(this.walDirectory, `transaction-${String(transactionId).padStart(12, "0")}.prepare.json`);
+  }
+
+  walCommitFile(transactionId: number): string {
+    return join(this.walDirectory, `transaction-${String(transactionId).padStart(12, "0")}.commit.json`);
   }
 
   private channelDirectoryFor(objectId: string): string {

@@ -47,6 +47,30 @@ export interface TransactionRecord {
   targetCount: number;
 }
 
+export interface WalPrepareRecord {
+  format: "graphvault-wal";
+  version: 1;
+  status: "prepared";
+  transactionId: number;
+  preparedAt: string;
+  snapshotFile: string;
+  objectIds: string[];
+  mode: StoreMode;
+  targetCount: number;
+  envelope: SerializedEnvelope;
+}
+
+export interface WalCommitRecord {
+  format: "graphvault-wal";
+  version: 1;
+  status: "committed";
+  transactionId: number;
+  committedAt: string;
+  prepareFile: string;
+}
+
+export type WalRecord = WalPrepareRecord | WalCommitRecord;
+
 export interface TypeDictionary {
   format: "graphvault-type-dictionary";
   version: 1;
@@ -134,7 +158,17 @@ export interface StorageManagerOptions<TRoot = unknown> {
   lockStrategy?: StorageLockStrategy;
   optimisticMaxRetries?: number;
   optimisticRetryDelayMs?: number;
+  commitValidators?: Array<StorageCommitValidator<TRoot>>;
+  transactionLog?: StorageTransactionLogMode;
+  recoverCommittedWal?: boolean;
+  readCommittedWal?: boolean;
 }
+
+export type StorageCommitValidator<TRoot = unknown> = (context: {
+  root: TRoot;
+  envelope: SerializedEnvelope;
+  transactionId: number;
+}) => void | Promise<void>;
 
 export interface StorageTarget {
   ensureDirectory(path: string): Promise<void>;
@@ -196,7 +230,7 @@ export interface StorageStatus {
   storageDirectory: string;
   transactionId: number;
   hasRoot: boolean;
-  recoveredFrom?: "manifest" | "snapshot" | "empty";
+  recoveredFrom?: "manifest" | "snapshot" | "wal" | "empty";
   housekeepingActive: boolean;
   registeredTypes: number;
   channelCount: number;
@@ -251,6 +285,8 @@ export type StorageWriteDurability = "strict" | "relaxed";
 export type StorageLockStrategy = "startup" | "pessimistic" | "optimistic";
 
 export type TransactionLockMode = "pessimistic" | "optimistic";
+
+export type StorageTransactionLogMode = "full" | "off";
 
 export type EagerFieldEvaluator = (context: {
   owner: object;
