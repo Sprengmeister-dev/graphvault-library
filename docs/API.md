@@ -29,6 +29,7 @@ Main runtime API.
 - `createStorer()`: batches several store targets into one commit.
 - `createLazyRef(key, value)`: creates and stores lazy data.
 - `loadLazy(key)` / `storeLazy(key, value)`: low-level lazy value access.
+- `operations()`: returns lightweight monitoring state such as WAL counts, pending recovery, latest manifest/journal transaction ids, lock strategy, and object count.
 - `verify()`: validates manifest, transactions, transaction hash chain, WAL prepare/commit records, object records, references, and lazy files.
 - `maintain(options)`: garbage collection, compaction, and optional verification.
 - `compact(keepLatest)`: removes older snapshots.

@@ -142,6 +142,9 @@ attachment.clear();
 ### Verification, Maintenance, And Backup
 
 ```ts
+const operations = await storage.operations();
+console.log(operations.status, operations.pendingWalCommits);
+
 const verification = await storage.verify();
 if (!verification.ok) {
   throw new Error(verification.errors.join("\n"));

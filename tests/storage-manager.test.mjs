@@ -24,6 +24,15 @@ try {
   const verified = await writeable.verify();
   assert.equal(verified.ok, true);
   assert.equal(verified.checkedObjects >= 2, true);
+  const operations = await writeable.operations();
+  assert.equal(operations.status, "healthy");
+  assert.equal(operations.publishedTransactionId, 1);
+  assert.equal(operations.latestJournalTransactionId, 1);
+  assert.equal(operations.pendingWalCommits, 0);
+  assert.equal(operations.walPrepareFiles, 1);
+  assert.equal(operations.walCommitFiles, 1);
+  assert.equal(operations.objectCount >= 2, true);
+  assert.equal(typeof operations.latestTransactionHash, "string");
   await writeable.gvql('MATCH (doc) WHERE doc.id = "doc-1" SET doc.title = "First updated"');
   const updated = await writeable.gvql('MATCH (doc) WHERE doc.id = "doc-1" RETURN doc.title AS title');
   assert.equal(updated.rows[0].title, "First updated");

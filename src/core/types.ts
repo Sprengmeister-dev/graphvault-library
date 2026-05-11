@@ -254,6 +254,26 @@ export interface StorageStatus {
   lockStrategy: StorageLockStrategy;
 }
 
+export interface StorageOperationsStatus {
+  status: "healthy" | "recovery-pending";
+  storageDirectory: string;
+  readOnly: boolean;
+  lockStrategy: StorageLockStrategy;
+  transactionLog: StorageTransactionLogMode;
+  lockTimeoutMs: number;
+  staleLockTimeoutMs?: number;
+  channelCount: number;
+  recoveredFrom?: "manifest" | "snapshot" | "wal" | "empty";
+  publishedTransactionId: number;
+  latestJournalTransactionId: number;
+  latestWalTransactionId: number;
+  pendingWalCommits: number;
+  walPrepareFiles: number;
+  walCommitFiles: number;
+  objectCount: number;
+  latestTransactionHash?: string;
+}
+
 export interface CompactionResult {
   kept: number;
   removed: number;

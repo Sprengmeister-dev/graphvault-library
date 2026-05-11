@@ -128,6 +128,17 @@ Restore procedure:
 
 ## Verification And Monitoring
 
+Use `operations()` for cheap readiness and monitoring checks:
+
+```ts
+const ops = await storage.operations();
+if (ops.status !== "healthy" || ops.pendingWalCommits > 0) {
+  throw new Error("GraphVault recovery is pending.");
+}
+```
+
+`operations()` does not replace `verify()`. It is intended for frequent operational signals: WAL prepare/commit counts, pending committed WAL, latest manifest and journal transaction ids, lock strategy, transaction-log mode, object count, and the latest transaction hash.
+
 Run `verify()`:
 
 - after restore
@@ -148,6 +159,7 @@ Important fields:
 
 Alert if:
 
+- `operations().status` is `recovery-pending`
 - `ok` is false
 - `pendingWalCommits` stays above zero after a writer restart
 - `checkedIntegrityHashes` unexpectedly drops to zero on a critical store

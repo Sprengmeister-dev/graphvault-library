@@ -256,6 +256,10 @@ const recoverableVerification = await crashingWriter.verify();
 assert.equal(recoverableVerification.ok, true);
 assert.equal(recoverableVerification.pendingWalCommits, 1);
 assert.equal(recoverableVerification.warnings.some((warning) => warning.includes("committed WAL")), true);
+const recoverableOperations = await crashingWriter.operations();
+assert.equal(recoverableOperations.status, "recovery-pending");
+assert.equal(recoverableOperations.pendingWalCommits, 1);
+assert.equal(recoverableOperations.latestWalTransactionId, 1);
 await crashingWriter.shutdown();
 
 const readOnlyWalView = await EmbeddedStorage.start({
@@ -278,6 +282,10 @@ const recoveredVerification = await recoveringWriter.verify();
 assert.equal(recoveredVerification.ok, true);
 assert.equal(recoveredVerification.pendingWalCommits, 0);
 assert.equal(recoveredVerification.checkedWalRecords >= 2, true);
+const recoveredOperations = await recoveringWriter.operations();
+assert.equal(recoveredOperations.status, "healthy");
+assert.equal(recoveredOperations.pendingWalCommits, 0);
+assert.equal(recoveredOperations.publishedTransactionId, 1);
 await recoveringWriter.shutdown();
 
 const validatorTarget = new MemoryStorageTarget();

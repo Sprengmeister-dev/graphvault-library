@@ -21,6 +21,7 @@ import type {
   StorageManagerOptions,
   StorageLockOptions,
   StorageStatus,
+  StorageOperationsStatus,
   StorageTarget,
   StorageTargetLock,
   StoreMetadata,
@@ -477,6 +478,35 @@ export class StorageManager<TRoot = unknown> {
       registeredTypes: this.serializer.types.entries().length,
       channelCount: this.layout.channelCount,
       lockStrategy: this.lockStrategy,
+    };
+  }
+
+  async operations(): Promise<StorageOperationsStatus> {
+    const manifest = await this.reader.readManifest();
+    const latestTransaction = await this.reader.readLatestTransactionRecord();
+    const walFiles = await this.reader.readDirectoryIfExists(this.layout.walDirectory);
+    const committedWal = await this.reader.readCommittedWalRecords();
+    const publishedTransactionId = manifest?.transactionId ?? 0;
+    const latestWalTransactionId = committedWal.reduce((latest, record) => Math.max(latest, record.transactionId), 0);
+    const pendingWalCommits = committedWal.filter((record) => record.transactionId > publishedTransactionId).length;
+    return {
+      status: pendingWalCommits > 0 ? "recovery-pending" : "healthy",
+      storageDirectory: this.options.storageDirectory,
+      readOnly: this.options.readOnly ?? false,
+      lockStrategy: this.lockStrategy,
+      transactionLog: this.options.transactionLog ?? "full",
+      lockTimeoutMs: this.options.lockTimeoutMs,
+      ...(this.options.staleLockTimeoutMs ? { staleLockTimeoutMs: this.options.staleLockTimeoutMs } : {}),
+      channelCount: this.layout.channelCount,
+      ...(this.recoveredFrom ? { recoveredFrom: this.recoveredFrom } : {}),
+      publishedTransactionId,
+      latestJournalTransactionId: latestTransaction?.transactionId ?? 0,
+      latestWalTransactionId,
+      pendingWalCommits,
+      walPrepareFiles: walFiles.filter((file) => file.endsWith(".prepare.json")).length,
+      walCommitFiles: walFiles.filter((file) => file.endsWith(".commit.json")).length,
+      objectCount: manifest?.objectIds.length ?? 0,
+      ...(manifest?.latestTransactionHash ? { latestTransactionHash: manifest.latestTransactionHash } : {}),
     };
   }
 

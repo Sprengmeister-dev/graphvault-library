@@ -114,6 +114,7 @@ export type {
   MaintenanceOptions,
   StorageManagerOptions,
   StorageCommitValidator,
+  StorageOperationsStatus,
   StorageStatus,
   StorageTarget,
   StorageTargetLock,
