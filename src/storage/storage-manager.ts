@@ -5,6 +5,8 @@ import { StorageLayout } from "./storage-layout.js";
 import { StorageReader } from "./storage-reader.js";
 import { verifyStorage } from "./storage-verifier.js";
 import { StorageWriter } from "./storage-writer.js";
+import { StorageCommitter, sortedObjectIds } from "./storage-committer.js";
+import { resolveStorageWriteOptions, type ResolvedStorageWriteOptions } from "./storage-write-options.js";
 import { copyStorageTargetTree, LocalFilesystemTarget } from "./storage-target.js";
 import { Storer } from "./storer.js";
 import { LazyRef } from "../lazy/lazy-ref.js";
@@ -23,10 +25,6 @@ import type {
   StorageTargetLock,
   StoreMetadata,
   StoreMode,
-  StorageWriteDurability,
-  StorageWriteProfile,
-  ObjectRecordWriteFormat,
-  TransactionRecord,
   GraphVaultTransactionContext,
   GraphVaultTransactionOptions,
   GraphVaultTransactionResult,
@@ -45,6 +43,7 @@ export class StorageManager<TRoot = unknown> {
   private readonly layout: StorageLayout;
   private readonly reader: StorageReader;
   private readonly writer: StorageWriter;
+  private readonly committer: StorageCommitter;
   private readonly writeOptions: ResolvedStorageWriteOptions;
   private readonly mutex = new AsyncMutex();
   private rootValue?: TRoot;
@@ -65,6 +64,19 @@ export class StorageManager<TRoot = unknown> {
     this.target = options.storageTarget ?? new LocalFilesystemTarget({ syncWrites: this.writeOptions.durability === "strict" });
     this.reader = new StorageReader(this.target, this.layout);
     this.writer = new StorageWriter(this.target, this.layout, this.writeOptions);
+    this.committer = new StorageCommitter({
+      target: this.target,
+      layout: this.layout,
+      writer: this.writer,
+      writeOptions: this.writeOptions,
+      transactionLogEnabled: () => this.transactionLogEnabled,
+      validateCommit: (envelope, transactionId) => this.runCommitValidators(envelope, transactionId),
+      beforePublish: () => this.writeTypeDictionaryIfChanged(),
+      commitState: (transactionId, objectIds) => {
+        this.transactionId = transactionId;
+        this.replacePersistedObjectIds(objectIds);
+      },
+    });
   }
 
   get root(): TRoot {
@@ -509,45 +521,17 @@ export class StorageManager<TRoot = unknown> {
   private async storeLocked(mode: StoreMode, targets: readonly unknown[], lock: StorageTargetLock): Promise<StoreMetadata> {
     this.bindLazyRefs(this.rootValue);
     await this.storeLoadedLazyRefs(this.rootValue);
-    const nextTransactionId = this.transactionId + 1;
     const envelope = this.serializer.serialize(this.rootValue);
-    const snapshotFile = `snapshot-${String(nextTransactionId).padStart(12, "0")}.json`;
-    const snapshotPath = join(this.layout.snapshotsDirectory, snapshotFile);
     const objectIds = mode === "eager" ? Object.keys(envelope.nodes) : this.collectObjectIds(envelope, targets);
-    await this.runCommitValidators(envelope, nextTransactionId);
-    let prepareFile: string | undefined;
-    if (this.transactionLogEnabled) {
-      prepareFile = await this.writer.writeWalPrepare({
-        format: "graphvault-wal",
-        version: 1,
-        status: "prepared",
-        transactionId: nextTransactionId,
-        preparedAt: new Date().toISOString(),
-        snapshotFile,
-        objectIds: Object.keys(envelope.nodes).sort((a, b) => Number(a) - Number(b)),
-        mode,
-        targetCount: targets.length,
-        envelope,
-      });
-    }
-    await this.writer.writeObjectRecords(envelope, nextTransactionId, objectIds);
-    await this.writeTypeDictionaryIfChanged();
-    if (this.writeOptions.writeSnapshots) {
-      await this.writer.writeJson(snapshotPath, envelope);
-    }
-    await lock.assertValid();
-    if (prepareFile) {
-      await this.writer.writeWalCommit({
-        format: "graphvault-wal",
-        version: 1,
-        status: "committed",
-        transactionId: nextTransactionId,
-        committedAt: new Date().toISOString(),
-        prepareFile,
-      });
-    }
-    const journalFile = await this.publishPreparedCommitLocked(envelope, nextTransactionId, snapshotFile, mode, targets.length, lock);
-    return { transactionId: nextTransactionId, storedAt: new Date(), snapshotFile, journalFile, mode, objectCount: targets.length, objectIds };
+    return this.committer.commitEnvelope({
+      envelope,
+      baseTransactionId: this.transactionId,
+      mode,
+      objectIds,
+      allObjectIds: sortedObjectIds(envelope),
+      targetCount: targets.length,
+      lock,
+    });
   }
 
   private async pessimisticTransaction<T>(
@@ -682,47 +666,16 @@ export class StorageManager<TRoot = unknown> {
       if (this.writeOptions.writeSnapshots) {
         await this.writer.writeJson(join(this.layout.snapshotsDirectory, prepare.snapshotFile), prepare.envelope);
       }
-      await this.publishPreparedCommitLocked(
-        prepare.envelope,
-        prepare.transactionId,
-        prepare.snapshotFile,
-        prepare.mode,
-        prepare.targetCount,
+      await this.committer.publishPreparedCommit({
+        envelope: prepare.envelope,
+        transactionId: prepare.transactionId,
+        snapshotFile: prepare.snapshotFile,
+        mode: prepare.mode,
+        targetCount: prepare.targetCount,
         lock,
-      );
+      });
       this.recoveredFrom = "wal";
     }
-  }
-
-  private async publishPreparedCommitLocked(
-    envelope: SerializedEnvelope,
-    transactionId: number,
-    snapshotFile: string,
-    mode: StoreMode,
-    targetCount: number,
-    lock: StorageTargetLock,
-  ): Promise<string> {
-    await lock.assertValid();
-    await this.writer.writeParentIndex(envelope, transactionId);
-    await this.writer.writeManifest(envelope, transactionId);
-    if (this.writeOptions.writeSnapshots) {
-      await lock.assertValid();
-      await this.target.writeTextAtomic(this.layout.currentFile, snapshotFile);
-    }
-    await lock.assertValid();
-    const journalFile = await this.writer.writeTransactionRecord({
-      format: "graphvault-transaction",
-      version: 1,
-      transactionId,
-      committedAt: new Date().toISOString(),
-      snapshotFile,
-      objectIds: Object.keys(envelope.nodes).sort((a, b) => Number(a) - Number(b)),
-      mode,
-      targetCount,
-    });
-    this.transactionId = transactionId;
-    this.replacePersistedObjectIds(Object.keys(envelope.nodes));
-    return journalFile;
   }
 
   private async reloadLatestLocked(): Promise<void> {
@@ -754,45 +707,16 @@ export class StorageManager<TRoot = unknown> {
     changedObjectIds: string[],
     lock: StorageTargetLock,
   ): Promise<StoreMetadata> {
-    const nextTransactionId = this.transactionId + 1;
-    const snapshotFile = `snapshot-${String(nextTransactionId).padStart(12, "0")}.json`;
-    const snapshotPath = join(this.layout.snapshotsDirectory, snapshotFile);
     const objectIds = Array.from(new Set(changedObjectIds.length ? changedObjectIds : Object.keys(envelope.nodes))).sort((a, b) => Number(a) - Number(b));
-    const allObjectIds = Object.keys(envelope.nodes).sort((a, b) => Number(a) - Number(b));
-    await this.runCommitValidators(envelope, nextTransactionId);
-    let prepareFile: string | undefined;
-    if (this.transactionLogEnabled) {
-      prepareFile = await this.writer.writeWalPrepare({
-        format: "graphvault-wal",
-        version: 1,
-        status: "prepared",
-        transactionId: nextTransactionId,
-        preparedAt: new Date().toISOString(),
-        snapshotFile,
-        objectIds: allObjectIds,
-        mode,
-        targetCount: objectIds.length,
-        envelope,
-      });
-    }
-    await this.writer.writeObjectRecords(envelope, nextTransactionId, objectIds);
-    await this.writeTypeDictionaryIfChanged();
-    if (this.writeOptions.writeSnapshots) {
-      await this.writer.writeJson(snapshotPath, envelope);
-    }
-    await lock.assertValid();
-    if (prepareFile) {
-      await this.writer.writeWalCommit({
-        format: "graphvault-wal",
-        version: 1,
-        status: "committed",
-        transactionId: nextTransactionId,
-        committedAt: new Date().toISOString(),
-        prepareFile,
-      });
-    }
-    const journalFile = await this.publishPreparedCommitLocked(envelope, nextTransactionId, snapshotFile, mode, objectIds.length, lock);
-    return { transactionId: nextTransactionId, storedAt: new Date(), snapshotFile, journalFile, mode, objectCount: objectIds.length, objectIds };
+    return this.committer.commitEnvelope({
+      envelope,
+      baseTransactionId: this.transactionId,
+      mode,
+      objectIds,
+      allObjectIds: sortedObjectIds(envelope),
+      targetCount: objectIds.length,
+      lock,
+    });
   }
 
   private collectObjectIds(envelope: SerializedEnvelope, targets: readonly unknown[]): string[] {
@@ -981,35 +905,4 @@ function replaceObjectContents(target: object, source: object): void {
     delete (target as Record<string, unknown>)[key];
   }
   Object.assign(target, source);
-}
-
-interface ResolvedStorageWriteOptions {
-  profile: StorageWriteProfile;
-  objectRecordFormat: ObjectRecordWriteFormat;
-  objectRecordWriteConcurrency: number;
-  prettyJson: boolean;
-  durability: StorageWriteDurability;
-  writeSnapshots: boolean;
-}
-
-function resolveStorageWriteOptions(options: StorageManagerOptions<any>): ResolvedStorageWriteOptions {
-  const profile = options.writeProfile ?? "standard";
-  return {
-    profile,
-    objectRecordFormat: options.objectRecordFormat ?? (profile === "standard" ? "binary-and-json" : "binary"),
-    objectRecordWriteConcurrency: options.objectRecordWriteConcurrency ?? defaultObjectRecordWriteConcurrency(profile),
-    prettyJson: options.prettyJson ?? profile === "standard",
-    durability: options.writeDurability ?? (profile === "standard" ? "strict" : "relaxed"),
-    writeSnapshots: options.writeSnapshots ?? profile !== "maximum",
-  };
-}
-
-function defaultObjectRecordWriteConcurrency(profile: StorageWriteProfile): number {
-  if (profile === "maximum") {
-    return 128;
-  }
-  if (profile === "fast") {
-    return 64;
-  }
-  return 32;
 }

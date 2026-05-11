@@ -9,6 +9,7 @@
 - Add fencing tokens for writer locks so stale recovered writers cannot publish old commits or release newer locks.
 - Add configurable WAL-based crash recovery with `transactionLog`, `recoverCommittedWal`, and `readCommittedWal`.
 - Extend verification with WAL prepare/commit checks, pending recovery counts, and warnings.
+- Split commit/WAL publishing and write-profile resolution into dedicated storage modules.
 - Add `commitValidators` for application-level consistency gates before WAL prepare.
 - Add concurrency tests that exercise two managers writing to the same store.
 
