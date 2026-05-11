@@ -89,3 +89,24 @@ await app.listen(3000);
 ```
 
 You can still call `await storage.shutdown()` directly in scripts, tests, and workers.
+
+### Transactional Service Methods
+
+Use `@GraphVaultTransactional()` for service methods that must commit several related mutations as one unit. The decorator wraps the method in `storage.transaction(...)`, so failures roll back the whole method and multiple pods/users get the same optimistic or pessimistic write protection as direct transaction calls.
+
+```ts
+import { Injectable } from "@nestjs/common";
+import { GraphVaultTransactional, StorageManager } from "@sprengmeister/graphvault";
+
+@Injectable()
+export class DocumentService {
+  constructor(readonly storage: StorageManager<AppRoot>) {}
+
+  @GraphVaultTransactional({ mode: "pessimistic", managerProperty: "storage" })
+  async approve(id: string): Promise<string> {
+    const document = this.storage.root.documents.find((item) => item.id === id);
+    document.status = "approved";
+    return document.status;
+  }
+}
+```

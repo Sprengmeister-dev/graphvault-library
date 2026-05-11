@@ -43,6 +43,7 @@ export type {
 } from "./gvql/gvql.js";
 export {
   GraphVaultModule,
+  GraphVaultTransactional,
   GRAPHVAULT_MANAGER,
   GRAPHVAULT_OPTIONS,
 } from "./integrations/nest.js";
@@ -50,13 +51,16 @@ export type {
   DynamicModuleLike,
   GraphVaultModuleAsyncOptions,
   GraphVaultModuleOptions,
+  GraphVaultTransactionalOptions,
   NestProvider,
 } from "./integrations/nest.js";
 export {
   GraphVaultError,
+  OptimisticLockError,
   StorageLockError,
   StorageNotStartedError,
   ReadonlyStorageError,
+  TransactionScopeError,
   UnknownTypeError,
 } from "./core/errors.js";
 export { startStorage } from "./storage/factory.js";
@@ -109,8 +113,13 @@ export type {
   StorageStatus,
   StorageTarget,
   StorageTargetLock,
+  StorageLockStrategy,
   StoreMetadata,
   StoreMode,
+  GraphVaultTransactionContext,
+  GraphVaultTransactionOptions,
+  GraphVaultTransactionResult,
+  TransactionLockMode,
   StorageWriteDurability,
   StorageWriteProfile,
   ObjectRecordWriteFormat,

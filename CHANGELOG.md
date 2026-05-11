@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.0
+
+- Add explicit GraphVault transactions for shared stores.
+- Add optimistic locking with commit-version checks, rollback, and retry.
+- Add pessimistic transactions with short-lived writer locks for multi-pod writes.
+- Add `@GraphVaultTransactional()` for NestJS service methods.
+- Add concurrency tests that exercise two managers writing to the same store.
+
 ## 0.1.0
 
 - Initial GraphVault Library package.

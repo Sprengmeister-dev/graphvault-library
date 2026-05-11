@@ -25,6 +25,7 @@ Main runtime API.
 - `store(object)`: stores after a specific object changed.
 - `storeAll(objects)` / `storeAll(...objects)`: stores after several objects changed.
 - `update(mutator, storeTarget?)`: mutates and stores in one safe operation.
+- `transaction(work, options)`: groups related mutations into one commit with rollback plus pessimistic or optimistic multi-writer locking.
 - `createStorer()`: batches several store targets into one commit.
 - `createLazyRef(key, value)`: creates and stores lazy data.
 - `loadLazy(key)` / `storeLazy(key, value)`: low-level lazy value access.
@@ -52,6 +53,8 @@ Main runtime API.
 - `readOnly`: opens without writer lock and rejects writes.
 - `channelCount`: spreads object records across channel folders.
 - `lockTimeoutMs`: writer-lock timeout.
+- `lockStrategy`: `startup`, `pessimistic`, or `optimistic`.
+- `optimisticMaxRetries` / `optimisticRetryDelayMs`: retry policy for optimistic transactions.
 - `housekeepingIntervalMs`: periodic maintenance interval.
 - `writeProfile`: `standard`, `fast`, or `maximum` write throughput profile.
 - `writeDurability`: `strict` for fsynced local atomic writes, `relaxed` for higher throughput.

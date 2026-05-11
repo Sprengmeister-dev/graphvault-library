@@ -11,6 +11,10 @@ export class ReadonlyStorageError extends GraphVaultError {}
 
 export class StorageLockError extends GraphVaultError {}
 
+export class OptimisticLockError extends GraphVaultError {}
+
+export class TransactionScopeError extends GraphVaultError {}
+
 export class UnknownTypeError extends GraphVaultError {}
 
 export class CorruptStorageError extends GraphVaultError {}

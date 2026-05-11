@@ -128,6 +128,8 @@ const storage = await EmbeddedStorage.start({
 
 - `channelCount`: distributes object records across channel directories; use a power of two.
 - `lockTimeoutMs`: how long a writer waits for the single-writer lock.
+- `lockStrategy`: `startup`, `pessimistic`, or `optimistic`. Use `pessimistic` or `optimistic` for shared stores with several pods.
+- `optimisticMaxRetries` and `optimisticRetryDelayMs`: retry policy for optimistic transactions.
 - `housekeepingIntervalMs`: enables periodic garbage collection and maintenance work.
 - `readOnly`: opens a store without acquiring a writer lock or mutating files.
 - `writeProfile`: selects `standard`, `fast`, or `maximum` write behavior.

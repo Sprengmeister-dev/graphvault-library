@@ -130,6 +130,9 @@ export interface StorageManagerOptions<TRoot = unknown> {
   prettyJson?: boolean;
   writeDurability?: StorageWriteDurability;
   writeSnapshots?: boolean;
+  lockStrategy?: StorageLockStrategy;
+  optimisticMaxRetries?: number;
+  optimisticRetryDelayMs?: number;
 }
 
 export interface StorageTarget {
@@ -159,6 +162,27 @@ export interface StoreMetadata {
   objectIds: string[];
 }
 
+export interface GraphVaultTransactionContext<TRoot = unknown> {
+  root: TRoot;
+  transactionId: number;
+  attempt: number;
+}
+
+export interface GraphVaultTransactionOptions<TRoot = unknown> {
+  mode?: TransactionLockMode;
+  maxRetries?: number;
+  retryDelayMs?: number;
+  storeTarget?: (root: TRoot) => unknown;
+}
+
+export interface GraphVaultTransactionResult<T = unknown> {
+  value: T;
+  metadata: StoreMetadata;
+  baseTransactionId: number;
+  attempts: number;
+  lockMode: TransactionLockMode;
+}
+
 export interface StorageStatus {
   started: boolean;
   readOnly: boolean;
@@ -169,6 +193,7 @@ export interface StorageStatus {
   housekeepingActive: boolean;
   registeredTypes: number;
   channelCount: number;
+  lockStrategy: StorageLockStrategy;
 }
 
 export interface CompactionResult {
@@ -215,6 +240,10 @@ export type StorageWriteProfile = "standard" | "fast" | "maximum";
 export type ObjectRecordWriteFormat = "binary-and-json" | "binary" | "json";
 
 export type StorageWriteDurability = "strict" | "relaxed";
+
+export type StorageLockStrategy = "startup" | "pessimistic" | "optimistic";
+
+export type TransactionLockMode = "pessimistic" | "optimistic";
 
 export type EagerFieldEvaluator = (context: {
   owner: object;

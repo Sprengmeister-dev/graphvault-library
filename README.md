@@ -148,6 +148,7 @@ Then open `http://127.0.0.1:4177`.
 
 - [Usage guide](./docs/USAGE.md) - modeling roots, registering classes, writing data, lazy data, verification, and lifecycle.
 - [GVQL guide](./docs/GVQL.md) - graph queries, indexed filtering, aggregates, execution plans, and mutation previews.
+- [Transactions and concurrency](./docs/TRANSACTIONS.md) - optimistic and pessimistic locking for multi-pod writers.
 - [Storage configuration](./docs/STORAGE.md) - local filesystem, memory, HTTP, S3-compatible, SQL, and operational options.
 - [NestJS integration](./docs/NESTJS.md) - module setup, async config, multiple stores, and shutdown hooks.
 - [API reference](./docs/API.md) - public entry points and important options.

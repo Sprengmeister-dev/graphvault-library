@@ -8,7 +8,7 @@ import { StorageWriter } from "./storage-writer.js";
 import { copyStorageTargetTree, LocalFilesystemTarget } from "./storage-target.js";
 import { Storer } from "./storer.js";
 import { LazyRef } from "../lazy/lazy-ref.js";
-import { ReadonlyStorageError, StorageNotStartedError } from "../core/errors.js";
+import { OptimisticLockError, ReadonlyStorageError, StorageNotStartedError, TransactionScopeError } from "../core/errors.js";
 import { executeGvqlStatement } from "../gvql/gvql-executor.js";
 import { parseGvql } from "../gvql/gvql-parser.js";
 import type {
@@ -26,6 +26,10 @@ import type {
   StorageWriteProfile,
   ObjectRecordWriteFormat,
   TransactionRecord,
+  GraphVaultTransactionContext,
+  GraphVaultTransactionOptions,
+  GraphVaultTransactionResult,
+  TransactionLockMode,
   VerificationResult,
   MaintenanceResult,
   MaintenanceOptions,
@@ -50,6 +54,7 @@ export class StorageManager<TRoot = unknown> {
   private typeDictionarySignature = "";
   private lockHandle: StorageTargetLock | undefined;
   private housekeepingTimer: NodeJS.Timeout | undefined;
+  private transactionDepth = 0;
 
   constructor(options: StorageManagerOptions<TRoot>, serializer = new GraphSerializer(options.types ?? [])) {
     this.options = { lockTimeoutMs: 5_000, housekeepingIntervalMs: 0, ...options };
@@ -81,7 +86,7 @@ export class StorageManager<TRoot = unknown> {
       await this.target.ensureDirectory(join(directory, "objects"));
       await this.target.ensureDirectory(join(directory, "objects-bin"));
     }
-    if (!this.options.readOnly) {
+    if (!this.options.readOnly && this.lockStrategy === "startup") {
       await this.acquireLock();
       await this.writeTypeDictionaryIfChanged();
     }
@@ -126,7 +131,8 @@ export class StorageManager<TRoot = unknown> {
   async store(_modifiedObject: unknown): Promise<StoreMetadata> {
     this.assertStarted();
     this.assertWritable();
-    return this.mutex.runExclusive(() => this.storeLocked("standard", [_modifiedObject]));
+    this.assertOutsideTransaction("store()");
+    return this.mutex.runExclusive(() => this.writeWithConflictCheck(() => this.storeLocked("standard", [_modifiedObject])));
   }
 
   async storeAll(instances: Iterable<unknown>): Promise<StoreMetadata>;
@@ -134,8 +140,9 @@ export class StorageManager<TRoot = unknown> {
   async storeAll(firstOrInstances: Iterable<unknown> | unknown, ...rest: unknown[]): Promise<StoreMetadata> {
     this.assertStarted();
     this.assertWritable();
+    this.assertOutsideTransaction("storeAll()");
     const targets = rest.length > 0 || !isIterable(firstOrInstances) ? [firstOrInstances, ...rest] : Array.from(firstOrInstances);
-    return this.mutex.runExclusive(() => this.storeLocked("standard", targets));
+    return this.mutex.runExclusive(() => this.writeWithConflictCheck(() => this.storeLocked("standard", targets)));
   }
 
   createStorer(): Storer {
@@ -153,18 +160,22 @@ export class StorageManager<TRoot = unknown> {
   async commitStorer(mode: StoreMode, targets: readonly unknown[]): Promise<StoreMetadata> {
     this.assertStarted();
     this.assertWritable();
-    return this.mutex.runExclusive(() => this.storeLocked(mode, targets));
+    this.assertOutsideTransaction("storer.commit()");
+    return this.mutex.runExclusive(() => this.writeWithConflictCheck(() => this.storeLocked(mode, targets)));
   }
 
   async update<T>(mutator: (root: TRoot) => T | Promise<T>, storeTarget?: (root: TRoot) => unknown): Promise<T> {
     this.assertStarted();
     this.assertWritable();
+    if (this.inTransaction) {
+      return mutator(this.root);
+    }
     return this.mutex.runExclusive(async () => {
       const rollback = this.serializer.deserialize<TRoot>(this.serializer.serialize(this.rootValue));
       this.bindLazyRefs(rollback);
       try {
         const result = await mutator(this.root);
-        await this.storeLocked("standard", [storeTarget ? storeTarget(this.root) : this.root]);
+        await this.writeWithConflictCheck(() => this.storeLocked("standard", [storeTarget ? storeTarget(this.root) : this.root]));
         return result;
       } catch (error) {
         this.rootValue = rollback;
@@ -173,7 +184,20 @@ export class StorageManager<TRoot = unknown> {
     });
   }
 
+  async transaction<T>(
+    work: (context: GraphVaultTransactionContext<TRoot>) => T | Promise<T>,
+    options: GraphVaultTransactionOptions<TRoot> = {},
+  ): Promise<GraphVaultTransactionResult<T>> {
+    this.assertStarted();
+    this.assertWritable();
+    const mode = options.mode ?? this.defaultTransactionMode();
+    return mode === "optimistic" ? this.optimisticTransaction(work, options) : this.pessimisticTransaction(work, options);
+  }
+
   async createLazyRef<T>(key: string, initialValue: T): Promise<LazyRef<T>> {
+    this.assertStarted();
+    this.assertWritable();
+    this.assertOutsideTransaction("createLazyRef()");
     const ref = new LazyRef<T>(key, initialValue);
     ref.bind((lazyKey) => this.loadLazy<T>(lazyKey), (lazyKey, value) => this.storeLazy(lazyKey, value));
     await ref.store();
@@ -186,7 +210,9 @@ export class StorageManager<TRoot = unknown> {
   }
 
   async storeLazy<T>(key: string, value: T): Promise<void> {
+    this.assertStarted();
     this.assertWritable();
+    this.assertOutsideTransaction("storeLazy()");
     await this.writer.writeJson(join(this.layout.lazyDirectory, `${encodeURIComponent(key)}.json`), this.serializer.serialize(value));
   }
 
@@ -273,8 +299,10 @@ export class StorageManager<TRoot = unknown> {
     const statement = parseGvql(query);
     if (statement.kind === "update" && !options.dryRun) {
       this.assertWritable();
+      this.assertOutsideTransaction("mutating gvql()");
     }
     return this.mutex.runExclusive(async () => {
+      const execute = async (): Promise<GvqlResult> => {
       const envelope = this.serializer.serialize(this.rootValue);
       const result = executeGvqlStatement(envelope, statement, {
         ...options,
@@ -287,6 +315,11 @@ export class StorageManager<TRoot = unknown> {
         result.metadata = await this.storeEnvelopeLocked(envelope, "standard", result.changes.map((change) => change.objectId));
       }
       return result;
+      };
+      if (statement.kind === "update" && !options.dryRun) {
+        return this.writeWithConflictCheck(execute);
+      }
+      return execute();
     });
   }
 
@@ -379,6 +412,7 @@ export class StorageManager<TRoot = unknown> {
       housekeepingActive: Boolean(this.housekeepingTimer),
       registeredTypes: this.serializer.types.entries().length,
       channelCount: this.layout.channelCount,
+      lockStrategy: this.lockStrategy,
     };
   }
 
@@ -401,6 +435,33 @@ export class StorageManager<TRoot = unknown> {
 
   private async acquireLock(): Promise<void> {
     this.lockHandle = await this.target.acquireLock(this.layout.lockFile, this.options.lockTimeoutMs);
+  }
+
+  private get lockStrategy(): "startup" | "pessimistic" | "optimistic" {
+    return this.options.lockStrategy ?? "startup";
+  }
+
+  private defaultTransactionMode(): TransactionLockMode {
+    return this.lockStrategy === "optimistic" ? "optimistic" : "pessimistic";
+  }
+
+  private get inTransaction(): boolean {
+    return this.transactionDepth > 0;
+  }
+
+  private async runInTransactionScope<T>(work: () => T | Promise<T>): Promise<T> {
+    this.transactionDepth += 1;
+    try {
+      return await work();
+    } finally {
+      this.transactionDepth -= 1;
+    }
+  }
+
+  private assertOutsideTransaction(operation: string): void {
+    if (this.inTransaction) {
+      throw new TransactionScopeError(`${operation} cannot commit inside an active GraphVault transaction. Mutate the transaction root and let the outer transaction commit once.`);
+    }
   }
 
   private startHousekeeping(): void {
@@ -451,6 +512,128 @@ export class StorageManager<TRoot = unknown> {
     this.transactionId = nextTransactionId;
     this.replacePersistedObjectIds(Object.keys(envelope.nodes));
     return { transactionId: nextTransactionId, storedAt: new Date(), snapshotFile, journalFile, mode, objectCount: targets.length, objectIds };
+  }
+
+  private async pessimisticTransaction<T>(
+    work: (context: GraphVaultTransactionContext<TRoot>) => T | Promise<T>,
+    options: GraphVaultTransactionOptions<TRoot>,
+  ): Promise<GraphVaultTransactionResult<T>> {
+    return this.mutex.runExclusive(() =>
+      this.withWriteLock(async () => {
+        await this.reloadLatestLocked();
+        const baseTransactionId = this.transactionId;
+        const rollback = this.cloneRoot();
+        try {
+          const value = await this.runInTransactionScope(() => work({ root: this.root, transactionId: baseTransactionId, attempt: 1 }));
+          const metadata = await this.storeLocked("eager", [options.storeTarget ? options.storeTarget(this.root) : this.root]);
+          return { value, metadata, baseTransactionId, attempts: 1, lockMode: "pessimistic" };
+        } catch (error) {
+          this.rootValue = rollback;
+          this.bindLazyRefs(this.rootValue);
+          throw error;
+        }
+      }),
+    );
+  }
+
+  private async optimisticTransaction<T>(
+    work: (context: GraphVaultTransactionContext<TRoot>) => T | Promise<T>,
+    options: GraphVaultTransactionOptions<TRoot>,
+  ): Promise<GraphVaultTransactionResult<T>> {
+    const maxRetries = options.maxRetries ?? this.options.optimisticMaxRetries ?? 3;
+    const retryDelayMs = options.retryDelayMs ?? this.options.optimisticRetryDelayMs ?? 25;
+    let lastConflict: unknown;
+    for (let attempt = 1; attempt <= Math.max(1, maxRetries); attempt++) {
+      const result = await this.mutex.runExclusive(async () => {
+        await this.reloadLatestLocked();
+        const baseTransactionId = this.transactionId;
+        const rollback = this.cloneRoot();
+        try {
+          const value = await this.runInTransactionScope(() => work({ root: this.root, transactionId: baseTransactionId, attempt }));
+          return await this.withWriteLock(async () => {
+            await this.assertNoExternalChangeLocked(baseTransactionId);
+            const metadata = await this.storeLocked("eager", [options.storeTarget ? options.storeTarget(this.root) : this.root]);
+            return { ok: true as const, value, metadata, baseTransactionId };
+          });
+        } catch (error) {
+          this.rootValue = rollback;
+          this.bindLazyRefs(this.rootValue);
+          if (error instanceof OptimisticLockError) {
+            return { ok: false as const, error };
+          }
+          throw error;
+        }
+      });
+      if (result.ok) {
+        return { value: result.value, metadata: result.metadata, baseTransactionId: result.baseTransactionId, attempts: attempt, lockMode: "optimistic" };
+      }
+      lastConflict = result.error;
+      if (attempt < Math.max(1, maxRetries)) {
+        await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
+      }
+    }
+    throw lastConflict ?? new OptimisticLockError("Optimistic transaction failed because the store changed concurrently.");
+  }
+
+  private async writeWithConflictCheck<T>(work: () => Promise<T>): Promise<T> {
+    return this.withWriteLock(async () => {
+      if (!this.lockHandle) {
+        await this.assertNoExternalChangeLocked(this.transactionId);
+      }
+      return work();
+    });
+  }
+
+  private async withWriteLock<T>(work: () => Promise<T>): Promise<T> {
+    if (this.lockHandle) {
+      return work();
+    }
+    const handle = await this.target.acquireLock(this.layout.lockFile, this.options.lockTimeoutMs);
+    try {
+      return await work();
+    } finally {
+      await handle.release();
+    }
+  }
+
+  private async assertNoExternalChangeLocked(expectedTransactionId: number): Promise<void> {
+    const currentTransactionId = await this.readCurrentTransactionId();
+    if (currentTransactionId !== expectedTransactionId) {
+      throw new OptimisticLockError(
+        `Store changed concurrently. Expected transaction ${expectedTransactionId}, found ${currentTransactionId}.`,
+      );
+    }
+  }
+
+  private async readCurrentTransactionId(): Promise<number> {
+    const [manifest, latestTransaction] = await Promise.all([
+      this.reader.readManifest(),
+      this.reader.readLatestTransactionRecord(),
+    ]);
+    return Math.max(manifest?.transactionId ?? 0, latestTransaction?.transactionId ?? 0);
+  }
+
+  private async reloadLatestLocked(): Promise<void> {
+    const loaded = await this.reader.loadExistingEnvelope();
+    if (loaded) {
+      const loadedRoot = this.serializer.deserialize<TRoot>(loaded.envelope);
+      this.rootValue = this.fillCustomRoot(loadedRoot, loaded.envelope);
+      this.transactionId = loaded.transactionId;
+      this.recoveredFrom = loaded.source;
+      this.replacePersistedObjectIds(Object.keys(loaded.envelope.nodes));
+    } else {
+      this.rootValue = this.options.rootFactory();
+      this.transactionId = 0;
+      this.recoveredFrom = "empty";
+      this.replacePersistedObjectIds([]);
+    }
+    this.bindLazyRefs(this.rootValue);
+  }
+
+  private cloneRoot(): TRoot {
+    const clone = this.serializer.deserialize<TRoot>(this.serializer.serialize(this.rootValue));
+    this.bindLazyRefs(clone);
+    return clone;
   }
 
   private async storeEnvelopeLocked(envelope: SerializedEnvelope, mode: StoreMode, changedObjectIds: string[]): Promise<StoreMetadata> {
