@@ -306,12 +306,7 @@ export class EncryptedStorageTarget implements StorageTarget {
   }
 
   async appendText(path: string, value: string): Promise<void> {
-    let current: Buffer = Buffer.alloc(0);
-    try {
-      current = await this.readBuffer(path);
-    } catch {
-      current = Buffer.alloc(0);
-    }
+    const current = (await this.exists(path)) ? await this.readBuffer(path) : Buffer.alloc(0);
     await this.writeBufferAtomic(path, Buffer.concat([current, Buffer.from(value)]));
   }
 

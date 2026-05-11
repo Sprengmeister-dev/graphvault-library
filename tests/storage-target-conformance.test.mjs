@@ -37,6 +37,8 @@ async function assertEncryptedStorageTarget() {
   assert.equal(await encrypted.readText("secure/value.txt"), "sensitive ledger value!");
   const wrongKey = new EncryptedStorageTarget({ target: raw, key: "wrong-key" });
   await assert.rejects(() => wrongKey.readText("secure/value.txt"), undefined, "wrong key rejects");
+  await assert.rejects(() => wrongKey.appendText("secure/value.txt", "?"), undefined, "wrong key append rejects");
+  assert.equal(await encrypted.readText("secure/value.txt"), "sensitive ledger value!");
 }
 
 async function assertStorageTargetContract(name, factory, root) {
