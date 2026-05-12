@@ -126,7 +126,40 @@ Restore procedure:
 4. Run `await storage.verify()`.
 5. Start the remaining pods only after verification reports `ok: true`.
 
+## Schema Migrations
+
+Run storage-wide schema migrations as controlled operational changes. A migration step rewrites the root graph and commits it through the same WAL, writer-lock, fencing-token, manifest, and transaction-hash path as application writes.
+
+Recommended rollout:
+
+1. Route regular write traffic away or stop writer pods.
+2. Start one migration runner with the full migration list.
+3. Run `await storage.health()`.
+4. Inspect `storage.migrationStatus(targetVersion)`.
+5. Run `await storage.migrateTo(targetVersion)`.
+6. Run `await storage.health()` again.
+7. Start application pods with the same `schemaVersion`.
+
+`migrateOnStart` is available, but for financial or otherwise critical stores explicit migration jobs are easier to observe, retry, and audit.
+
 ## Verification And Monitoring
+
+Use `health()` as the primary service-level gate. It combines operational counters, the production safety profile, and by default a full verification pass:
+
+```ts
+const health = await storage.health();
+if (!health.ok) {
+  throw new Error(`GraphVault store is ${health.status}`);
+}
+```
+
+Use `health({ verify: false })` for frequent readiness endpoints where a full verification pass would be too expensive:
+
+```ts
+const readiness = await storage.health({ verify: false });
+```
+
+`healthy` means verification passed and the production safety profile has no warnings. `warning` means verification passed but the deployment has hardening recommendations. `unsafe` means a critical safety issue is present. `error` means verification failed.
 
 Use `operations()` for cheap readiness and monitoring checks:
 

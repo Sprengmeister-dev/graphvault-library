@@ -47,6 +47,9 @@ export async function verifyStorage(options: StorageVerifierOptions): Promise<Ve
     warnings.push(...wal.warnings);
     errors.push(...wal.errors);
   }
+  if (manifest.schemaVersion !== undefined && !isNonNegativeSafeInteger(manifest.schemaVersion)) {
+    errors.push("Manifest schemaVersion must be a non-negative safe integer.");
+  }
 
   const latestTransaction = await options.readLatestTransactionRecord();
   if (latestTransaction) {
@@ -115,6 +118,9 @@ async function verifyTransactionIntegrity(
   let checkedIntegrityHashes = 0;
   let previousHash: string | undefined;
   for (const record of records.sort((a, b) => a.transactionId - b.transactionId)) {
+    if (record.schemaVersion !== undefined && !isNonNegativeSafeInteger(record.schemaVersion)) {
+      errors.push(`Transaction ${record.transactionId} has an invalid schemaVersion.`);
+    }
     if (record.previousHash || record.transactionHash) {
       if (record.previousHash !== previousHash) {
         errors.push(`Transaction ${record.transactionId} has an invalid previousHash.`);
@@ -145,6 +151,13 @@ async function verifyTransactionIntegrity(
   const publishedRecord = records.find((record) => record.transactionId === manifest.transactionId);
   if (manifest.latestTransactionHash && publishedRecord?.transactionHash && manifest.latestTransactionHash !== publishedRecord.transactionHash) {
     errors.push(`Manifest latestTransactionHash does not match transaction ${publishedRecord.transactionId}.`);
+  }
+  if (
+    manifest.schemaVersion !== undefined &&
+    publishedRecord?.schemaVersion !== undefined &&
+    manifest.schemaVersion !== publishedRecord.schemaVersion
+  ) {
+    errors.push(`Manifest schemaVersion does not match transaction ${publishedRecord.transactionId}.`);
   }
   if (manifest.latestTransactionHash) {
     checkedIntegrityHashes++;
@@ -198,12 +211,25 @@ async function verifyWal(
     if (prepare.format !== "graphvault-wal" || prepare.status !== "prepared" || prepare.transactionId !== commit.transactionId) {
       errors.push(`Invalid WAL prepare record ${commit.prepareFile}.`);
     }
+    if (prepare.schemaVersion !== undefined && !isNonNegativeSafeInteger(prepare.schemaVersion)) {
+      errors.push(`WAL prepare ${commit.prepareFile} has an invalid schemaVersion.`);
+    }
+    if (commit.schemaVersion !== undefined && !isNonNegativeSafeInteger(commit.schemaVersion)) {
+      errors.push(`WAL commit ${file} has an invalid schemaVersion.`);
+    }
+    if (prepare.schemaVersion !== commit.schemaVersion) {
+      errors.push(`WAL commit ${file} schemaVersion does not match ${commit.prepareFile}.`);
+    }
     if (commit.transactionId > manifestTransactionId) {
       pendingWalCommits++;
       warnings.push(`Committed WAL transaction ${commit.transactionId} is newer than manifest transaction ${manifestTransactionId}; recovery can publish it.`);
     }
   }
   return { checkedWalRecords, pendingWalCommits, warnings, errors };
+}
+
+function isNonNegativeSafeInteger(value: number): boolean {
+  return Number.isSafeInteger(value) && value >= 0;
 }
 
 async function listOrEmpty(target: StorageTarget, path: string): Promise<string[]> {

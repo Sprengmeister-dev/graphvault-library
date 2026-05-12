@@ -36,6 +36,7 @@ export interface StorageManifest {
   objectIds: string[];
   objectVersions?: Record<string, number>;
   latestTransactionHash?: string;
+  schemaVersion?: number;
 }
 
 export interface TransactionRecord {
@@ -51,6 +52,7 @@ export interface TransactionRecord {
   envelopeHash?: string;
   previousHash?: string;
   transactionHash?: string;
+  schemaVersion?: number;
 }
 
 export interface TransactionMetadata {
@@ -60,6 +62,15 @@ export interface TransactionMetadata {
   traceId?: string;
   tags?: string[];
   attributes?: Record<string, string | number | boolean | null>;
+  schemaMigration?: SchemaMigrationMetadata;
+}
+
+export interface SchemaMigrationMetadata {
+  version: number;
+  name?: string;
+  direction: StorageMigrationDirection;
+  fromVersion: number;
+  toVersion: number;
 }
 
 export interface WalPrepareRecord {
@@ -73,6 +84,7 @@ export interface WalPrepareRecord {
   mode: StoreMode;
   targetCount: number;
   envelope: SerializedEnvelope;
+  schemaVersion?: number;
 }
 
 export interface WalCommitRecord {
@@ -82,6 +94,7 @@ export interface WalCommitRecord {
   transactionId: number;
   committedAt: string;
   prepareFile: string;
+  schemaVersion?: number;
 }
 
 export type WalRecord = WalPrepareRecord | WalCommitRecord;
@@ -199,6 +212,9 @@ export interface StorageManagerOptions<TRoot = unknown> {
   transactionLog?: StorageTransactionLogMode;
   recoverCommittedWal?: boolean;
   readCommittedWal?: boolean;
+  schemaVersion?: number;
+  schemaMigrations?: Array<StorageSchemaMigration<TRoot>>;
+  migrateOnStart?: boolean;
 }
 
 export type StorageCommitValidator<TRoot = unknown> = (context: {
@@ -263,11 +279,56 @@ export interface GraphVaultTransactionResult<T = unknown> {
   lockMode: TransactionLockMode;
 }
 
+export type StorageMigrationDirection = "up" | "down";
+
+export interface StorageSchemaMigrationContext<TRoot = unknown> {
+  root: TRoot;
+  direction: StorageMigrationDirection;
+  fromVersion: number;
+  toVersion: number;
+  version: number;
+  name?: string;
+}
+
+export interface StorageSchemaMigration<TRoot = unknown> {
+  version: number;
+  name?: string;
+  up: (context: StorageSchemaMigrationContext<TRoot>) => void | Promise<void>;
+  down: (context: StorageSchemaMigrationContext<TRoot>) => void | Promise<void>;
+}
+
+export interface StorageMigrationStatus {
+  currentVersion: number;
+  targetVersion: number;
+  latestAvailableVersion: number;
+  pending: StorageMigrationPlanStep[];
+}
+
+export interface StorageMigrationPlanStep {
+  version: number;
+  name?: string;
+  direction: StorageMigrationDirection;
+  fromVersion: number;
+  toVersion: number;
+}
+
+export interface StorageMigrationStepResult extends StorageMigrationPlanStep {
+  metadata: StoreMetadata;
+}
+
+export interface StorageMigrationResult {
+  fromVersion: number;
+  toVersion: number;
+  applied: StorageMigrationStepResult[];
+  skipped: boolean;
+}
+
 export interface StorageStatus {
   started: boolean;
   readOnly: boolean;
   storageDirectory: string;
   transactionId: number;
+  schemaVersion: number;
   hasRoot: boolean;
   recoveredFrom?: "manifest" | "snapshot" | "wal" | "empty";
   housekeepingActive: boolean;
@@ -287,6 +348,7 @@ export interface StorageOperationsStatus {
   channelCount: number;
   recoveredFrom?: "manifest" | "snapshot" | "wal" | "empty";
   publishedTransactionId: number;
+  schemaVersion: number;
   latestJournalTransactionId: number;
   latestWalTransactionId: number;
   pendingWalCommits: number;
@@ -325,6 +387,21 @@ export interface StorageSafetyProfile {
   pendingRecovery: boolean;
   hashChain: "present" | "missing" | "empty-store";
   issues: StorageSafetyIssue[];
+}
+
+export interface StorageHealthOptions {
+  verify?: boolean;
+}
+
+export type StorageHealthStatus = "healthy" | "warning" | "unsafe" | "error";
+
+export interface StorageHealthReport {
+  ok: boolean;
+  status: StorageHealthStatus;
+  checkedAt: string;
+  operations: StorageOperationsStatus;
+  safety: StorageSafetyProfile;
+  verification?: VerificationResult;
 }
 
 export interface CompactionResult {

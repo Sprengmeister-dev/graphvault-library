@@ -134,3 +134,48 @@ export class GraphController {
 ```
 
 The response includes the bounded `envelope`, loaded `objectIds`, and `truncatedReferences` so clients can request deeper slices deliberately.
+
+### Health Endpoints
+
+Expose a lightweight readiness endpoint from `health({ verify: false })`, and keep the full verification pass for startup gates, scheduled checks, or operator-only endpoints.
+
+```ts
+import { Controller, Get, ServiceUnavailableException } from "@nestjs/common";
+import { StorageManager } from "@sprengmeister/graphvault";
+
+@Controller("health")
+export class HealthController {
+  constructor(private readonly storage: StorageManager<AppRoot>) {}
+
+  @Get("graphvault")
+  async graphvault() {
+    const health = await this.storage.health({ verify: false });
+    if (!health.ok) {
+      throw new ServiceUnavailableException(health);
+    }
+    return health;
+  }
+}
+```
+
+The report includes operational counters, the production safety profile, and optionally the full verification result when you call `health()` without `{ verify: false }`.
+
+### Migration Jobs
+
+For production NestJS deployments, run schema migrations as a separate job before rolling the application pods:
+
+```ts
+const storage = await EmbeddedStorage.start<AppRoot>({
+  storageDirectory: process.env.GRAPHVAULT_DIR,
+  rootFactory: () => ({ documents: [] }),
+  schemaVersion: 3,
+  schemaMigrations,
+});
+
+await storage.health();
+await storage.migrateTo();
+await storage.health();
+await storage.shutdown();
+```
+
+This keeps startup predictable and makes the migration result visible in logs, metrics, and the GraphVault transaction journal. Use `migrateOnStart` only for simpler deployments where one controlled writer starts first.

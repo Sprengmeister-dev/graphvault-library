@@ -73,6 +73,7 @@ export class StorageWriter {
     transactionId: number,
     objectVersions?: ReadonlyMap<string, number> | Record<string, number>,
     latestTransactionHash?: string,
+    schemaVersion?: number,
   ): Promise<void> {
     const versions =
       objectVersions instanceof Map
@@ -87,6 +88,7 @@ export class StorageWriter {
       objectIds: Object.keys(envelope.nodes).sort((a, b) => Number(a) - Number(b)),
       ...(versions ? { objectVersions: versions } : {}),
       ...(latestTransactionHash ? { latestTransactionHash } : {}),
+      ...(schemaVersion ? { schemaVersion } : {}),
     } satisfies StorageManifest);
   }
 

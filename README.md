@@ -38,7 +38,8 @@ await storage.shutdown();
 - explicit transactions with rollback plus optimistic or pessimistic locking for shared stores
 - WAL recovery, fencing tokens, transaction-versioned object records, and a tamper-evident SHA-256 transaction hash chain for audit-oriented deployments
 - transaction metadata for actor, reason, source, trace ID, tags, and audit attributes
-- production safety profile API for WAL, durability, stale-lock recovery, hash-chain, and validator checks
+- storage-wide schema migrations with `up` and `down`, persisted schema versions, and migration audit metadata
+- production health and safety APIs for WAL, durability, stale-lock recovery, hash-chain, validator, and verification checks
 - depth-limited subtree loading for bounded REST/API graph exposure
 - optional AES-256-GCM encrypted storage-target wrapper for data at rest
 - local filesystem, memory, HTTP, S3-compatible, and SQL-backed storage targets
@@ -98,6 +99,26 @@ For ACID-oriented deployments, use `transactionLog: "full"`, `recoverCommittedWa
 
 For NestJS services, `@GraphVaultTransactional()` wraps a service method in the same commit/rollback and locking behavior.
 
+## Production Health Checks
+
+GraphVault exposes a single health report for service checks, CI gates, and operations dashboards. It combines lightweight operational state, the production safety profile, and by default a real store verification pass.
+
+```ts
+const health = await storage.health();
+
+if (!health.ok) {
+  throw new Error(`GraphVault store is ${health.status}`);
+}
+```
+
+For latency-sensitive endpoints, skip the full verification pass and reserve `verify()` or `health()` for deeper checks:
+
+```ts
+const health = await storage.health({ verify: false });
+```
+
+`healthy` means verification passed and the safety profile is production-ready. `warning` means the store is usable but has hardening recommendations. `unsafe` means a critical safety issue is present. `error` means verification failed.
+
 ## Bounded Subtree Exports
 
 GraphVault can load only a bounded part of the stored object graph. This is useful for REST endpoints that should expose a focused subgraph without materializing or returning the whole store.
@@ -113,6 +134,43 @@ return {
 ```
 
 `depth: 0` includes only the start object, `depth: 1` includes its direct referenced children, and so on. `truncatedReferences` tells callers which outgoing object references were intentionally left out at the boundary.
+
+## Schema Migrations
+
+Use storage-wide schema migrations when the persisted root graph needs to change shape across releases.
+
+```ts
+const storage = await EmbeddedStorage.start<AppRoot>({
+  storageDirectory: "./data",
+  rootFactory: () => ({ people: [] }),
+  schemaVersion: 2,
+  schemaMigrations: [
+    {
+      version: 1,
+      name: "split-person-name",
+      up: ({ root }) => {
+        for (const person of root.people) {
+          const [firstName, ...lastName] = person.fullName.split(" ");
+          person.firstName = firstName;
+          person.lastName = lastName.join(" ");
+          delete person.fullName;
+        }
+      },
+      down: ({ root }) => {
+        for (const person of root.people) {
+          person.fullName = `${person.firstName} ${person.lastName}`.trim();
+          delete person.firstName;
+          delete person.lastName;
+        }
+      },
+    },
+  ],
+});
+
+await storage.migrateTo();
+```
+
+Each migration step is committed as a normal pessimistic GraphVault transaction with WAL, fencing-token checks, schema version publication, and transaction metadata. See [schema migrations](./docs/SCHEMA_MIGRATIONS.md).
 
 ## Why Use This Instead Of A Normal Database?
 
@@ -145,6 +203,7 @@ GraphVault is not trying to replace Postgres, SQLite, MongoDB, or Redis. It is f
 - lazy references and segmented lazy arrays
 - atomic commits, explicit transactions, manifest, transaction journal, verification, compaction, backup, and garbage collection
 - optimistic and pessimistic locking for several pods/users writing to the same store
+- storage-wide `up`/`down` schema migrations
 - depth-limited subtree loading for REST/API exports
 - optional encrypted storage-target wrapper
 - pluggable storage targets for local filesystem, memory, HTTP, S3-compatible clients, and SQL adapters

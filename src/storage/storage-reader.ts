@@ -13,9 +13,9 @@ import type {
 } from "../core/types.js";
 
 export type LoadedEnvelope =
-  | { source: "manifest"; envelope: SerializedEnvelope; transactionId: number; objectVersions: Map<string, number> }
-  | { source: "snapshot"; envelope: SerializedEnvelope; transactionId: number; objectVersions: Map<string, number> }
-  | { source: "wal"; envelope: SerializedEnvelope; transactionId: number; objectVersions: Map<string, number> };
+  | { source: "manifest"; envelope: SerializedEnvelope; transactionId: number; objectVersions: Map<string, number>; schemaVersion: number }
+  | { source: "snapshot"; envelope: SerializedEnvelope; transactionId: number; objectVersions: Map<string, number>; schemaVersion: number }
+  | { source: "wal"; envelope: SerializedEnvelope; transactionId: number; objectVersions: Map<string, number>; schemaVersion: number };
 
 export class StorageReader {
   constructor(
@@ -42,6 +42,7 @@ export class StorageReader {
           envelope: await this.envelopeFromManifest(manifest),
           transactionId: manifest.transactionId,
           objectVersions: objectVersionsFromManifest(manifest),
+          schemaVersion: schemaVersionFromManifest(manifest),
         };
       } catch {
         // Fall back to the checkpoint snapshot below.
@@ -55,11 +56,13 @@ export class StorageReader {
     const content = await this.target.readText(join(this.layout.snapshotsDirectory, current));
     const envelope = JSON.parse(content) as SerializedEnvelope;
     const transactionId = this.layout.parseTransactionId(current);
+    const transaction = (await this.readTransactionRecords()).find((record) => record.transactionId === transactionId);
     return {
       source: "snapshot",
       envelope,
       transactionId,
       objectVersions: objectVersionsForEnvelope(envelope, transactionId),
+      schemaVersion: transaction?.schemaVersion ?? 0,
     };
   }
 
@@ -73,6 +76,7 @@ export class StorageReader {
           envelope: prepare.envelope,
           transactionId: prepare.transactionId,
           objectVersions: objectVersionsForEnvelope(prepare.envelope, prepare.transactionId),
+          schemaVersion: prepare.schemaVersion ?? 0,
         };
       }
     }
@@ -212,6 +216,10 @@ export function objectVersionsFromManifest(manifest: StorageManifest): Map<strin
     versions.set(objectId, manifest.objectVersions?.[objectId] ?? manifest.transactionId);
   }
   return versions;
+}
+
+export function schemaVersionFromManifest(manifest: StorageManifest): number {
+  return manifest.schemaVersion ?? 0;
 }
 
 function objectVersionsForEnvelope(envelope: SerializedEnvelope, transactionId: number): Map<string, number> {

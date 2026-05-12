@@ -53,6 +53,11 @@ const subtree = await storage.loadSubtree({ depth: 1 });
 assert.equal(subtree.objectIds.length >= 2, true);
 const safety = await storage.safetyProfile();
 assert.equal(["production-ready", "warning", "unsafe"].includes(safety.status), true);
+const health = await storage.health({ verify: false });
+assert.equal(health.ok, true);
+assert.equal(health.status, "warning");
+assert.equal(health.operations.objectCount >= 2, true);
+assert.equal("verification" in health, false);
 await storage.shutdown();
 
 const assessed = assessStorageSafety({
@@ -66,6 +71,7 @@ const assessed = assessStorageSafety({
     staleLockTimeoutMs: 60000,
     channelCount: 1,
     publishedTransactionId: 1,
+    schemaVersion: 0,
     latestJournalTransactionId: 1,
     latestWalTransactionId: 1,
     pendingWalCommits: 0,
@@ -103,6 +109,45 @@ const viaFactory = await startStorage({
 });
 await viaFactory.storeRoot();
 await viaFactory.shutdown();
+
+const migrationTarget = new MemoryStorageTarget();
+const migrationStore = await EmbeddedStorage.start({
+  storageDirectory: "migration-smoke",
+  storageTarget: migrationTarget,
+  schemaVersion: 0,
+  rootFactory: () => ({ people: [{ fullName: "Package Smoke" }] }),
+});
+await migrationStore.storeRoot();
+await migrationStore.shutdown();
+
+const migratedStore = await EmbeddedStorage.start({
+  storageDirectory: "migration-smoke",
+  storageTarget: migrationTarget,
+  schemaVersion: 1,
+  schemaMigrations: [
+    {
+      version: 1,
+      name: "split-name",
+      up: ({ root }) => {
+        root.people[0].firstName = "Package";
+        root.people[0].lastName = "Smoke";
+        delete root.people[0].fullName;
+      },
+      down: ({ root }) => {
+        root.people[0].fullName = "Package Smoke";
+        delete root.people[0].firstName;
+        delete root.people[0].lastName;
+      },
+    },
+  ],
+});
+assert.equal(migratedStore.migrationStatus().pending.length, 1);
+await migratedStore.migrateTo();
+assert.equal(migratedStore.currentSchemaVersion(), 1);
+assert.deepEqual(migratedStore.root.people[0], { firstName: "Package", lastName: "Smoke" });
+await migratedStore.migrateTo(0);
+assert.deepEqual(migratedStore.root.people[0], { fullName: "Package Smoke" });
+await migratedStore.shutdown();
 `,
   );
   execFileSync("node", ["smoke.mjs"], { cwd: temp, stdio: "inherit" });

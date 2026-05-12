@@ -23,6 +23,7 @@ export interface StorageCommitterDependencies {
   beforePublish: () => Promise<void>;
   commitState: (transactionId: number, objectVersions: ReadonlyMap<string, number>) => void;
   readLatestTransactionRecord: () => Promise<TransactionRecord | undefined>;
+  schemaVersion: () => number;
 }
 
 export interface CommitEnvelopeOptions {
@@ -61,6 +62,7 @@ export class StorageCommitter {
         mode,
         targetCount,
         envelope,
+        schemaVersion: this.dependencies.schemaVersion(),
       });
     }
 
@@ -78,6 +80,7 @@ export class StorageCommitter {
         transactionId: nextTransactionId,
         committedAt: new Date().toISOString(),
         prepareFile,
+        schemaVersion: this.dependencies.schemaVersion(),
       });
     }
     const journalFile = await this.publishPreparedCommit({
@@ -131,6 +134,7 @@ export class StorageCommitter {
       ...(options.metadata ? { metadata: options.metadata } : {}),
       envelopeHash: envelopeHash(envelope),
       ...(previousHash ? { previousHash } : {}),
+      schemaVersion: this.dependencies.schemaVersion(),
     };
     transactionRecord.transactionHash ??= transactionRecordHash(transactionRecord);
     const journalFile = existingRecord ? transactionRecordName(transactionId) : await this.dependencies.writer.writeTransactionRecord(transactionRecord);
@@ -140,7 +144,13 @@ export class StorageCommitter {
       await lock.assertValid();
       await this.dependencies.target.writeTextAtomic(this.dependencies.layout.currentFile, snapshotFile);
     }
-    await this.dependencies.writer.writeManifest(envelope, transactionId, objectVersions, transactionRecord.transactionHash);
+    await this.dependencies.writer.writeManifest(
+      envelope,
+      transactionId,
+      objectVersions,
+      transactionRecord.transactionHash,
+      this.dependencies.schemaVersion(),
+    );
     this.dependencies.commitState(transactionId, objectVersions);
     return journalFile;
   }

@@ -25,6 +25,8 @@ import type {
   StorageStatus,
   StorageOperationsStatus,
   StorageSafetyProfile,
+  StorageHealthOptions,
+  StorageHealthReport,
   SubtreeLoadOptions,
   SubtreeLoadResult,
   StorageTarget,
@@ -34,6 +36,12 @@ import type {
   GraphVaultTransactionContext,
   GraphVaultTransactionOptions,
   GraphVaultTransactionResult,
+  SchemaMigrationMetadata,
+  StorageMigrationPlanStep,
+  StorageMigrationResult,
+  StorageMigrationStatus,
+  StorageMigrationStepResult,
+  StorageSchemaMigration,
   TransactionLockMode,
   TransactionMetadata,
   VerificationResult,
@@ -63,6 +71,7 @@ export class StorageManager<TRoot = unknown> {
   private lockHandle: StorageTargetLock | undefined;
   private housekeepingTimer: NodeJS.Timeout | undefined;
   private transactionDepth = 0;
+  private schemaVersion = 0;
 
   constructor(options: StorageManagerOptions<TRoot>, serializer = new GraphSerializer(options.types ?? [])) {
     this.options = { lockTimeoutMs: 5_000, housekeepingIntervalMs: 0, ...options };
@@ -85,6 +94,7 @@ export class StorageManager<TRoot = unknown> {
         this.transactionId = transactionId;
         this.replacePersistedObjectVersions(objectVersions);
       },
+      schemaVersion: () => this.schemaVersion,
     });
   }
 
@@ -126,15 +136,20 @@ export class StorageManager<TRoot = unknown> {
       this.transactionId = loaded.transactionId;
       this.recoveredFrom = loaded.source;
       this.replacePersistedObjectVersions(loaded.objectVersions);
+      this.schemaVersion = loaded.schemaVersion;
       if (loaded.source === "snapshot" && !this.options.readOnly) {
         await this.repairObjectStoreFromEnvelope(loaded.envelope, loaded.transactionId);
       }
     } else {
       this.rootValue = this.options.rootFactory();
       this.recoveredFrom = "empty";
+      this.schemaVersion = this.targetSchemaVersion();
     }
     this.bindLazyRefs(this.rootValue);
     this.started = true;
+    if (!this.options.readOnly && this.options.migrateOnStart) {
+      await this.migrateTo(this.targetSchemaVersion());
+    }
     this.startHousekeeping();
     return this;
   }
@@ -491,6 +506,7 @@ export class StorageManager<TRoot = unknown> {
       readOnly: this.options.readOnly ?? false,
       storageDirectory: this.options.storageDirectory,
       transactionId: this.transactionId,
+      schemaVersion: this.schemaVersion,
       hasRoot: this.started,
       ...(this.recoveredFrom ? { recoveredFrom: this.recoveredFrom } : {}),
       housekeepingActive: Boolean(this.housekeepingTimer),
@@ -519,6 +535,7 @@ export class StorageManager<TRoot = unknown> {
       channelCount: this.layout.channelCount,
       ...(this.recoveredFrom ? { recoveredFrom: this.recoveredFrom } : {}),
       publishedTransactionId,
+      schemaVersion: manifest?.schemaVersion ?? this.schemaVersion,
       latestJournalTransactionId: latestTransaction?.transactionId ?? 0,
       latestWalTransactionId,
       pendingWalCommits,
@@ -539,6 +556,86 @@ export class StorageManager<TRoot = unknown> {
       readCommittedWal: this.shouldReadCommittedWal,
       commitValidatorCount: this.options.commitValidators?.length ?? 0,
     });
+  }
+
+  async health(options: StorageHealthOptions = {}): Promise<StorageHealthReport> {
+    const operations = await this.operations();
+    const safety = assessStorageSafety({
+      operations,
+      writeProfile: this.writeOptions.profile,
+      durability: this.writeOptions.durability,
+      writeSnapshots: this.writeOptions.writeSnapshots,
+      recoverCommittedWal: this.shouldRecoverCommittedWal,
+      readCommittedWal: this.shouldReadCommittedWal,
+      commitValidatorCount: this.options.commitValidators?.length ?? 0,
+    });
+    const verification = options.verify === false ? undefined : await this.verify();
+    const verificationOk = verification?.ok ?? true;
+    const ok = verificationOk && safety.status !== "unsafe";
+    const report: StorageHealthReport = {
+      ok,
+      status: healthStatus(safety.status, verificationOk),
+      checkedAt: new Date().toISOString(),
+      operations,
+      safety,
+    };
+    if (verification) {
+      report.verification = verification;
+    }
+    return report;
+  }
+
+  currentSchemaVersion(): number {
+    return this.schemaVersion;
+  }
+
+  migrationStatus(targetVersion = this.targetSchemaVersion()): StorageMigrationStatus {
+    const migrations = this.sortedSchemaMigrations();
+    return {
+      currentVersion: this.schemaVersion,
+      targetVersion,
+      latestAvailableVersion: migrations.at(-1)?.version ?? 0,
+      pending: migrationPlan(this.schemaVersion, targetVersion, migrations),
+    };
+  }
+
+  async migrateTo(targetVersion = this.targetSchemaVersion()): Promise<StorageMigrationResult> {
+    this.assertStarted();
+    this.assertWritable();
+    this.assertOutsideTransaction("migrateTo()");
+    const fromVersion = this.schemaVersion;
+    const plan = migrationPlan(fromVersion, targetVersion, this.sortedSchemaMigrations());
+    const applied: StorageMigrationStepResult[] = [];
+    for (const step of plan) {
+      const migration = this.schemaMigrationFor(step.version);
+      const result = await this.transaction(
+        async ({ root }) => {
+          this.schemaVersion = step.toVersion;
+          const context = migrationContext(root, step);
+          if (step.direction === "up") {
+            await migration.up(context);
+          } else {
+            await migration.down(context);
+          }
+        },
+        {
+          mode: "pessimistic",
+          metadata: {
+            source: "graphvault-schema-migration",
+            reason: `Schema migration ${step.direction} ${step.fromVersion} -> ${step.toVersion}`,
+            tags: ["schema-migration"],
+            schemaMigration: migrationMetadata(step),
+          },
+        },
+      );
+      applied.push({ ...step, metadata: result.metadata });
+    }
+    return {
+      fromVersion,
+      toVersion: this.schemaVersion,
+      applied,
+      skipped: applied.length === 0,
+    };
   }
 
   getRoot(): TRoot {
@@ -635,12 +732,14 @@ export class StorageManager<TRoot = unknown> {
         await this.reloadLatestLocked();
         const baseTransactionId = this.transactionId;
         const rollback = this.cloneRoot();
+        const rollbackSchemaVersion = this.schemaVersion;
         try {
           const value = await this.runInTransactionScope(() => work({ root: this.root, transactionId: baseTransactionId, attempt: 1 }));
           const commitMetadata = await this.storeLocked("eager", [options.storeTarget ? options.storeTarget(this.root) : this.root], lock, options.metadata);
           return { value, metadata: commitMetadata, baseTransactionId, attempts: 1, lockMode: "pessimistic" };
         } catch (error) {
           this.rootValue = rollback;
+          this.schemaVersion = rollbackSchemaVersion;
           this.bindLazyRefs(this.rootValue);
           throw error;
         }
@@ -660,6 +759,7 @@ export class StorageManager<TRoot = unknown> {
         await this.reloadLatestLocked();
         const baseTransactionId = this.transactionId;
         const rollback = this.cloneRoot();
+        const rollbackSchemaVersion = this.schemaVersion;
         try {
           const value = await this.runInTransactionScope(() => work({ root: this.root, transactionId: baseTransactionId, attempt }));
           return await this.withWriteLock(async (lock) => {
@@ -669,6 +769,7 @@ export class StorageManager<TRoot = unknown> {
           });
         } catch (error) {
           this.rootValue = rollback;
+          this.schemaVersion = rollbackSchemaVersion;
           this.bindLazyRefs(this.rootValue);
           if (error instanceof OptimisticLockError) {
             return { ok: false as const, error };
@@ -733,6 +834,24 @@ export class StorageManager<TRoot = unknown> {
     return this.options.readCommittedWal ?? true;
   }
 
+  private targetSchemaVersion(): number {
+    const targetVersion = this.options.schemaVersion ?? this.sortedSchemaMigrations().at(-1)?.version ?? 0;
+    validateSchemaVersion(targetVersion, "schemaVersion");
+    return targetVersion;
+  }
+
+  private sortedSchemaMigrations(): Array<StorageSchemaMigration<TRoot>> {
+    return sortedSchemaMigrations(this.options.schemaMigrations ?? []);
+  }
+
+  private schemaMigrationFor(version: number): StorageSchemaMigration<TRoot> {
+    const migration = this.sortedSchemaMigrations().find((candidate) => candidate.version === version);
+    if (!migration) {
+      throw new Error(`Missing schema migration for version ${version}.`);
+    }
+    return migration;
+  }
+
   private async readCurrentTransactionId(): Promise<number> {
     const [manifest, latestTransaction] = await Promise.all([
       this.reader.readManifest(),
@@ -755,6 +874,7 @@ export class StorageManager<TRoot = unknown> {
         continue;
       }
       await this.writer.writeObjectRecords(prepare.envelope, prepare.transactionId, prepare.objectIds);
+      this.schemaVersion = prepare.schemaVersion ?? 0;
       if (this.writeOptions.writeSnapshots) {
         await this.writer.writeJson(join(this.layout.snapshotsDirectory, prepare.snapshotFile), prepare.envelope);
       }
@@ -779,10 +899,12 @@ export class StorageManager<TRoot = unknown> {
       this.transactionId = loaded.transactionId;
       this.recoveredFrom = loaded.source;
       this.replacePersistedObjectVersions(loaded.objectVersions);
+      this.schemaVersion = loaded.schemaVersion;
     } else {
       this.rootValue = this.options.rootFactory();
       this.transactionId = 0;
       this.recoveredFrom = "empty";
+      this.schemaVersion = this.targetSchemaVersion();
       this.replacePersistedObjectVersions(new Map());
     }
     this.bindLazyRefs(this.rootValue);
@@ -1002,6 +1124,108 @@ function replaceObjectContents(target: object, source: object): void {
     delete (target as Record<string, unknown>)[key];
   }
   Object.assign(target, source);
+}
+
+function healthStatus(safetyStatus: StorageSafetyProfile["status"], verificationOk: boolean): StorageHealthReport["status"] {
+  if (!verificationOk) {
+    return "error";
+  }
+  if (safetyStatus === "unsafe") {
+    return "unsafe";
+  }
+  if (safetyStatus === "warning") {
+    return "warning";
+  }
+  return "healthy";
+}
+
+function sortedSchemaMigrations<TRoot>(migrations: readonly StorageSchemaMigration<TRoot>[]): Array<StorageSchemaMigration<TRoot>> {
+  const sorted = [...migrations].sort((a, b) => a.version - b.version);
+  const seen = new Set<number>();
+  for (const migration of sorted) {
+    if (!Number.isSafeInteger(migration.version) || migration.version < 1) {
+      throw new RangeError("Schema migration versions must be positive safe integers.");
+    }
+    if (seen.has(migration.version)) {
+      throw new Error(`Duplicate schema migration version ${migration.version}.`);
+    }
+    seen.add(migration.version);
+  }
+  return sorted;
+}
+
+function migrationPlan<TRoot>(
+  currentVersion: number,
+  targetVersion: number,
+  migrations: readonly StorageSchemaMigration<TRoot>[],
+): StorageMigrationPlanStep[] {
+  validateSchemaVersion(currentVersion, "currentVersion");
+  validateSchemaVersion(targetVersion, "targetVersion");
+  if (currentVersion === targetVersion) {
+    return [];
+  }
+  const byVersion = new Map(migrations.map((migration) => [migration.version, migration]));
+  const steps: StorageMigrationPlanStep[] = [];
+  if (targetVersion > currentVersion) {
+    for (let version = currentVersion + 1; version <= targetVersion; version++) {
+      const migration = byVersion.get(version);
+      if (!migration) {
+        throw new Error(`Missing schema migration for version ${version}.`);
+      }
+      steps.push(migrationPlanStep(migration, "up", version - 1, version));
+    }
+    return steps;
+  }
+  for (let version = currentVersion; version > targetVersion; version--) {
+    const migration = byVersion.get(version);
+    if (!migration) {
+      throw new Error(`Missing schema migration for version ${version}.`);
+    }
+    steps.push(migrationPlanStep(migration, "down", version, version - 1));
+  }
+  return steps;
+}
+
+function migrationPlanStep<TRoot>(
+  migration: StorageSchemaMigration<TRoot>,
+  direction: StorageMigrationPlanStep["direction"],
+  fromVersion: number,
+  toVersion: number,
+): StorageMigrationPlanStep {
+  return {
+    version: migration.version,
+    ...(migration.name ? { name: migration.name } : {}),
+    direction,
+    fromVersion,
+    toVersion,
+  };
+}
+
+function migrationContext<TRoot>(root: TRoot, step: StorageMigrationPlanStep): Parameters<StorageSchemaMigration<TRoot>["up"]>[0] {
+  return {
+    root,
+    direction: step.direction,
+    fromVersion: step.fromVersion,
+    toVersion: step.toVersion,
+    version: step.version,
+    ...(step.name ? { name: step.name } : {}),
+  };
+}
+
+function migrationMetadata(step: StorageMigrationPlanStep): SchemaMigrationMetadata {
+  return {
+    version: step.version,
+    ...(step.name ? { name: step.name } : {}),
+    direction: step.direction,
+    fromVersion: step.fromVersion,
+    toVersion: step.toVersion,
+  };
+}
+
+function validateSchemaVersion(version: number, label: string): void {
+  if (!Number.isSafeInteger(version) || version < 0) {
+    throw new RangeError(`${label} must be a non-negative safe integer.`);
+  }
 }
 
 function liveObjectRecordFiles(manifest: { objectIds: string[]; transactionId: number; objectVersions?: Record<string, number> }, extension: "json" | "bin"): Set<string> {

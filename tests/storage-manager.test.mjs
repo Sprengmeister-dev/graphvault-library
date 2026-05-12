@@ -12,6 +12,7 @@ const consistentBackupDirectory = await mkdtemp(join(tmpdir(), "graphvault-stora
 const integrityDirectory = await mkdtemp(join(tmpdir(), "graphvault-storage-integrity-"));
 const productionSafetyDirectory = await mkdtemp(join(tmpdir(), "graphvault-storage-safety-production-"));
 const unsafeSafetyDirectory = await mkdtemp(join(tmpdir(), "graphvault-storage-safety-unsafe-"));
+const migrationDirectory = await mkdtemp(join(tmpdir(), "graphvault-storage-migrations-"));
 
 try {
   const writeable = await EmbeddedStorage.start({
@@ -29,6 +30,7 @@ try {
   const operations = await writeable.operations();
   assert.equal(operations.status, "healthy");
   assert.equal(operations.publishedTransactionId, 1);
+  assert.equal(operations.schemaVersion, 0);
   assert.equal(operations.latestJournalTransactionId, 1);
   assert.equal(operations.pendingWalCommits, 0);
   assert.equal(operations.walPrepareFiles, 1);
@@ -39,6 +41,17 @@ try {
   assert.equal(defaultSafety.status, "warning");
   assert.equal(defaultSafety.issues.some((issue) => issue.code === "stale-lock-recovery-disabled"), true);
   assert.equal(defaultSafety.hashChain, "present");
+  const defaultHealth = await writeable.health();
+  assert.equal(defaultHealth.ok, true);
+  assert.equal(defaultHealth.status, "warning");
+  assert.equal(defaultHealth.operations.status, "healthy");
+  assert.equal(defaultHealth.safety.status, "warning");
+  assert.equal(defaultHealth.verification.ok, true);
+  assert.equal(typeof defaultHealth.checkedAt, "string");
+  const lightweightHealth = await writeable.health({ verify: false });
+  assert.equal(lightweightHealth.ok, true);
+  assert.equal(lightweightHealth.status, "warning");
+  assert.equal("verification" in lightweightHealth, false);
 
   const rootOnlySubtree = await writeable.loadSubtree({ depth: 0 });
   assert.equal(rootOnlySubtree.depth, 0);
@@ -241,6 +254,10 @@ try {
   assert.equal(safeProfile.pendingRecovery, false);
   assert.equal(safeProfile.staleLockRecovery, true);
   assert.deepEqual(safeProfile.issues, []);
+  const safeHealth = await productionSafe.health();
+  assert.equal(safeHealth.ok, true);
+  assert.equal(safeHealth.status, "healthy");
+  assert.equal(safeHealth.safety.score, 100);
   await productionSafe.shutdown();
 
   const unsafeStore = await EmbeddedStorage.start({
@@ -256,7 +273,106 @@ try {
   assert.equal(unsafeProfile.writeSnapshots, false);
   assert.equal(unsafeProfile.issues.some((issue) => issue.code === "transaction-log-disabled" && issue.severity === "critical"), true);
   assert.equal(unsafeProfile.issues.some((issue) => issue.code === "relaxed-durability"), true);
+  const unsafeHealth = await unsafeStore.health({ verify: false });
+  assert.equal(unsafeHealth.ok, false);
+  assert.equal(unsafeHealth.status, "unsafe");
+  assert.equal(unsafeHealth.safety.status, "unsafe");
   await unsafeStore.shutdown();
+
+  const migrationV0 = await EmbeddedStorage.start({
+    storageDirectory: migrationDirectory,
+    schemaVersion: 0,
+    rootFactory: () => ({ people: [{ fullName: "Ada Lovelace" }] }),
+  });
+  await migrationV0.storeRoot();
+  await migrationV0.shutdown();
+
+  const migrations = [
+    {
+      version: 1,
+      name: "split-person-name",
+      up: ({ root }) => {
+        for (const person of root.people) {
+          const [firstName, ...lastName] = person.fullName.split(" ");
+          person.firstName = firstName;
+          person.lastName = lastName.join(" ");
+          delete person.fullName;
+        }
+      },
+      down: ({ root }) => {
+        for (const person of root.people) {
+          person.fullName = `${person.firstName} ${person.lastName}`.trim();
+          delete person.firstName;
+          delete person.lastName;
+        }
+      },
+    },
+    {
+      version: 2,
+      name: "add-active-flag",
+      up: ({ root }) => {
+        for (const person of root.people) {
+          person.active = true;
+        }
+      },
+      down: ({ root }) => {
+        for (const person of root.people) {
+          delete person.active;
+        }
+      },
+    },
+  ];
+
+  const migrationStore = await EmbeddedStorage.start({
+    storageDirectory: migrationDirectory,
+    rootFactory: () => ({ people: [] }),
+    schemaVersion: 2,
+    schemaMigrations: migrations,
+  });
+  assert.equal(migrationStore.currentSchemaVersion(), 0);
+  const migrationStatus = migrationStore.migrationStatus();
+  assert.equal(migrationStatus.currentVersion, 0);
+  assert.equal(migrationStatus.targetVersion, 2);
+  assert.deepEqual(migrationStatus.pending.map((step) => [step.version, step.direction]), [[1, "up"], [2, "up"]]);
+  const migrated = await migrationStore.migrateTo();
+  assert.equal(migrated.fromVersion, 0);
+  assert.equal(migrated.toVersion, 2);
+  assert.equal(migrated.applied.length, 2);
+  assert.equal(migrationStore.currentSchemaVersion(), 2);
+  assert.deepEqual(migrationStore.root.people, [{ firstName: "Ada", lastName: "Lovelace", active: true }]);
+  const migratedManifest = JSON.parse(await readFile(join(migrationDirectory, "manifest.json"), "utf8"));
+  assert.equal(migratedManifest.schemaVersion, 2);
+  const migrationTransactions = await readdir(join(migrationDirectory, "transactions"));
+  const latestMigrationRecord = JSON.parse(
+    await readFile(join(migrationDirectory, "transactions", migrationTransactions.sort().at(-1)), "utf8"),
+  );
+  assert.equal(latestMigrationRecord.schemaVersion, 2);
+  assert.deepEqual(latestMigrationRecord.metadata.schemaMigration, {
+    version: 2,
+    name: "add-active-flag",
+    direction: "up",
+    fromVersion: 1,
+    toVersion: 2,
+  });
+
+  const downMigrated = await migrationStore.migrateTo(0);
+  assert.equal(downMigrated.fromVersion, 2);
+  assert.equal(downMigrated.toVersion, 0);
+  assert.deepEqual(downMigrated.applied.map((step) => [step.version, step.direction]), [[2, "down"], [1, "down"]]);
+  assert.deepEqual(migrationStore.root.people, [{ fullName: "Ada Lovelace" }]);
+  assert.equal(migrationStore.currentSchemaVersion(), 0);
+  await migrationStore.shutdown();
+
+  const migrationReload = await EmbeddedStorage.start({
+    storageDirectory: migrationDirectory,
+    rootFactory: () => ({ people: [] }),
+    schemaVersion: 2,
+    schemaMigrations: migrations,
+    migrateOnStart: true,
+  });
+  assert.equal(migrationReload.currentSchemaVersion(), 2);
+  assert.deepEqual(migrationReload.root.people, [{ firstName: "Ada", lastName: "Lovelace", active: true }]);
+  await migrationReload.shutdown();
 } finally {
   await rm(workingDirectory, { recursive: true, force: true });
   await rm(backupDirectory, { recursive: true, force: true });
@@ -266,4 +382,5 @@ try {
   await rm(integrityDirectory, { recursive: true, force: true });
   await rm(productionSafetyDirectory, { recursive: true, force: true });
   await rm(unsafeSafetyDirectory, { recursive: true, force: true });
+  await rm(migrationDirectory, { recursive: true, force: true });
 }
