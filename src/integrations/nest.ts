@@ -4,26 +4,42 @@ import type { GraphVaultTransactionOptions, StorageManagerOptions } from "../cor
 export const GRAPHVAULT_MANAGER = Symbol("GRAPHVAULT_MANAGER");
 export const GRAPHVAULT_OPTIONS = Symbol("GRAPHVAULT_OPTIONS");
 
-export interface NestProvider {
-  provide: unknown;
-  useValue?: unknown;
-  useFactory?: (...args: any[]) => unknown;
-  useExisting?: unknown;
-  inject?: unknown[];
+export type NestInjectionToken = string | symbol | Function | NestType;
+
+export interface NestType<T = unknown> extends Function {
+  new (...args: any[]): T;
+}
+
+export type NestProvider = NestValueProvider | NestFactoryProvider | NestExistingProvider;
+
+export interface NestValueProvider {
+  provide: NestInjectionToken;
+  useValue: unknown;
+}
+
+export interface NestFactoryProvider {
+  provide: NestInjectionToken;
+  useFactory: (...args: any[]) => unknown;
+  inject?: NestInjectionToken[];
+}
+
+export interface NestExistingProvider {
+  provide: NestInjectionToken;
+  useExisting: NestInjectionToken;
 }
 
 export interface DynamicModuleLike {
-  module: unknown;
+  module: NestType;
   global?: boolean;
   providers: NestProvider[];
-  exports: unknown[];
+  exports: NestInjectionToken[];
 }
 
 export type GraphVaultModuleOptions<TRoot> = StorageManagerOptions<TRoot> & { global?: boolean };
 
 export interface GraphVaultModuleAsyncOptions<TRoot> {
   global?: boolean;
-  inject?: unknown[];
+  inject?: NestInjectionToken[];
   useFactory: (...args: any[]) => StorageManagerOptions<TRoot> | Promise<StorageManagerOptions<TRoot>>;
 }
 

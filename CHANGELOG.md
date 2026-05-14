@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.3
+
+- Fix NestJS `GraphVaultModule.forRoot(...)` and `forRootAsync(...)` TypeScript compatibility with real Nest module imports.
+- Add a package smoke test that compiles and runs a minimal NestJS application with `StorageManager` injection, `@GraphVaultTransactional()`, and restart persistence.
+
 ## 0.2.1
 
 - Add `safetyProfile()` for production-readiness checks across WAL, durability, stale-lock recovery, read-committed WAL behavior, snapshots, commit validators, pending recovery, and the transaction hash chain.

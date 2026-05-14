@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { join, resolve } from "node:path";
@@ -19,7 +19,25 @@ try {
 
   await writeFile(
     join(temp, "package.json"),
-    JSON.stringify({ type: "module", private: true, dependencies: { "@sprengmeister/graphvault": `file:${tarball}` } }, null, 2),
+    JSON.stringify(
+      {
+        type: "module",
+        private: true,
+        dependencies: {
+          "@nestjs/common": "^11.1.21",
+          "@nestjs/core": "^11.1.21",
+          "@sprengmeister/graphvault": `file:${tarball}`,
+          "reflect-metadata": "^0.2.2",
+          rxjs: "^7.8.2",
+        },
+        devDependencies: {
+          "@types/node": "^22.15.3",
+          typescript: "^5.8.3",
+        },
+      },
+      null,
+      2,
+    ),
   );
   execFileSync("npm", ["install", "--ignore-scripts", "--no-audit", "--no-fund", "--cache", join(temp, ".npm-cache")], {
     cwd: temp,
@@ -151,6 +169,113 @@ await migratedStore.shutdown();
 `,
   );
   execFileSync("node", ["smoke.mjs"], { cwd: temp, stdio: "inherit" });
+  await mkdir(join(temp, "src"), { recursive: true });
+  await writeFile(
+    join(temp, "tsconfig.json"),
+    JSON.stringify(
+      {
+        compilerOptions: {
+          target: "ES2024",
+          module: "NodeNext",
+          moduleResolution: "NodeNext",
+          strict: true,
+          experimentalDecorators: true,
+          emitDecoratorMetadata: true,
+          esModuleInterop: true,
+          skipLibCheck: false,
+          outDir: "dist",
+        },
+        include: ["src/**/*.ts"],
+      },
+      null,
+      2,
+    ),
+  );
+  await writeFile(
+    join(temp, "src", "nest-smoke.ts"),
+    `
+import "reflect-metadata";
+import assert from "node:assert/strict";
+import { Injectable, Module } from "@nestjs/common";
+import { NestFactory } from "@nestjs/core";
+import { GraphVaultModule, GraphVaultTransactional, StorageManager } from "@sprengmeister/graphvault";
+
+interface CaseNote {
+  id: string;
+  title: string;
+  status: "draft" | "approved";
+}
+
+class AppRoot {
+  notes: CaseNote[] = [];
+}
+
+@Injectable()
+class CasesService {
+  constructor(readonly storage: StorageManager<AppRoot>) {}
+
+  async create(title: string): Promise<CaseNote> {
+    const note: CaseNote = { id: "case-1", title, status: "draft" };
+    await this.storage.update((root) => {
+      root.notes.push(note);
+    });
+    return note;
+  }
+
+  @GraphVaultTransactional({ mode: "pessimistic", managerProperty: "storage" })
+  async approve(id: string): Promise<CaseNote> {
+    const note = this.storage.root.notes.find((item) => item.id === id);
+    if (!note) throw new Error("Missing note");
+    note.status = "approved";
+    return note;
+  }
+
+  list(): CaseNote[] {
+    return [...this.storage.root.notes];
+  }
+}
+
+@Module({
+  imports: [
+    GraphVaultModule.forRoot<AppRoot>({
+      global: true,
+      storageDirectory: "./nest-data/graphvault",
+      rootFactory: () => new AppRoot(),
+      types: [{ name: "AppRoot", ctor: AppRoot }],
+      lockStrategy: "pessimistic",
+      transactionLog: "full",
+      recoverCommittedWal: true,
+      readCommittedWal: true,
+      staleLockTimeoutMs: 60_000,
+      writeDurability: "strict",
+    }),
+  ],
+  providers: [CasesService],
+})
+class AppModule {}
+
+async function runOnce(): Promise<void> {
+  const app = await NestFactory.createApplicationContext(AppModule, { logger: false });
+  const cases = app.get(CasesService);
+  const created = await cases.create("Package Nest smoke");
+  await cases.approve(created.id);
+  assert.deepEqual(cases.list(), [{ id: "case-1", title: "Package Nest smoke", status: "approved" }]);
+  await app.close();
+}
+
+async function verifyRestart(): Promise<void> {
+  const app = await NestFactory.createApplicationContext(AppModule, { logger: false });
+  const cases = app.get(CasesService);
+  assert.deepEqual(cases.list(), [{ id: "case-1", title: "Package Nest smoke", status: "approved" }]);
+  await app.close();
+}
+
+await runOnce();
+await verifyRestart();
+`,
+  );
+  execFileSync(join(temp, "node_modules", ".bin", "tsc"), ["-p", "tsconfig.json"], { cwd: temp, stdio: "inherit" });
+  execFileSync("node", ["dist/nest-smoke.js"], { cwd: temp, stdio: "inherit" });
   console.log("GraphVault package smoke test passed.");
 } finally {
   await rm(temp, { recursive: true, force: true });
