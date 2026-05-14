@@ -12,6 +12,8 @@ GraphVault is embedded object-graph persistence for TypeScript and NestJS applic
 
 It is not a SQL server and it is not an ORM. You keep your domain model in memory, mutate normal TypeScript objects, then explicitly commit a verifiable graph store with WAL recovery, locking, indexes, GVQL, and an admin UI.
 
+Current release: [0.2.3](./docs/RELEASE_NOTES_0.2.3.md), with persistent indexes, Node.js 26 validation, NestJS smoke tests, and a slimmer TypeScript-developer README.
+
 ## 30-Second Quickstart
 
 ```bash
@@ -168,6 +170,7 @@ Then open `http://127.0.0.1:4177`.
 - [NestJS integration](./docs/NESTJS.md) - module setup, async config, multiple stores, and shutdown hooks.
 - [API reference](./docs/API.md) - public entry points and important options.
 - [Benchmarks](./docs/BENCHMARKS.md) - reproducible performance numbers and write profiles.
+- [0.2.3 release notes](./docs/RELEASE_NOTES_0.2.3.md) - persistent indexes, Node.js 26, NestJS smoke tests, and current package baseline.
 - [0.2.0 release notes](./docs/RELEASE_NOTES_0.2.0.md) - production hardening, ACID-oriented recovery, subtree exports, and encrypted storage.
 - [0.1.0 release notes](./docs/RELEASE_NOTES_0.1.0.md) - package overview for the first public release.
 - [Publishing checklist](./docs/PUBLISHING.md) - local release checks, tagging, npm provenance, and GitHub topics.

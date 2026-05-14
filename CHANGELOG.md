@@ -4,6 +4,15 @@
 
 - Fix NestJS `GraphVaultModule.forRoot(...)` and `forRootAsync(...)` TypeScript compatibility with real Nest module imports.
 - Add a package smoke test that compiles and runs a minimal NestJS application with `StorageManager` injection, `@GraphVaultTransactional()`, and restart persistence.
+- Refresh README and release notes around the current TypeScript developer baseline.
+
+## 0.2.2
+
+- Add persistent storage-wide indexes for type, property, and graph-edge lookup tables.
+- Add configurable index coverage for large stores.
+- Add `indexStatus()` and `rebuildIndexes()` for operational index administration.
+- Teach GVQL to reuse committed indexes for common equality, `IN`, `OR`, aggregate, and traversal queries.
+- Move the package and CI baseline to Node.js 26 and add source-size quality checks.
 
 ## 0.2.1
 
