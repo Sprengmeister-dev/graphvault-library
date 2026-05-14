@@ -1,7 +1,7 @@
 # GraphVault Library
 
 [![CI](https://github.com/Sprengmeister-dev/graphvault-library/actions/workflows/ci.yml/badge.svg)](https://github.com/Sprengmeister-dev/graphvault-library/actions/workflows/ci.yml)
-![Node](https://img.shields.io/badge/node-%3E%3D20-3c7a52)
+![Node](https://img.shields.io/badge/node-%3E%3D26-3c7a52)
 ![TypeScript](https://img.shields.io/badge/TypeScript-first-315c92)
 ![License](https://img.shields.io/badge/license-MIT-2f2f2f)
 
@@ -217,7 +217,7 @@ From npm:
 npm install @sprengmeister/graphvault
 ```
 
-GraphVault requires Node.js 20 or newer and ships ESM JavaScript plus TypeScript declarations.
+GraphVault requires Node.js 26 or newer and ships ESM JavaScript plus TypeScript declarations.
 
 ## Basic Usage
 
@@ -296,7 +296,7 @@ npm run pack:dry-run
 npm run package:smoke
 ```
 
-The smoke test stores and reloads a real object graph with class instances, shared references, maps, sets, and cycles. The package smoke test installs the generated tarball into a clean temporary project and verifies public and Studio-facing subpath imports. CI runs on Node.js 20 and 22.
+The smoke test stores and reloads a real object graph with class instances, shared references, maps, sets, and cycles. The package smoke test installs the generated tarball into a clean temporary project and verifies public and Studio-facing subpath imports. CI runs on Node.js 26 and includes a source-size quality gate.
 
 ## Admin UI
 

@@ -71,8 +71,8 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "test:unit": "npm run build && node tests/smoke.mjs && node tests/parser.test.mjs && node tests/engine.test.mjs && node tests/storage-manager.test.mjs && node tests/concurrency-transactions.test.mjs && node tests/wal-crash-matrix.test.mjs && node tests/storage-target-conformance.test.mjs && node tests/clause-scanner.test.mjs && node tests/gvql-values.test.mjs && node tests/binary-codec.test.mjs && node tests/gvql-index.test.mjs && node tests/mutex.test.mjs && node tests/storage-target-sql.test.mjs && node tests/storage-target-s3.test.mjs && node tests/persistent-cache.test.mjs && node tests/serializer.test.mjs && node tests/lazy-and-storer.test.mjs && node tests/parser-fuzz.test.mjs",
-    "test": "c8 npm run test:unit",
+    "test:unit": "npm run build && node tests/smoke.mjs && node tests/parser.test.mjs && node tests/engine.test.mjs && node tests/storage-manager.test.mjs && node tests/concurrency-transactions.test.mjs && node tests/wal-crash-matrix.test.mjs && node tests/storage-target-conformance.test.mjs && node tests/clause-scanner.test.mjs && node tests/gvql-values.test.mjs && node tests/binary-codec.test.mjs && node tests/gvql-index.test.mjs && node tests/mutex.test.mjs && node tests/storage-target-sql.test.mjs && node tests/storage-target-s3.test.mjs && node tests/persistent-cache.test.mjs && node tests/serializer.test.mjs && node tests/lazy-and-storer.test.mjs && node tests/storage-modules.test.mjs && node tests/parser-fuzz.test.mjs",
+    "test": "npm run quality:source && c8 npm run test:unit",
     "coverage": "npm run test",
     "benchmark": "npm run build && node benchmarks/object-graph.mjs",
     "benchmark:json": "npm run build && node benchmarks/object-graph.mjs --json --output benchmark-results.json",
@@ -80,7 +80,9 @@
     "pack:dry-run": "npm pack --dry-run --cache ./.npm-cache",
     "package:smoke": "node scripts/package-smoke.mjs",
     "prepare": "npm run build",
-    "prepack": "npm run build"
+    "prepack": "npm run build",
+    "quality:source": "node scripts/source-quality.mjs",
+    "quality": "npm run quality:source && npm run build"
   },
   "keywords": [
     "graphvault",
@@ -96,7 +98,7 @@
   ],
   "license": "MIT",
   "engines": {
-    "node": ">=20"
+    "node": ">=26"
   },
   "peerDependencies": {
     "@nestjs/common": ">=10 || >=11"
@@ -117,7 +119,12 @@
     "branches": 70,
     "functions": 80,
     "statements": 80,
-    "include": ["dist/**/*.js"],
-    "exclude": ["tests/**/*.js", "tests/**/*.mjs"]
+    "include": [
+      "dist/**/*.js"
+    ],
+    "exclude": [
+      "tests/**/*.js",
+      "tests/**/*.mjs"
+    ]
   }
 }

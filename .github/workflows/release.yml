@@ -30,10 +30,11 @@ jobs:
           ref: ${{ inputs.tag }}
       - uses: actions/setup-node@v4
         with:
-          node-version: 22.x
+          node-version: 26.x
           cache: npm
           registry-url: https://registry.npmjs.org
       - run: npm ci
+      - run: npm run quality
       - run: npm test
       - run: npm run benchmark:check
       - run: npm run pack:dry-run

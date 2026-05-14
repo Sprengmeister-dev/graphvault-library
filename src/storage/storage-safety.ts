@@ -1,9 +1,7 @@
 import type {
-  StorageLockStrategy,
   StorageOperationsStatus,
   StorageSafetyIssue,
   StorageSafetyProfile,
-  StorageTransactionLogMode,
   StorageWriteDurability,
   StorageWriteProfile,
 } from "../core/types.js";

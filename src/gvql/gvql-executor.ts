@@ -10,7 +10,6 @@ import type {
   GvqlBooleanExpression,
   GvqlExecutionOptions,
   GvqlExecutionPlan,
-  GvqlGraphEdge,
   GvqlGraphIndex,
   GvqlHavingClause,
   GvqlLiteral,

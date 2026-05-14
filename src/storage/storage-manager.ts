@@ -10,6 +10,11 @@ import { resolveStorageWriteOptions, type ResolvedStorageWriteOptions } from "./
 import { copyStorageTargetTree, LocalFilesystemTarget } from "./storage-target.js";
 import { loadSubtreeFromEnvelope, loadSubtreeFromManifest } from "./storage-subtree.js";
 import { assessStorageSafety } from "./storage-safety.js";
+import { buildStorageHealthReport } from "./storage-health.js";
+import { collectStorageGarbage } from "./storage-garbage.js";
+import { collectObjectIdsForTargets } from "./storage-object-collector.js";
+import { migrationContext, migrationMetadata, migrationPlan, sortedSchemaMigrations, targetSchemaVersion } from "./storage-migrations.js";
+import { isIterable, replaceObjectContents } from "./storage-root-helpers.js";
 import { Storer } from "./storer.js";
 import { LazyRef } from "../lazy/lazy-ref.js";
 import { OptimisticLockError, ReadonlyStorageError, StorageNotStartedError, TransactionScopeError } from "../core/errors.js";
@@ -36,8 +41,6 @@ import type {
   GraphVaultTransactionContext,
   GraphVaultTransactionOptions,
   GraphVaultTransactionResult,
-  SchemaMigrationMetadata,
-  StorageMigrationPlanStep,
   StorageMigrationResult,
   StorageMigrationStatus,
   StorageMigrationStepResult,
@@ -429,75 +432,7 @@ export class StorageManager<TRoot = unknown> {
   }
 
   private async collectGarbageLocked(): Promise<GarbageCollectionResult> {
-    const manifest = await this.reader.readManifest();
-    if (!manifest) {
-      return {
-        keptObjects: 0,
-        removedObjects: 0,
-        keptBinaryObjects: 0,
-        removedBinaryObjects: 0,
-        keptLazyFiles: 0,
-        removedLazyFiles: 0,
-      };
-    }
-
-    const liveJsonRecords = liveObjectRecordFiles(manifest, "json");
-    const liveBinaryRecords = liveObjectRecordFiles(manifest, "bin");
-    const liveLazyFiles = new Set<string>();
-    const envelope = await this.reader.envelopeFromManifest(manifest);
-    for (const node of Object.values(envelope.nodes)) {
-      if (node.kind === "lazy") {
-        liveLazyFiles.add(`${encodeURIComponent(node.key)}.json`);
-      }
-    }
-
-    let keptObjects = 0;
-    let removedObjects = 0;
-    for (const directory of this.layout.objectRecordDirectories("json")) {
-      for (const file of await this.reader.readDirectoryIfExists(directory)) {
-        if (!file.endsWith(".json")) {
-          continue;
-        }
-        if (liveJsonRecords.has(file)) {
-          keptObjects++;
-        } else {
-          await this.target.remove(join(directory, file));
-          removedObjects++;
-        }
-      }
-    }
-
-    let keptBinaryObjects = 0;
-    let removedBinaryObjects = 0;
-    for (const directory of this.layout.objectRecordDirectories("binary")) {
-      for (const file of await this.reader.readDirectoryIfExists(directory)) {
-        if (!file.endsWith(".bin")) {
-          continue;
-        }
-        if (liveBinaryRecords.has(file)) {
-          keptBinaryObjects++;
-        } else {
-          await this.target.remove(join(directory, file));
-          removedBinaryObjects++;
-        }
-      }
-    }
-
-    let keptLazyFiles = 0;
-    let removedLazyFiles = 0;
-    for (const file of await this.reader.readDirectoryIfExists(this.layout.lazyDirectory)) {
-      if (!file.endsWith(".json")) {
-        continue;
-      }
-      if (liveLazyFiles.has(file)) {
-        keptLazyFiles++;
-      } else {
-        await this.target.remove(join(this.layout.lazyDirectory, file));
-        removedLazyFiles++;
-      }
-    }
-
-    return { keptObjects, removedObjects, keptBinaryObjects, removedBinaryObjects, keptLazyFiles, removedLazyFiles };
+    return collectStorageGarbage({ target: this.target, layout: this.layout, reader: this.reader });
   }
 
   status(): StorageStatus {
@@ -559,30 +494,17 @@ export class StorageManager<TRoot = unknown> {
   }
 
   async health(options: StorageHealthOptions = {}): Promise<StorageHealthReport> {
-    const operations = await this.operations();
-    const safety = assessStorageSafety({
-      operations,
+    return buildStorageHealthReport({
+      options,
+      operations: await this.operations(),
       writeProfile: this.writeOptions.profile,
       durability: this.writeOptions.durability,
       writeSnapshots: this.writeOptions.writeSnapshots,
       recoverCommittedWal: this.shouldRecoverCommittedWal,
       readCommittedWal: this.shouldReadCommittedWal,
       commitValidatorCount: this.options.commitValidators?.length ?? 0,
+      verify: () => this.verify(),
     });
-    const verification = options.verify === false ? undefined : await this.verify();
-    const verificationOk = verification?.ok ?? true;
-    const ok = verificationOk && safety.status !== "unsafe";
-    const report: StorageHealthReport = {
-      ok,
-      status: healthStatus(safety.status, verificationOk),
-      checkedAt: new Date().toISOString(),
-      operations,
-      safety,
-    };
-    if (verification) {
-      report.verification = verification;
-    }
-    return report;
   }
 
   currentSchemaVersion(): number {
@@ -835,9 +757,7 @@ export class StorageManager<TRoot = unknown> {
   }
 
   private targetSchemaVersion(): number {
-    const targetVersion = this.options.schemaVersion ?? this.sortedSchemaMigrations().at(-1)?.version ?? 0;
-    validateSchemaVersion(targetVersion, "schemaVersion");
-    return targetVersion;
+    return targetSchemaVersion(this.options.schemaVersion, this.options.schemaMigrations ?? []);
   }
 
   private sortedSchemaMigrations(): Array<StorageSchemaMigration<TRoot>> {
@@ -936,49 +856,13 @@ export class StorageManager<TRoot = unknown> {
   }
 
   private collectObjectIds(envelope: SerializedEnvelope, targets: readonly unknown[]): string[] {
-    const requested = new Set<string>();
-    const seen = new Set<unknown>();
-
-    const visitValue = (value: unknown, force = false): void => {
-      if (!value || typeof value !== "object" || seen.has(value)) {
-        return;
-      }
-      seen.add(value);
-      const id = this.serializer.objectIds.idFor(value);
-      if (envelope.nodes[id]) {
-        if (force || !this.persistedObjectIds.has(id)) {
-          requested.add(id);
-        }
-      }
-      if (value instanceof LazyRef) {
-        return;
-      }
-      if (value instanceof Map) {
-        for (const [key, item] of value) {
-          visitValue(key);
-          visitValue(item);
-        }
-        return;
-      }
-      if (value instanceof Set || Array.isArray(value)) {
-        for (const item of value) {
-          visitValue(item);
-        }
-        return;
-      }
-      const entries = Object.entries(value);
-      for (const [fieldName, item] of entries) {
-        visitValue(item, Boolean(this.options.eagerFieldEvaluator?.({ owner: value, fieldName, value: item })));
-      }
-    };
-
-    for (const target of targets) {
-      visitValue(target, true);
-    }
-    if (requested.size === 0 && envelope.root && typeof envelope.root === "object" && "$ref" in envelope.root) {
-      requested.add(envelope.root.$ref);
-    }
-    return Array.from(requested).sort((a, b) => Number(a) - Number(b));
+    return collectObjectIdsForTargets({
+      envelope,
+      targets,
+      serializer: this.serializer,
+      persistedObjectIds: this.persistedObjectIds,
+      ...(this.options.eagerFieldEvaluator ? { eagerFieldEvaluator: this.options.eagerFieldEvaluator } : {}),
+    });
   }
 
   private async repairObjectStoreFromEnvelope(envelope: SerializedEnvelope, transactionId: number): Promise<void> {
@@ -1095,144 +979,4 @@ export class StorageManager<TRoot = unknown> {
     }
   }
 
-}
-
-function isIterable(value: unknown): value is Iterable<unknown> {
-  return Boolean(value) && typeof (value as { [Symbol.iterator]?: unknown })[Symbol.iterator] === "function";
-}
-
-function replaceObjectContents(target: object, source: object): void {
-  if (Array.isArray(target) && Array.isArray(source)) {
-    target.splice(0, target.length, ...source);
-    return;
-  }
-  if (target instanceof Map && source instanceof Map) {
-    target.clear();
-    for (const [key, value] of source) {
-      target.set(key, value);
-    }
-    return;
-  }
-  if (target instanceof Set && source instanceof Set) {
-    target.clear();
-    for (const value of source) {
-      target.add(value);
-    }
-    return;
-  }
-  for (const key of Object.keys(target)) {
-    delete (target as Record<string, unknown>)[key];
-  }
-  Object.assign(target, source);
-}
-
-function healthStatus(safetyStatus: StorageSafetyProfile["status"], verificationOk: boolean): StorageHealthReport["status"] {
-  if (!verificationOk) {
-    return "error";
-  }
-  if (safetyStatus === "unsafe") {
-    return "unsafe";
-  }
-  if (safetyStatus === "warning") {
-    return "warning";
-  }
-  return "healthy";
-}
-
-function sortedSchemaMigrations<TRoot>(migrations: readonly StorageSchemaMigration<TRoot>[]): Array<StorageSchemaMigration<TRoot>> {
-  const sorted = [...migrations].sort((a, b) => a.version - b.version);
-  const seen = new Set<number>();
-  for (const migration of sorted) {
-    if (!Number.isSafeInteger(migration.version) || migration.version < 1) {
-      throw new RangeError("Schema migration versions must be positive safe integers.");
-    }
-    if (seen.has(migration.version)) {
-      throw new Error(`Duplicate schema migration version ${migration.version}.`);
-    }
-    seen.add(migration.version);
-  }
-  return sorted;
-}
-
-function migrationPlan<TRoot>(
-  currentVersion: number,
-  targetVersion: number,
-  migrations: readonly StorageSchemaMigration<TRoot>[],
-): StorageMigrationPlanStep[] {
-  validateSchemaVersion(currentVersion, "currentVersion");
-  validateSchemaVersion(targetVersion, "targetVersion");
-  if (currentVersion === targetVersion) {
-    return [];
-  }
-  const byVersion = new Map(migrations.map((migration) => [migration.version, migration]));
-  const steps: StorageMigrationPlanStep[] = [];
-  if (targetVersion > currentVersion) {
-    for (let version = currentVersion + 1; version <= targetVersion; version++) {
-      const migration = byVersion.get(version);
-      if (!migration) {
-        throw new Error(`Missing schema migration for version ${version}.`);
-      }
-      steps.push(migrationPlanStep(migration, "up", version - 1, version));
-    }
-    return steps;
-  }
-  for (let version = currentVersion; version > targetVersion; version--) {
-    const migration = byVersion.get(version);
-    if (!migration) {
-      throw new Error(`Missing schema migration for version ${version}.`);
-    }
-    steps.push(migrationPlanStep(migration, "down", version, version - 1));
-  }
-  return steps;
-}
-
-function migrationPlanStep<TRoot>(
-  migration: StorageSchemaMigration<TRoot>,
-  direction: StorageMigrationPlanStep["direction"],
-  fromVersion: number,
-  toVersion: number,
-): StorageMigrationPlanStep {
-  return {
-    version: migration.version,
-    ...(migration.name ? { name: migration.name } : {}),
-    direction,
-    fromVersion,
-    toVersion,
-  };
-}
-
-function migrationContext<TRoot>(root: TRoot, step: StorageMigrationPlanStep): Parameters<StorageSchemaMigration<TRoot>["up"]>[0] {
-  return {
-    root,
-    direction: step.direction,
-    fromVersion: step.fromVersion,
-    toVersion: step.toVersion,
-    version: step.version,
-    ...(step.name ? { name: step.name } : {}),
-  };
-}
-
-function migrationMetadata(step: StorageMigrationPlanStep): SchemaMigrationMetadata {
-  return {
-    version: step.version,
-    ...(step.name ? { name: step.name } : {}),
-    direction: step.direction,
-    fromVersion: step.fromVersion,
-    toVersion: step.toVersion,
-  };
-}
-
-function validateSchemaVersion(version: number, label: string): void {
-  if (!Number.isSafeInteger(version) || version < 0) {
-    throw new RangeError(`${label} must be a non-negative safe integer.`);
-  }
-}
-
-function liveObjectRecordFiles(manifest: { objectIds: string[]; transactionId: number; objectVersions?: Record<string, number> }, extension: "json" | "bin"): Set<string> {
-  const files = new Set<string>();
-  for (const objectId of manifest.objectIds) {
-    files.add(`${objectId}.${extension}`);
-    files.add(`${objectId}.${manifest.objectVersions?.[objectId] ?? manifest.transactionId}.${extension}`);
-  }
-  return files;
 }

@@ -101,7 +101,6 @@ export class GraphSerializer {
   serialize(root: unknown): SerializedEnvelope {
     const seen = new Map<object, string>();
     const nodes: Record<string, EncodedNode> = {};
-    let nextId = 1;
 
     const encode = (value: unknown): EncodedValue => {
       if (value === null || typeof value === "string" || typeof value === "boolean") {
