@@ -25,12 +25,13 @@ jobs:
         env:
           RELEASE_CONFIRMATION: ${{ inputs.confirm }}
         run: test "$RELEASE_CONFIRMATION" = "PUBLISH"
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           ref: ${{ inputs.tag }}
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: 26.x
+          check-latest: true
           cache: npm
           registry-url: https://registry.npmjs.org
       - run: npm ci

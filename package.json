@@ -110,8 +110,8 @@
   },
   "devDependencies": {
     "@types/node": "^22.15.3",
-    "typescript": "^5.8.3",
-    "c8": "^10.1.3"
+    "c8": "^11.0.0",
+    "typescript": "^5.8.3"
   },
   "c8": {
     "check-coverage": true,
@@ -126,5 +126,10 @@
       "tests/**/*.js",
       "tests/**/*.mjs"
     ]
+  },
+  "overrides": {
+    "c8": {
+      "yargs": "^18.0.0"
+    }
   }
 }
