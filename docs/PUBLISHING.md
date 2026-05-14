@@ -35,7 +35,7 @@ npm run pack:dry-run
 npm run package:smoke
 ```
 
-Inspect the dry-run file list and confirm it contains `README.md`, `LICENSE`, `CHANGELOG.md`, `CONTRIBUTING.md`, `docs`, `dist`, `examples`, `benchmarks`, and the logo asset. `npm run package:smoke` installs the generated tarball into a fresh temporary project and imports the public API plus internal subpath exports used by GraphVault Studio.
+Inspect the dry-run file list and confirm it contains `README.md`, `LICENSE`, `CHANGELOG.md`, `CONTRIBUTING.md`, `docs`, `dist`, `examples`, `benchmarks`, and the logo asset. `npm run package:smoke` installs the generated tarball into a fresh temporary project, imports the public API plus internal subpath exports used by GraphVault Studio, and compiles/runs a minimal NestJS consumer with injection, transactional rollback, GVQL, health checks, backup, and restart persistence.
 
 ## Tagging
 
