@@ -1,5 +1,6 @@
 export { executeGvqlStatement, matchBindings } from "./gvql-executor.js";
-export { buildGvqlGraphIndex, propertyIndexKey, referencedEdges, visitEncodedNode } from "./gvql-index.js";
+export { buildGvqlGraphIndex, propertyIndexKey, propertyKey, referencedEdges, visitEncodedNode } from "./gvql-index.js";
+export type { GvqlGraphIndexBuildOptions } from "./gvql-index.js";
 export { parseGvql } from "./gvql-parser.js";
 export { encodedValueToJs, jsValueToEncoded } from "./gvql-values.js";
 export type {

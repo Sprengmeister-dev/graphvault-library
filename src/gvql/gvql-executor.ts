@@ -1,7 +1,7 @@
 import { performance } from "node:perf_hooks";
 import { projectGvqlRows } from "./gvql-aggregation.js";
 import { evaluateGvqlValueExpression } from "./gvql-expressions.js";
-import { buildGvqlGraphIndex, propertyIndexKey } from "./gvql-index.js";
+import { buildGvqlGraphIndex, propertyIndexKey, propertyKey } from "./gvql-index.js";
 import { applyGvqlMutations } from "./gvql-mutations.js";
 import { encodedValueToJs, getNodePath, literalToJs, nodeSummary } from "./gvql-values.js";
 import type { EncodedNode, SerializedEnvelope } from "../core/types.js";
@@ -24,7 +24,7 @@ import type {
 
 interface IndexedCandidateSelection {
   path: string;
-  source: Extract<GvqlExecutionPlan["candidateSource"], "property-index" | "type-index" | "id-index">;
+  source: GvqlExecutionPlan["candidateSource"];
   objectIds: string[];
   propertyIndexes: NonNullable<GvqlExecutionPlan["propertyIndexes"]>;
   operation: string;
@@ -43,7 +43,7 @@ interface IndexablePredicateSet {
 export function executeGvqlStatement(envelope: SerializedEnvelope, statement: GvqlStatement, options: GvqlExecutionOptions = {}): GvqlResult {
   const started = performance.now();
   const parameters = options.parameters ?? {};
-  const index = buildGvqlGraphIndex(envelope);
+  const index = options.graphIndex ?? buildGvqlGraphIndex(envelope);
   const matched = matchBindingsWithPlan(index, statement, parameters);
   const bindings = matched.bindings.filter((binding) => matchesWhere(index, binding, statement, parameters));
   if (statement.kind === "select") {
@@ -162,6 +162,7 @@ function matchBindingsWithPlan(
       nodeCount: index.nodes.size,
       candidateSource: selection.source,
       indexUsed: selection.source !== "full-scan",
+      indexSource: index.source ?? "ephemeral",
       ...(patterns[0]?.start.type ? { startType: patterns[0].start.type } : {}),
       ...(selection.propertyIndex ? { propertyIndex: selection.propertyIndex } : {}),
       ...(selection.propertyIndexes ? { propertyIndexes: selection.propertyIndexes } : {}),
@@ -286,7 +287,9 @@ function candidates(
       ? new Set(unionCandidates(indexedCandidates.map((item) => item.objectIds)))
       : intersectCandidates(indexedCandidates.map((item) => item.objectIds));
   const propertyIndexes = indexedCandidates.flatMap((item) => item.propertyIndexes);
-  const source = indexedCandidates.find((item) => item.source === "property-index")?.source ?? indexedCandidates[0]?.source ?? (type ? "type-index" : "full-scan");
+  const source = indexedCandidates.some((item) => item.source === "full-scan")
+    ? "full-scan"
+    : indexedCandidates.find((item) => item.source === "property-index")?.source ?? indexedCandidates[0]?.source ?? (type ? "type-index" : "full-scan");
   return {
     objectIds: typeCandidates.filter((objectId) => allowed.has(objectId)),
     source,
@@ -311,6 +314,15 @@ function indexedCandidateSelection(
   }
   if (item.path === "$type") {
     return metadataCandidateSelection(index, item, "type-index");
+  }
+  if (!propertyIndexAvailable(index, item.path, item.keyValues.map(({ key }) => key))) {
+    return {
+      path: item.path,
+      source: "full-scan",
+      objectIds: Array.from(index.nodes.keys()),
+      propertyIndexes: [],
+      operation: `property-index-miss:${item.path}`,
+    };
   }
   const keyedCandidates = item.keyValues.map(({ key, value }) => ({ key, value, objectIds: index.byProperty.get(key) ?? [] }));
   if (keyedCandidates.length === 1) {
@@ -344,6 +356,16 @@ function indexedCandidateSelection(
     })),
     operation: `property-index-union:${item.path}:${keyedCandidates.length}`,
   };
+}
+
+function propertyIndexAvailable(index: GvqlGraphIndex, path: string, keys: readonly string[]): boolean {
+  if (index.propertyIndexMode !== "configured") {
+    return true;
+  }
+  if (keys.some((key) => index.byProperty.has(key))) {
+    return true;
+  }
+  return index.indexedPropertyKeys?.has(propertyKey(undefined, path)) ?? false;
 }
 
 function metadataCandidateSelection(

@@ -5,6 +5,7 @@ import type {
   ObjectRecord,
   ParentIndexRecord,
   SerializedEnvelope,
+  StorageIndexRecord,
   StorageManifest,
   StorageTarget,
   TransactionRecord,
@@ -165,6 +166,18 @@ export class StorageReader {
         return undefined;
       }
       return JSON.parse(await this.target.readText(this.layout.parentIndexFile)) as ParentIndexRecord;
+    } catch {
+      return undefined;
+    }
+  }
+
+  async readStorageIndex(): Promise<StorageIndexRecord | undefined> {
+    try {
+      if (!(await this.target.exists(this.layout.indexFile))) {
+        return undefined;
+      }
+      const record = JSON.parse(await this.target.readText(this.layout.indexFile)) as StorageIndexRecord;
+      return record.format === "graphvault-index" ? record : undefined;
     } catch {
       return undefined;
     }

@@ -1,7 +1,18 @@
 import { join } from "node:path";
-import type { ObjectRecord, StorageManifest, StorageTarget, TransactionRecord, VerificationResult, WalCommitRecord, WalPrepareRecord } from "../core/types.js";
+import type {
+  ObjectRecord,
+  SerializedEnvelope,
+  StorageIndexRecord,
+  StorageManifest,
+  StorageTarget,
+  TransactionRecord,
+  VerificationResult,
+  WalCommitRecord,
+  WalPrepareRecord,
+} from "../core/types.js";
 import { envelopeHash, transactionHashPayload, transactionRecordHash } from "../core/integrity.js";
 import { objectVersionsFromManifest } from "./storage-reader.js";
+import { indexEnvelopeHash } from "./storage-index.js";
 
 export interface StorageVerifierOptions {
   target: StorageTarget;
@@ -11,6 +22,7 @@ export interface StorageVerifierOptions {
   readLatestTransactionRecord: () => Promise<TransactionRecord | undefined>;
   readTransactionRecords?: () => Promise<TransactionRecord[]>;
   readObjectRecord: (objectId: string, transactionId?: number) => Promise<ObjectRecord>;
+  readStorageIndex?: () => Promise<StorageIndexRecord | undefined>;
   readSnapshotEnvelope?: (snapshotFile: string) => Promise<import("../core/types.js").SerializedEnvelope>;
 }
 
@@ -72,6 +84,7 @@ export async function verifyStorage(options: StorageVerifierOptions): Promise<Ve
 
   const knownObjects = new Set(manifest.objectIds);
   const objectVersions = objectVersionsFromManifest(manifest);
+  const nodes: SerializedEnvelope["nodes"] = {};
   const referencedObjects = new Set<string>();
   const referencedLazyFiles = new Set<string>();
   if (manifest.root && typeof manifest.root === "object" && "$ref" in manifest.root) {
@@ -90,6 +103,7 @@ export async function verifyStorage(options: StorageVerifierOptions): Promise<Ve
     if (record.objectId !== objectId) {
       errors.push(`Object record ${objectId} contains mismatched objectId ${record.objectId}.`);
     }
+    nodes[objectId] = record.node;
     collectReferences(record.node, referencedObjects, referencedLazyFiles);
   }
 
@@ -105,7 +119,38 @@ export async function verifyStorage(options: StorageVerifierOptions): Promise<Ve
     }
   }
 
+  if (options.readStorageIndex) {
+    const index = await options.readStorageIndex();
+    if (!index) {
+      warnings.push("Persistent index is missing; GVQL can rebuild ephemeral indexes but persistent index acceleration is unavailable.");
+    } else {
+      verifyPersistentIndex(index, manifest, nodes, warnings);
+    }
+  }
+
   return { ok: errors.length === 0, checkedObjects, checkedTransactions, checkedWalRecords, checkedIntegrityHashes, pendingWalCommits, warnings, errors };
+}
+
+function verifyPersistentIndex(index: StorageIndexRecord, manifest: StorageManifest, nodes: SerializedEnvelope["nodes"], warnings: string[]): void {
+  if (index.format !== "graphvault-index") {
+    warnings.push("Persistent index has an invalid format; GVQL will rebuild ephemeral indexes if needed.");
+  }
+  if (index.transactionId !== manifest.transactionId) {
+    warnings.push(`Persistent index transaction ${index.transactionId} does not match manifest transaction ${manifest.transactionId}.`);
+  }
+  if (index.nodeCount !== manifest.objectIds.length) {
+    warnings.push(`Persistent index node count ${index.nodeCount} does not match manifest object count ${manifest.objectIds.length}.`);
+  }
+  const envelope: SerializedEnvelope = {
+    format: "graphvault",
+    version: 1,
+    createdAt: manifest.createdAt,
+    root: manifest.root,
+    nodes,
+  };
+  if (index.envelopeHash !== indexEnvelopeHash(envelope)) {
+    warnings.push("Persistent index envelopeHash does not match the manifest graph.");
+  }
 }
 
 async function verifyTransactionIntegrity(

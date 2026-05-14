@@ -35,6 +35,7 @@ The benchmark creates a typed object graph with:
 - a GVQL multi-property index lookup
 - a GVQL indexed `IN` lookup with property-index unions and intersections
 - a GVQL indexed `OR` lookup with property-index union planning
+- persistent `index.json` reuse for committed type, property, and graph-edge lookup tables
 - a GVQL computed `RETURN` expression
 - GVQL scalar functions in `WHERE` and `RETURN`
 - a GVQL `CASE` expression for conditional projections

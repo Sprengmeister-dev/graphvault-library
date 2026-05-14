@@ -118,6 +118,53 @@ export interface ParentReference {
   path: string;
 }
 
+export type StorageIndexMode = "off" | "auto" | "configured";
+export type StorageIndexConsistency = "strict" | "committed";
+
+export interface StorageIndexDefinition {
+  type?: string;
+  path: string;
+}
+
+export interface StorageIndexOptions {
+  mode?: StorageIndexMode;
+  consistency?: StorageIndexConsistency;
+  properties?: Array<string | StorageIndexDefinition>;
+}
+
+export interface StorageIndexRecord {
+  format: "graphvault-index";
+  version: 1;
+  transactionId: number;
+  createdAt: string;
+  envelopeHash: string;
+  nodeCount: number;
+  mode: Exclude<StorageIndexMode, "off">;
+  indexedProperties: StorageIndexDefinition[];
+  byType: Record<string, string[]>;
+  byProperty: Record<string, string[]>;
+  outgoing: Record<string, StorageIndexEdge[]>;
+  incoming: Record<string, StorageIndexEdge[]>;
+}
+
+export interface StorageIndexEdge {
+  from: string;
+  to: string;
+  path: string;
+  label: string;
+}
+
+export interface StorageIndexStatus {
+  enabled: boolean;
+  mode: StorageIndexMode;
+  consistency: StorageIndexConsistency;
+  transactionId?: number;
+  nodeCount: number;
+  propertyKeys: number;
+  edgeCount: number;
+  source: "memory" | "storage" | "missing" | "stale" | "disabled";
+}
+
 export interface SubtreeLoadOptions {
   depth?: number;
   rootObjectId?: string;
@@ -215,6 +262,7 @@ export interface StorageManagerOptions<TRoot = unknown> {
   schemaVersion?: number;
   schemaMigrations?: Array<StorageSchemaMigration<TRoot>>;
   migrateOnStart?: boolean;
+  indexes?: boolean | StorageIndexOptions;
 }
 
 export type StorageCommitValidator<TRoot = unknown> = (context: {

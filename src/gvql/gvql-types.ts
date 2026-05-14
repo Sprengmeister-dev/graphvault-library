@@ -170,12 +170,17 @@ export interface GvqlGraphIndex {
   byProperty: Map<string, string[]>;
   outgoing: Map<string, GvqlGraphEdge[]>;
   incoming: Map<string, GvqlGraphEdge[]>;
+  propertyIndexMode?: "all" | "configured";
+  indexedPropertyKeys?: Set<string>;
+  source?: "ephemeral" | "persistent";
+  transactionId?: number;
 }
 
 export interface GvqlExecutionOptions {
   parameters?: Record<string, unknown>;
   allowMutations?: boolean;
   dryRun?: boolean;
+  graphIndex?: GvqlGraphIndex;
 }
 
 export type GvqlCandidateSource = "property-index" | "type-index" | "id-index" | "full-scan";
@@ -184,6 +189,7 @@ export interface GvqlExecutionPlan {
   nodeCount: number;
   candidateSource: GvqlCandidateSource;
   indexUsed: boolean;
+  indexSource: "ephemeral" | "persistent";
   startType?: string;
   propertyIndex?: {
     path: string;

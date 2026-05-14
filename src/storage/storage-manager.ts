@@ -13,7 +13,9 @@ import { assessStorageSafety } from "./storage-safety.js";
 import { buildStorageHealthReport } from "./storage-health.js";
 import { collectStorageGarbage } from "./storage-garbage.js";
 import { collectObjectIdsForTargets } from "./storage-object-collector.js";
+import { buildStorageIndexRecord, graphIndexFromStorageRecord, isUsableStorageIndexRecord, resolveStorageIndexOptions, storageIndexStatus, type ResolvedStorageIndexOptions } from "./storage-index.js";
 import { migrationContext, migrationMetadata, migrationPlan, sortedSchemaMigrations, targetSchemaVersion } from "./storage-migrations.js";
+import { bindStorageLazyRefs, storeLoadedStorageLazyRefs } from "./storage-lazy-helpers.js";
 import { isIterable, replaceObjectContents } from "./storage-root-helpers.js";
 import { Storer } from "./storer.js";
 import { LazyRef } from "../lazy/lazy-ref.js";
@@ -45,6 +47,8 @@ import type {
   StorageMigrationStatus,
   StorageMigrationStepResult,
   StorageSchemaMigration,
+  StorageIndexRecord,
+  StorageIndexStatus,
   TransactionLockMode,
   TransactionMetadata,
   VerificationResult,
@@ -52,6 +56,7 @@ import type {
   MaintenanceOptions,
 } from "../core/types.js";
 import type { GvqlExecutionOptions, GvqlResult } from "../gvql/gvql-types.js";
+import type { GvqlGraphIndex } from "../gvql/gvql-types.js";
 
 export class StorageManager<TRoot = unknown> {
   private readonly options: Required<Pick<StorageManagerOptions<TRoot>, "lockTimeoutMs" | "housekeepingIntervalMs">> &
@@ -63,6 +68,7 @@ export class StorageManager<TRoot = unknown> {
   private readonly writer: StorageWriter;
   private readonly committer: StorageCommitter;
   private readonly writeOptions: ResolvedStorageWriteOptions;
+  private readonly indexOptions: ResolvedStorageIndexOptions;
   private readonly mutex = new AsyncMutex();
   private rootValue?: TRoot;
   private started = false;
@@ -75,15 +81,17 @@ export class StorageManager<TRoot = unknown> {
   private housekeepingTimer: NodeJS.Timeout | undefined;
   private transactionDepth = 0;
   private schemaVersion = 0;
+  private storageIndexRecord: StorageIndexRecord | undefined;
 
   constructor(options: StorageManagerOptions<TRoot>, serializer = new GraphSerializer(options.types ?? [])) {
     this.options = { lockTimeoutMs: 5_000, housekeepingIntervalMs: 0, ...options };
     this.writeOptions = resolveStorageWriteOptions(this.options);
+    this.indexOptions = resolveStorageIndexOptions(this.options.indexes);
     this.layout = new StorageLayout(this.options.storageDirectory, this.options.channelCount ?? 1);
     this.serializer = serializer;
     this.target = options.storageTarget ?? new LocalFilesystemTarget({ syncWrites: this.writeOptions.durability === "strict" });
     this.reader = new StorageReader(this.target, this.layout);
-    this.writer = new StorageWriter(this.target, this.layout, this.writeOptions);
+    this.writer = new StorageWriter(this.target, this.layout, { ...this.writeOptions, indexes: this.indexOptions });
     this.committer = new StorageCommitter({
       target: this.target,
       layout: this.layout,
@@ -93,9 +101,10 @@ export class StorageManager<TRoot = unknown> {
       validateCommit: (envelope, transactionId) => this.runCommitValidators(envelope, transactionId),
       beforePublish: () => this.writeTypeDictionaryIfChanged(),
       readLatestTransactionRecord: () => this.reader.readLatestTransactionRecord(),
-      commitState: (transactionId, objectVersions) => {
+      commitState: (transactionId, objectVersions, envelope) => {
         this.transactionId = transactionId;
         this.replacePersistedObjectVersions(objectVersions);
+        this.storageIndexRecord = envelope ? this.indexRecordForEnvelope(envelope, transactionId) : undefined;
       },
       schemaVersion: () => this.schemaVersion,
     });
@@ -140,6 +149,7 @@ export class StorageManager<TRoot = unknown> {
       this.recoveredFrom = loaded.source;
       this.replacePersistedObjectVersions(loaded.objectVersions);
       this.schemaVersion = loaded.schemaVersion;
+      this.storageIndexRecord = await this.reader.readStorageIndex();
       if (loaded.source === "snapshot" && !this.options.readOnly) {
         await this.repairObjectStoreFromEnvelope(loaded.envelope, loaded.transactionId);
       }
@@ -147,6 +157,7 @@ export class StorageManager<TRoot = unknown> {
       this.rootValue = this.options.rootFactory();
       this.recoveredFrom = "empty";
       this.schemaVersion = this.targetSchemaVersion();
+      this.storageIndexRecord = undefined;
     }
     this.bindLazyRefs(this.rootValue);
     this.started = true;
@@ -336,6 +347,7 @@ export class StorageManager<TRoot = unknown> {
       readLatestTransactionRecord: () => this.reader.readLatestTransactionRecord(),
       readTransactionRecords: () => this.reader.readTransactionRecords(),
       readObjectRecord: (objectId, transactionId) => this.reader.readObjectRecord(objectId, transactionId),
+      ...(this.indexOptions.mode !== "off" ? { readStorageIndex: () => this.reader.readStorageIndex() } : {}),
       readSnapshotEnvelope: async (snapshotFile) => JSON.parse(await this.target.readText(join(this.layout.snapshotsDirectory, snapshotFile))) as SerializedEnvelope,
     });
   }
@@ -379,8 +391,10 @@ export class StorageManager<TRoot = unknown> {
     return this.mutex.runExclusive(async () => {
       const execute = async (): Promise<GvqlResult> => {
         const envelope = this.serializer.serialize(this.rootValue);
+        const graphIndex = options.graphIndex ?? this.graphIndexForGvql(envelope, statement.kind === "update" && !options.dryRun);
         const result = executeGvqlStatement(envelope, statement, {
           ...options,
+          ...(graphIndex ? { graphIndex } : {}),
           allowMutations: statement.kind === "update" && !options.dryRun,
         });
         if (result.kind === "update" && !result.dryRun) {
@@ -396,8 +410,10 @@ export class StorageManager<TRoot = unknown> {
       if (statement.kind === "update" && !options.dryRun) {
         return this.writeWithConflictCheck(async (lock) => {
           const envelope = this.serializer.serialize(this.rootValue);
+          const graphIndex = options.graphIndex ?? this.graphIndexForGvql(envelope, true);
           const result = executeGvqlStatement(envelope, statement, {
             ...options,
+            ...(graphIndex ? { graphIndex } : {}),
             allowMutations: true,
           });
           if (result.kind === "update" && !result.dryRun) {
@@ -505,6 +521,28 @@ export class StorageManager<TRoot = unknown> {
       commitValidatorCount: this.options.commitValidators?.length ?? 0,
       verify: () => this.verify(),
     });
+  }
+
+  async indexStatus(): Promise<StorageIndexStatus> {
+    this.assertStarted();
+    const record = this.storageIndexRecord ?? await this.reader.readStorageIndex();
+    this.storageIndexRecord = record;
+    return storageIndexStatus({ options: this.indexOptions, record, transactionId: this.transactionId });
+  }
+
+  async rebuildIndexes(): Promise<StorageIndexStatus> {
+    this.assertStarted();
+    this.assertWritable();
+    return this.mutex.runExclusive(() =>
+      this.withWriteLock(async (lock) => {
+        await lock.assertValid();
+        const envelope = this.serializer.serialize(this.rootValue);
+        await this.writer.writePersistentIndex(envelope, this.transactionId);
+        await lock.assertValid();
+        this.storageIndexRecord = this.indexRecordForEnvelope(envelope, this.transactionId);
+        return this.indexStatus();
+      }),
+    );
   }
 
   currentSchemaVersion(): number {
@@ -820,12 +858,14 @@ export class StorageManager<TRoot = unknown> {
       this.recoveredFrom = loaded.source;
       this.replacePersistedObjectVersions(loaded.objectVersions);
       this.schemaVersion = loaded.schemaVersion;
+      this.storageIndexRecord = await this.reader.readStorageIndex();
     } else {
       this.rootValue = this.options.rootFactory();
       this.transactionId = 0;
       this.recoveredFrom = "empty";
       this.schemaVersion = this.targetSchemaVersion();
       this.replacePersistedObjectVersions(new Map());
+      this.storageIndexRecord = undefined;
     }
     this.bindLazyRefs(this.rootValue);
   }
@@ -855,6 +895,22 @@ export class StorageManager<TRoot = unknown> {
     });
   }
 
+  private graphIndexForGvql(envelope: SerializedEnvelope, mutating: boolean): GvqlGraphIndex | undefined {
+    if (this.indexOptions.mode === "off" || !this.storageIndexRecord || this.storageIndexRecord.transactionId !== this.transactionId) {
+      return undefined;
+    }
+    if (mutating || this.indexOptions.consistency === "strict") {
+      return isUsableStorageIndexRecord(this.storageIndexRecord, envelope, this.transactionId)
+        ? graphIndexFromStorageRecord(envelope, this.storageIndexRecord)
+        : undefined;
+    }
+    return graphIndexFromStorageRecord(envelope, this.storageIndexRecord);
+  }
+
+  private indexRecordForEnvelope(envelope: SerializedEnvelope, transactionId: number): StorageIndexRecord | undefined {
+    return buildStorageIndexRecord(envelope, transactionId, this.indexOptions);
+  }
+
   private collectObjectIds(envelope: SerializedEnvelope, targets: readonly unknown[]): string[] {
     return collectObjectIdsForTargets({
       envelope,
@@ -871,6 +927,8 @@ export class StorageManager<TRoot = unknown> {
     const objectVersions = new Map(objectIds.map((objectId) => [objectId, transactionId]));
     await this.writer.writeManifest(envelope, transactionId, objectVersions);
     await this.writer.writeParentIndex(envelope, transactionId);
+    await this.writer.writePersistentIndex(envelope, transactionId);
+    this.storageIndexRecord = this.indexRecordForEnvelope(envelope, transactionId);
     this.replacePersistedObjectVersions(objectVersions);
   }
 
@@ -912,59 +970,11 @@ export class StorageManager<TRoot = unknown> {
   }
 
   private bindLazyRefs(value: unknown, seen = new Set<object>()): void {
-    if (!value || typeof value !== "object" || seen.has(value)) {
-      return;
-    }
-    seen.add(value);
-    if (value instanceof LazyRef) {
-      value.bind((key) => this.loadLazy(key), (key, item) => this.storeLazy(key, item));
-      return;
-    }
-    if (value instanceof Map) {
-      for (const [key, item] of value) {
-        this.bindLazyRefs(key, seen);
-        this.bindLazyRefs(item, seen);
-      }
-      return;
-    }
-    if (value instanceof Set || Array.isArray(value)) {
-      for (const item of value) {
-        this.bindLazyRefs(item, seen);
-      }
-      return;
-    }
-    for (const item of Object.values(value)) {
-      this.bindLazyRefs(item, seen);
-    }
+    bindStorageLazyRefs(value, { load: (key) => this.loadLazy(key), store: (key, item) => this.storeLazy(key, item) }, seen);
   }
 
   private async storeLoadedLazyRefs(value: unknown, seen = new Set<object>()): Promise<void> {
-    if (!value || typeof value !== "object" || seen.has(value)) {
-      return;
-    }
-    seen.add(value);
-    if (value instanceof LazyRef) {
-      if (value.isLoaded()) {
-        await value.store();
-      }
-      return;
-    }
-    if (value instanceof Map) {
-      for (const [key, item] of value) {
-        await this.storeLoadedLazyRefs(key, seen);
-        await this.storeLoadedLazyRefs(item, seen);
-      }
-      return;
-    }
-    if (value instanceof Set || Array.isArray(value)) {
-      for (const item of value) {
-        await this.storeLoadedLazyRefs(item, seen);
-      }
-      return;
-    }
-    for (const item of Object.values(value)) {
-      await this.storeLoadedLazyRefs(item, seen);
-    }
+    await storeLoadedStorageLazyRefs(value, seen);
   }
 
   private assertStarted(): void {

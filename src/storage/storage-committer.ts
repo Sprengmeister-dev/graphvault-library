@@ -21,7 +21,7 @@ export interface StorageCommitterDependencies {
   transactionLogEnabled: () => boolean;
   validateCommit: (envelope: SerializedEnvelope, transactionId: number) => Promise<void>;
   beforePublish: () => Promise<void>;
-  commitState: (transactionId: number, objectVersions: ReadonlyMap<string, number>) => void;
+  commitState: (transactionId: number, objectVersions: ReadonlyMap<string, number>, envelope: SerializedEnvelope) => void;
   readLatestTransactionRecord: () => Promise<TransactionRecord | undefined>;
   schemaVersion: () => number;
 }
@@ -140,6 +140,7 @@ export class StorageCommitter {
     const journalFile = existingRecord ? transactionRecordName(transactionId) : await this.dependencies.writer.writeTransactionRecord(transactionRecord);
     await lock.assertValid();
     await this.dependencies.writer.writeParentIndex(envelope, transactionId);
+    await this.dependencies.writer.writePersistentIndex(envelope, transactionId);
     if (this.dependencies.writeOptions.writeSnapshots) {
       await lock.assertValid();
       await this.dependencies.target.writeTextAtomic(this.dependencies.layout.currentFile, snapshotFile);
@@ -151,7 +152,7 @@ export class StorageCommitter {
       transactionRecord.transactionHash,
       this.dependencies.schemaVersion(),
     );
-    this.dependencies.commitState(transactionId, objectVersions);
+    this.dependencies.commitState(transactionId, objectVersions, envelope);
     return journalFile;
   }
 }

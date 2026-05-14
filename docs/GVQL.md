@@ -166,6 +166,7 @@ Current GVQL supports:
 - `CREATE (alias:Type { ... }) INTO parent.collection`, `MERGE (alias:Type { ... }) INTO parent.collection ON alias.field` for idempotent collection upserts, `SET` for primitive field updates, arithmetic and `CASE`-based `SET` expressions, `REMOVE` for object-field cleanup, and parent-aware `DELETE alias`
 - type indexes, primitive-property index intersections, indexed `IN` unions, and indexed `OR` unions for common filters on the first matched node
 - indexed virtual metadata filters for `$id` and `$type`
+- persistent storage indexes for committed graphs, with full-scan fallback when a configured property index is unavailable
 
 Aggregate queries stay compact:
 
@@ -214,6 +215,7 @@ const result = await storage.gvql(`
 });
 
 console.log(result.plan.candidateSource); // "property-index"
+console.log(result.plan.indexSource); // "persistent" or "ephemeral"
 console.log(result.plan.startCandidates); // number of objects read from the first candidate set
 ```
 

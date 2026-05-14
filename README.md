@@ -35,6 +35,7 @@ await storage.shutdown();
 - preserves object identity, cycles, `Map`, `Set`, classes, and rich JS values
 - explicit persistence instead of hidden ORM-style unit-of-work magic
 - GVQL query language for graph traversal, indexed filters, grouping, aggregate analysis, execution plans, and safe batch-update previews
+- persistent type, property, and graph-edge indexes for fast GVQL candidate selection
 - explicit transactions with rollback plus optimistic or pessimistic locking for shared stores
 - WAL recovery, fencing tokens, transaction-versioned object records, and a tamper-evident SHA-256 transaction hash chain for audit-oriented deployments
 - transaction metadata for actor, reason, source, trace ID, tags, and audit attributes
@@ -65,6 +66,25 @@ const result = await storage.gvql(`
 ```
 
 GVQL supports graph traversal, comma-separated `MATCH` patterns for joins, `OPTIONAL MATCH` for left-join style graph expansion, indexed metadata and property filters, indexed equality/`IN` intersections and `OR` unions, parenthesized `WHERE`/`HAVING` logic with `NOT` and SQL-style `AND` precedence, `WITH` pipelines, computed `RETURN` expressions, scalar functions, conditional `CASE` expressions, grouping, aggregates, `RETURN DISTINCT`, `count(DISTINCT path)`, pagination, execution plans, and preview-first batch updates with `CREATE`, idempotent `MERGE`, `SET`, arithmetic/conditional `SET` expressions, `REMOVE`, and `DELETE`. It is also what powers GraphVault Studio's search, inspection, and manipulation workflows.
+
+## Persistent Indexes
+
+GraphVault maintains a storage-wide `index.json` sidecar with type, property, and graph-edge lookup tables. The default `indexes: true` behavior indexes direct object properties automatically and GVQL reuses the persisted index when it matches the committed graph.
+
+For very large graphs, keep index size predictable with configured properties:
+
+```ts
+const storage = await EmbeddedStorage.start({
+  storageDirectory: "./data",
+  rootFactory: () => ({ invoices: [] }),
+  indexes: {
+    mode: "configured",
+    properties: ["id", "status", { type: "Invoice", path: "customerId" }],
+  },
+});
+```
+
+Use `await storage.indexStatus()` for operational visibility and `await storage.rebuildIndexes()` after changing index configuration. See [persistent indexes](./docs/INDEXES.md).
 
 ## Transactions And Concurrent Writers
 
@@ -204,6 +224,7 @@ GraphVault is not trying to replace Postgres, SQLite, MongoDB, or Redis. It is f
 - atomic commits, explicit transactions, manifest, transaction journal, verification, compaction, backup, and garbage collection
 - optimistic and pessimistic locking for several pods/users writing to the same store
 - storage-wide `up`/`down` schema migrations
+- persistent GVQL indexes with automatic or configured property coverage
 - depth-limited subtree loading for REST/API exports
 - optional encrypted storage-target wrapper
 - pluggable storage targets for local filesystem, memory, HTTP, S3-compatible clients, and SQL adapters
@@ -267,6 +288,7 @@ Then open `http://127.0.0.1:4177`.
 - [ACID configuration](./docs/ACID.md) - WAL, recovery, fencing tokens, validators, and durability tradeoffs.
 - [Production operations](./docs/PRODUCTION.md) - production profiles, backup/restore, verification, monitoring, and known boundaries.
 - [GVQL guide](./docs/GVQL.md) - graph queries, indexed filtering, aggregates, execution plans, and mutation previews.
+- [Persistent indexes](./docs/INDEXES.md) - storage-wide index configuration, consistency modes, and rebuild operations.
 - [Transactions and concurrency](./docs/TRANSACTIONS.md) - optimistic and pessimistic locking for multi-pod writers.
 - [Storage configuration](./docs/STORAGE.md) - local filesystem, memory, HTTP, S3-compatible, SQL, and operational options.
 - [NestJS integration](./docs/NESTJS.md) - module setup, async config, multiple stores, and shutdown hooks.

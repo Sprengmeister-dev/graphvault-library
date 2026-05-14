@@ -45,6 +45,10 @@ export class StorageLayout {
     return join(this.storageDirectory, "parent-index.json");
   }
 
+  get indexFile(): string {
+    return join(this.storageDirectory, "index.json");
+  }
+
   get journalFile(): string {
     return join(this.storageDirectory, "journal.log");
   }

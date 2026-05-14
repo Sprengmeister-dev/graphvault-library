@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import { encodeBinaryRecord } from "../core/binary-codec.js";
 import { buildParentIndexRecord } from "./storage-parent-index.js";
+import { buildStorageIndexRecord, type ResolvedStorageIndexOptions } from "./storage-index.js";
 import type { StorageLayout } from "./storage-layout.js";
 import type {
   ObjectRecordWriteFormat,
@@ -20,12 +21,14 @@ export interface StorageWriterOptions {
   objectRecordFormat?: ObjectRecordWriteFormat;
   objectRecordWriteConcurrency?: number;
   prettyJson?: boolean;
+  indexes?: ResolvedStorageIndexOptions;
 }
 
 export class StorageWriter {
   private readonly objectRecordFormat: ObjectRecordWriteFormat;
   private readonly objectRecordWriteConcurrency: number;
   private readonly prettyJson: boolean;
+  private readonly indexes: ResolvedStorageIndexOptions;
 
   constructor(
     private readonly target: StorageTarget,
@@ -35,6 +38,7 @@ export class StorageWriter {
     this.objectRecordFormat = options.objectRecordFormat ?? "binary-and-json";
     this.objectRecordWriteConcurrency = options.objectRecordWriteConcurrency ?? OBJECT_RECORD_WRITE_CONCURRENCY;
     this.prettyJson = options.prettyJson ?? true;
+    this.indexes = options.indexes ?? { mode: "auto", consistency: "strict", properties: [] };
   }
 
   async writeJson(path: string, value: unknown): Promise<void> {
@@ -94,6 +98,15 @@ export class StorageWriter {
 
   async writeParentIndex(envelope: SerializedEnvelope, transactionId: number): Promise<void> {
     await this.writeJson(this.layout.parentIndexFile, buildParentIndexRecord(envelope, transactionId));
+  }
+
+  async writePersistentIndex(envelope: SerializedEnvelope, transactionId: number): Promise<void> {
+    const record = buildStorageIndexRecord(envelope, transactionId, this.indexes);
+    if (record) {
+      await this.writeJson(this.layout.indexFile, record);
+    } else if (await this.target.exists(this.layout.indexFile)) {
+      await this.target.remove(this.layout.indexFile);
+    }
   }
 
   async writeTransactionRecord(record: TransactionRecord): Promise<string> {

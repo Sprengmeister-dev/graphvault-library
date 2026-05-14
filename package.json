@@ -71,7 +71,7 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "test:unit": "npm run build && node tests/smoke.mjs && node tests/parser.test.mjs && node tests/engine.test.mjs && node tests/storage-manager.test.mjs && node tests/concurrency-transactions.test.mjs && node tests/wal-crash-matrix.test.mjs && node tests/storage-target-conformance.test.mjs && node tests/clause-scanner.test.mjs && node tests/gvql-values.test.mjs && node tests/binary-codec.test.mjs && node tests/gvql-index.test.mjs && node tests/mutex.test.mjs && node tests/storage-target-sql.test.mjs && node tests/storage-target-s3.test.mjs && node tests/persistent-cache.test.mjs && node tests/serializer.test.mjs && node tests/lazy-and-storer.test.mjs && node tests/storage-modules.test.mjs && node tests/parser-fuzz.test.mjs",
+    "test:unit": "npm run build && node tests/smoke.mjs && node tests/parser.test.mjs && node tests/engine.test.mjs && node tests/storage-manager.test.mjs && node tests/concurrency-transactions.test.mjs && node tests/wal-crash-matrix.test.mjs && node tests/storage-target-conformance.test.mjs && node tests/clause-scanner.test.mjs && node tests/gvql-values.test.mjs && node tests/binary-codec.test.mjs && node tests/gvql-index.test.mjs && node tests/mutex.test.mjs && node tests/storage-target-sql.test.mjs && node tests/storage-target-s3.test.mjs && node tests/persistent-cache.test.mjs && node tests/serializer.test.mjs && node tests/lazy-and-storer.test.mjs && node tests/storage-modules.test.mjs && node tests/storage-index.test.mjs && node tests/parser-fuzz.test.mjs",
     "test": "npm run quality:source && c8 npm run test:unit",
     "coverage": "npm run test",
     "benchmark": "npm run build && node benchmarks/object-graph.mjs",

@@ -2,12 +2,22 @@ import { encodedValueToJs } from "./gvql-values.js";
 import type { EncodedNode, EncodedValue, SerializedEnvelope } from "../core/types.js";
 import type { GvqlGraphEdge, GvqlGraphIndex, GvqlGraphNode } from "./gvql-types.js";
 
-export function buildGvqlGraphIndex(envelope: SerializedEnvelope): GvqlGraphIndex {
+export interface GvqlGraphIndexBuildOptions {
+  propertyMode?: "all" | "configured";
+  properties?: Array<{ type?: string; path: string }>;
+  source?: GvqlGraphIndex["source"];
+  transactionId?: number;
+}
+
+export function buildGvqlGraphIndex(envelope: SerializedEnvelope, options: GvqlGraphIndexBuildOptions = {}): GvqlGraphIndex {
   const nodes = new Map<string, GvqlGraphNode>();
   const byType = new Map<string, string[]>();
   const byProperty = new Map<string, string[]>();
   const outgoing = new Map<string, GvqlGraphEdge[]>();
   const incoming = new Map<string, GvqlGraphEdge[]>();
+  const propertyMode = options.propertyMode ?? "all";
+  const configuredProperties = configuredPropertyKeys(options.properties ?? []);
+  const indexedPropertyKeys = new Set<string>();
 
   for (const [objectId, encoded] of Object.entries(envelope.nodes)) {
     const node: GvqlGraphNode = {
@@ -23,7 +33,11 @@ export function buildGvqlGraphIndex(envelope: SerializedEnvelope): GvqlGraphInde
     }
     if (encoded.kind === "object") {
       for (const [path, value] of Object.entries(encoded.props)) {
+        if (!shouldIndexProperty(propertyMode, configuredProperties, node.type, path)) {
+          continue;
+        }
         indexProperty(byProperty, node.type, path, encodedValueToJs(value), objectId);
+        addIndexedPropertyKeys(indexedPropertyKeys, node.type, path);
       }
     }
 
@@ -37,7 +51,18 @@ export function buildGvqlGraphIndex(envelope: SerializedEnvelope): GvqlGraphInde
     }
   }
 
-  return { envelope, nodes, byType, byProperty, outgoing, incoming };
+  return {
+    envelope,
+    nodes,
+    byType,
+    byProperty,
+    outgoing,
+    incoming,
+    propertyIndexMode: propertyMode,
+    indexedPropertyKeys,
+    ...(options.source ? { source: options.source } : {}),
+    ...(options.transactionId ? { transactionId: options.transactionId } : {}),
+  };
 }
 
 export function propertyIndexKey(type: string | undefined, path: string, value: unknown): string {
@@ -51,6 +76,29 @@ function indexProperty(byProperty: Map<string, string[]>, type: string | undefin
     indexed.push(objectId);
     byProperty.set(key, indexed);
   }
+}
+
+function configuredPropertyKeys(properties: Array<{ type?: string; path: string }>): Set<string> {
+  const keys = new Set<string>();
+  for (const property of properties) {
+    keys.add(propertyKey(property.type, property.path));
+  }
+  return keys;
+}
+
+function shouldIndexProperty(propertyMode: "all" | "configured", configuredProperties: ReadonlySet<string>, type: string | undefined, path: string): boolean {
+  return propertyMode === "all" || configuredProperties.has(propertyKey(type, path)) || configuredProperties.has(propertyKey(undefined, path));
+}
+
+function addIndexedPropertyKeys(keys: Set<string>, type: string | undefined, path: string): void {
+  keys.add(propertyKey(undefined, path));
+  if (type) {
+    keys.add(propertyKey(type, path));
+  }
+}
+
+export function propertyKey(type: string | undefined, path: string): string {
+  return `${type ?? "*"}\u0000${path}`;
 }
 
 function stableValueKey(value: unknown): string {

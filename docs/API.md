@@ -29,6 +29,8 @@ Main runtime API.
 - `currentSchemaVersion()`: returns the schema version currently loaded by the store.
 - `migrationStatus(targetVersion?)`: returns the current schema version, target version, latest known migration, and pending `up`/`down` steps.
 - `migrateTo(targetVersion?)`: applies storage-wide schema migrations up or down. Without an argument, it migrates to `schemaVersion`.
+- `indexStatus()`: returns persistent-index mode, consistency, transaction id, node count, property-key count, edge count, and whether the index is loaded, missing, stale, or disabled.
+- `rebuildIndexes()`: takes the writer lock and rewrites the persistent index sidecar for the currently loaded root.
 - `createStorer()`: batches several store targets into one commit.
 - `createLazyRef(key, value)`: creates and stores lazy data.
 - `loadLazy(key)` / `storeLazy(key, value)`: low-level lazy value access.
@@ -120,6 +122,7 @@ See [schema migrations](./SCHEMA_MIGRATIONS.md) for the full operational pattern
 - `schemaVersion`: target storage-wide schema version.
 - `schemaMigrations`: ordered or unordered list of `up`/`down` storage-wide migrations. Versions must be unique positive integers.
 - `migrateOnStart`: runs `migrateTo(schemaVersion)` during startup after the root is loaded. For critical deployments, prefer an explicit migration job.
+- `indexes`: persistent index configuration. `true` or omitted uses automatic direct-property indexing. Use `{ mode: "configured", properties: ["id", { type: "Invoice", path: "customerId" }] }` for bounded large-graph indexes, `{ mode: "off" }` to disable, and `consistency: "committed"` only when read queries intentionally target the last committed graph.
 - `transaction(..., { metadata })`: records actor, reason, source, trace ID, tags, and simple audit attributes in the transaction record. Metadata is included in the transaction hash.
 - `housekeepingIntervalMs`: periodic maintenance interval.
 - `writeProfile`: `standard`, `fast`, or `maximum` write throughput profile.
