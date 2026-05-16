@@ -70,7 +70,7 @@ npm run package:smoke
 
 ## Upgrade Notes
 
-- Node.js 26 or newer is the supported runtime baseline.
+- Node.js 22 or newer is the supported runtime baseline, including active LTS lines.
 - Existing 0.2.x stores remain GraphVault-native object stores; no storage-server migration is required.
 - For large stores, prefer configured property indexes over indexing every frequently changing field.
 - For shared stores with several application pods, keep using GraphVault transactions as the write boundary and read [transactions and concurrency](./TRANSACTIONS.md).

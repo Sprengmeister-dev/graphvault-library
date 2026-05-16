@@ -1,10 +1,10 @@
 # GraphVault TS 0.2.3 Release Notes
 
-GraphVault TS 0.2.3 is the current public TypeScript developer release. It builds on the 0.2.0 production-hardening work with persistent indexes, Node.js 26 validation, a tighter package smoke test, and clearer documentation for NestJS and production adoption.
+GraphVault TS 0.2.3 is the current public TypeScript developer release. It builds on the 0.2.0 production-hardening work with persistent indexes, Node.js LTS validation, a tighter package smoke test, and clearer documentation for NestJS and production adoption.
 
 ## Why Upgrade
 
-Use 0.2.3 if you want the current package baseline for real TypeScript and NestJS projects. Compared with 0.2.0, this release adds storage-wide persistent indexes for GVQL, validates the package on Node.js 26, and verifies the npm tarball inside a fresh NestJS application before publishing.
+Use 0.2.3 if you want the current package baseline for real TypeScript and NestJS projects. Compared with 0.2.0, this release adds storage-wide persistent indexes for GVQL, validates the package on Node.js LTS, and verifies the npm tarball inside a fresh NestJS application before publishing.
 
 ## What Is New Since 0.2.0
 
@@ -12,7 +12,7 @@ Use 0.2.3 if you want the current package baseline for real TypeScript and NestJ
 - Configurable index coverage with automatic direct-property indexing by default and explicit property lists for very large graphs.
 - `indexStatus()` and `rebuildIndexes()` for operational index administration.
 - GVQL planning that can reuse committed indexes for equality, `IN`, `OR`, aggregate, and graph traversal queries.
-- Node.js 26 engine and CI baseline.
+- Node.js LTS engine and CI baseline.
 - Source-size quality gate so the TypeScript source stays split into maintainable modules.
 - Smaller storage-manager internals with dedicated modules for garbage collection, health, migrations, object collection, and root helpers.
 - NestJS dynamic module type fixes for `GraphVaultModule.forRoot(...)` and `forRootAsync(...)`.
@@ -74,7 +74,7 @@ npm run package:smoke
 
 ## Upgrade Notes
 
-- Node.js 26 or newer is the supported runtime baseline.
+- Node.js 22 or newer is the supported runtime baseline, including active LTS lines.
 - Existing 0.2.x stores remain GraphVault-native object stores; no storage-server migration is required.
 - For large stores, prefer configured property indexes over indexing every frequently changing field.
 - For shared stores with several application pods, keep using GraphVault transactions as the write boundary and read [transactions and concurrency](./TRANSACTIONS.md).

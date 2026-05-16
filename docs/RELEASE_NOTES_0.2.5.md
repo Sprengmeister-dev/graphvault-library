@@ -49,6 +49,6 @@ The serializer tests cover normal fields, custom `serialize(...)`, custom `hydra
 
 ## Upgrade Notes
 
-- Node.js 26 or newer remains the supported runtime baseline.
+- Node.js 22 or newer is the supported runtime baseline, including active LTS lines.
 - The feature is additive and does not require store migration.
 - TypeScript legacy property-decorator usage requires `experimentalDecorators` in the consuming app.

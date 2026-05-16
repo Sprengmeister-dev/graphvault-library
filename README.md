@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/Sprengmeister-dev/graphvault-library/actions/workflows/ci.yml/badge.svg)](https://github.com/Sprengmeister-dev/graphvault-library/actions/workflows/ci.yml)
 ![npm](https://img.shields.io/npm/v/%40sprengmeister%2Fgraphvault)
-![Node](https://img.shields.io/badge/node-%3E%3D26-3c7a52)
+![Node](https://img.shields.io/badge/node-%3E%3D22%20LTS-3c7a52)
 ![TypeScript](https://img.shields.io/badge/TypeScript-first-315c92)
 ![License](https://img.shields.io/badge/license-MIT-2f2f2f)
 
@@ -12,7 +12,7 @@ GraphVault is embedded object-graph persistence for TypeScript and NestJS applic
 
 It is not a SQL server and it is not an ORM. You keep your domain model in memory, mutate normal TypeScript objects, then explicitly commit a verifiable graph store with WAL recovery, locking, indexes, GVQL, and an admin UI.
 
-Current release: [0.2.5](./docs/RELEASE_NOTES_0.2.5.md), with field annotations for save/load filtering, professional persistent indexes, Node.js 26 validation, and NestJS smoke tests.
+Current release: [0.2.5](./docs/RELEASE_NOTES_0.2.5.md), with field annotations for save/load filtering, professional persistent indexes, Node.js LTS support, and NestJS smoke tests.
 
 ## 30-Second Quickstart
 
@@ -178,7 +178,7 @@ For a fuller graph-shaped product demo, see the [CaseGraph demo concept](./docs/
 - [Benchmarks](./docs/BENCHMARKS.md) - reproducible performance numbers and write profiles.
 - [0.2.5 release notes](./docs/RELEASE_NOTES_0.2.5.md) - field annotations for save/load filtering and current package baseline.
 - [0.2.4 release notes](./docs/RELEASE_NOTES_0.2.4.md) - professional persistent indexes, index verification/repair, and current package baseline.
-- [0.2.3 release notes](./docs/RELEASE_NOTES_0.2.3.md) - Node.js 26, NestJS smoke tests, and TypeScript developer polish.
+- [0.2.3 release notes](./docs/RELEASE_NOTES_0.2.3.md) - NestJS smoke tests and TypeScript developer polish.
 - [0.2.0 release notes](./docs/RELEASE_NOTES_0.2.0.md) - production hardening, ACID-oriented recovery, subtree exports, and encrypted storage.
 - [0.1.0 release notes](./docs/RELEASE_NOTES_0.1.0.md) - package overview for the first public release.
 - [Publishing checklist](./docs/PUBLISHING.md) - local release checks, tagging, npm provenance, and GitHub topics.
@@ -193,7 +193,7 @@ npm run pack:dry-run
 npm run package:smoke
 ```
 
-The smoke test stores and reloads a real object graph with class instances, shared references, maps, sets, and cycles. The package smoke test installs the generated tarball into a clean temporary project, verifies public and Studio-facing subpath imports, and compiles/runs a minimal NestJS app with injection, rollback, GVQL, health checks, backup, and restart persistence. CI runs on Node.js 26 and includes a source-size quality gate.
+The smoke test stores and reloads a real object graph with class instances, shared references, maps, sets, and cycles. The package smoke test installs the generated tarball into a clean temporary project, verifies public and Studio-facing subpath imports, and compiles/runs a minimal NestJS app with injection, rollback, GVQL, health checks, backup, and restart persistence. CI runs on Node.js 22 LTS, 24 LTS, and 26, and includes a source-size quality gate.
 
 ## Status And Scope
 

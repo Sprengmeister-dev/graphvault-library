@@ -6,6 +6,7 @@
 - Export `GraphVaultIgnore`, `GraphVaultIgnoreSave`, `GraphVaultIgnoreLoad`, and low-level annotation helpers.
 - Apply field annotations after custom `serialize(...)` and before custom `hydrate(...)` so class registrations compose with filtering.
 - Document field annotations in README, usage guide, and API reference.
+- Support Node.js 22+ explicitly, including current LTS lines, and validate CI on Node.js 22, 24, and 26.
 
 ## 0.2.4
 
