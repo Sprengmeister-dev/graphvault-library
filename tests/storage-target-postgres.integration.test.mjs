@@ -88,9 +88,9 @@ async function assertEmbeddedStorageRoundTripOnPostgres(pool) {
   await restored.shutdown();
 }
 
-function createPostgresTarget(pool, client = new PgStorageClient(pool)) {
+function createPostgresTarget(pool, client) {
   return new SqlStorageTarget({
-    client,
+    client: client ?? new PgStorageClient(pool),
     dialect: "postgres",
     tableName: "gv_pg_objects",
     lockTableName: "gv_pg_locks",
@@ -109,19 +109,6 @@ async function withPostgres(connectionString, work) {
   } finally {
     await pool.end();
   }
-}
-
-if (!databaseUrl) {
-  console.log("Skipping Postgres integration test: GRAPHVAULT_POSTGRES_URL is not set.");
-} else {
-  await withPostgres(databaseUrl, async (pool) => {
-    await resetTables(pool);
-    await assertSqlStorageTargetOnRealPostgres(pool);
-    await resetTables(pool);
-    await assertPostgresTransactionRollback(pool);
-    await resetTables(pool);
-    await assertEmbeddedStorageRoundTripOnPostgres(pool);
-  });
 }
 
 class PgStorageClient {
@@ -162,4 +149,17 @@ class PgStorageClient {
       client.release();
     }
   }
+}
+
+if (!databaseUrl) {
+  console.log("Skipping Postgres integration test: GRAPHVAULT_POSTGRES_URL is not set.");
+} else {
+  await withPostgres(databaseUrl, async (pool) => {
+    await resetTables(pool);
+    await assertSqlStorageTargetOnRealPostgres(pool);
+    await resetTables(pool);
+    await assertPostgresTransactionRollback(pool);
+    await resetTables(pool);
+    await assertEmbeddedStorageRoundTripOnPostgres(pool);
+  });
 }
