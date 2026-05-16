@@ -1,4 +1,4 @@
-import type { EncodedValue, SerializedEnvelope, StoreMetadata } from "../core/types.js";
+import type { EncodedValue, SerializedEnvelope, StorageAdvancedIndexRecord, StoreMetadata } from "../core/types.js";
 
 export type GvqlStatementKind = "select" | "update";
 export type GvqlDirection = "out" | "in";
@@ -170,10 +170,22 @@ export interface GvqlGraphIndex {
   byProperty: Map<string, string[]>;
   outgoing: Map<string, GvqlGraphEdge[]>;
   incoming: Map<string, GvqlGraphEdge[]>;
+  advanced?: GvqlAdvancedGraphIndex;
   propertyIndexMode?: "all" | "configured";
   indexedPropertyKeys?: Set<string>;
   source?: "ephemeral" | "persistent";
   transactionId?: number;
+}
+
+export interface GvqlAdvancedGraphIndex {
+  definitions: StorageAdvancedIndexRecord["definitions"];
+  composite: Map<string, Map<string, string[]>>;
+  range: Map<string, Array<{ value: string; raw: unknown; objectIds: string[] }>>;
+  text: Map<string, Map<string, string[]>>;
+  fullText: Map<string, Map<string, string[]>>;
+  expression: Map<string, Map<string, string[]>>;
+  unique: Map<string, Map<string, string>>;
+  statistics: StorageAdvancedIndexRecord["statistics"];
 }
 
 export interface GvqlExecutionOptions {
@@ -183,7 +195,7 @@ export interface GvqlExecutionOptions {
   graphIndex?: GvqlGraphIndex;
 }
 
-export type GvqlCandidateSource = "property-index" | "type-index" | "id-index" | "full-scan";
+export type GvqlCandidateSource = "property-index" | "composite-index" | "range-index" | "text-index" | "fulltext-index" | "expression-index" | "unique-index" | "type-index" | "id-index" | "full-scan";
 
 export interface GvqlExecutionPlan {
   nodeCount: number;

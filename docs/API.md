@@ -29,8 +29,9 @@ Main runtime API.
 - `currentSchemaVersion()`: returns the schema version currently loaded by the store.
 - `migrationStatus(targetVersion?)`: returns the current schema version, target version, latest known migration, and pending `up`/`down` steps.
 - `migrateTo(targetVersion?)`: applies storage-wide schema migrations up or down. Without an argument, it migrates to `schemaVersion`.
-- `indexStatus()`: returns persistent-index mode, consistency, transaction id, node count, property-key count, edge count, and whether the index is loaded, missing, stale, or disabled.
-- `rebuildIndexes()`: takes the writer lock and rewrites the persistent index sidecar for the currently loaded root.
+- `indexStatus()`: returns persistent-index mode, consistency, transaction id, node count, property-key count, edge count, advanced index counts, and whether the index is loaded, missing, stale, or disabled.
+- `verifyIndexes()`: rebuilds the expected persistent index in memory and compares it with the committed sidecar.
+- `rebuildIndexes()` / `repairIndexes()`: take the writer lock and rewrite the persistent index sidecar for the currently loaded root.
 - `createStorer()`: batches several store targets into one commit.
 - `createLazyRef(key, value)`: creates and stores lazy data.
 - `loadLazy(key)` / `storeLazy(key, value)`: low-level lazy value access.

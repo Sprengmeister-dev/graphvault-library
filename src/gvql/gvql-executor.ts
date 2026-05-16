@@ -2,6 +2,7 @@ import { performance } from "node:perf_hooks";
 import { projectGvqlRows } from "./gvql-aggregation.js";
 import { evaluateGvqlValueExpression } from "./gvql-expressions.js";
 import { buildGvqlGraphIndex, propertyIndexKey, propertyKey } from "./gvql-index.js";
+import { advancedIndexSelections } from "./gvql-index-planner.js";
 import { applyGvqlMutations } from "./gvql-mutations.js";
 import { encodedValueToJs, getNodePath, literalToJs, nodeSummary } from "./gvql-values.js";
 import type { EncodedNode, SerializedEnvelope } from "../core/types.js";
@@ -271,25 +272,27 @@ function candidates(
   const type = pattern.start.type;
   const typeCandidates = type ? index.byType.get(type) ?? [] : Array.from(index.nodes.keys());
   const indexed = indexablePredicates(statement, pattern, parameters);
-  if (!indexed || indexed.predicates.length === 0) {
+  const advancedSelections = advancedIndexSelections(index, statement, pattern, parameters);
+  if ((!indexed || indexed.predicates.length === 0) && advancedSelections.length === 0) {
     return {
       objectIds: typeCandidates,
       source: type ? "type-index" : "full-scan",
       operations: [type ? `type-index:${type}` : "full-scan"],
     };
   }
-  const indexedCandidates = indexed
-    .predicates
-    .map((item) => indexedCandidateSelection(index, item))
-    .sort((a, b) => a.objectIds.length - b.objectIds.length);
+  const propertySelections = (indexed?.predicates ?? []).map((item) => indexedCandidateSelection(index, item));
+  const indexedCandidates = [
+    ...advancedSelections,
+    ...(advancedSelections.length ? propertySelections.filter((item) => item.source !== "full-scan") : propertySelections),
+  ].sort((a, b) => a.objectIds.length - b.objectIds.length);
   const allowed =
-    indexed.mode === "OR"
+    indexed?.mode === "OR" && advancedSelections.length === 0
       ? new Set(unionCandidates(indexedCandidates.map((item) => item.objectIds)))
       : intersectCandidates(indexedCandidates.map((item) => item.objectIds));
   const propertyIndexes = indexedCandidates.flatMap((item) => item.propertyIndexes);
   const source = indexedCandidates.some((item) => item.source === "full-scan")
     ? "full-scan"
-    : indexedCandidates.find((item) => item.source === "property-index")?.source ?? indexedCandidates[0]?.source ?? (type ? "type-index" : "full-scan");
+    : indexedCandidates[0]?.source ?? (type ? "type-index" : "full-scan");
   return {
     objectIds: typeCandidates.filter((objectId) => allowed.has(objectId)),
     source,
@@ -298,11 +301,17 @@ function candidates(
     operations: [
       ...indexedCandidates.map((item) => item.operation),
       ...(indexedCandidates.length > 1
-        ? [indexed.mode === "OR" ? `index-or-union:${indexedCandidates.length}` : `property-index-intersect:${indexedCandidates.length}`]
+        ? [combinedIndexOperation(indexedCandidates, indexed?.mode, advancedSelections.length)]
         : []),
       ...(type ? [`type-filter:${type}`] : []),
     ],
   };
+}
+
+function combinedIndexOperation(indexedCandidates: IndexedCandidateSelection[], mode: "AND" | "OR" | undefined, advancedCount: number): string {
+  if (mode === "OR" && advancedCount === 0) return `index-or-union:${indexedCandidates.length}`;
+  if (indexedCandidates.every((item) => item.source === "property-index")) return `property-index-intersect:${indexedCandidates.length}`;
+  return `index-intersect:${indexedCandidates.length}`;
 }
 
 function indexedCandidateSelection(

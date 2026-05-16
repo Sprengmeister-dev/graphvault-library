@@ -1,4 +1,5 @@
 import { encodedValueToJs } from "./gvql-values.js";
+import { stableIndexValueKey } from "./gvql-index-keys.js";
 import type { EncodedNode, EncodedValue, SerializedEnvelope } from "../core/types.js";
 import type { GvqlGraphEdge, GvqlGraphIndex, GvqlGraphNode } from "./gvql-types.js";
 
@@ -102,9 +103,7 @@ export function propertyKey(type: string | undefined, path: string): string {
 }
 
 function stableValueKey(value: unknown): string {
-  if (typeof value === "bigint") return `bigint:${value.toString()}`;
-  if (value && typeof value === "object") return JSON.stringify(value);
-  return `${typeof value}:${String(value)}`;
+  return stableIndexValueKey(value);
 }
 
 export function referencedEdges(from: string, node: EncodedNode): GvqlGraphEdge[] {

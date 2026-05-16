@@ -1,32 +1,40 @@
 import { createHash } from "node:crypto";
 import { buildGvqlGraphIndex } from "../gvql/gvql-index.js";
+import { advancedIndexFromRecord, buildAdvancedIndexRecord, type AdvancedIndexOptions } from "../gvql/gvql-advanced-index.js";
 import type { GvqlGraphIndex, GvqlGraphEdge, GvqlGraphNode } from "../gvql/gvql-types.js";
 import type {
   SerializedEnvelope,
+  StorageCompositeIndexDefinition,
+  StorageExpressionIndexDefinition,
   StorageIndexDefinition,
   StorageIndexOptions,
   StorageIndexRecord,
   StorageIndexStatus,
+  StorageUniqueIndexDefinition,
 } from "../core/types.js";
 
 export interface ResolvedStorageIndexOptions {
   mode: "off" | "auto" | "configured";
   consistency: "strict" | "committed";
   properties: StorageIndexDefinition[];
+  advanced: AdvancedIndexOptions;
 }
 
 export function resolveStorageIndexOptions(options: boolean | StorageIndexOptions | undefined): ResolvedStorageIndexOptions {
   if (options === false) {
-    return { mode: "off", consistency: "strict", properties: [] };
+    return { mode: "off", consistency: "strict", properties: [], advanced: emptyAdvancedOptions() };
   }
   if (options === true || !options) {
-    return { mode: "auto", consistency: "strict", properties: [] };
+    return { mode: "auto", consistency: "strict", properties: [], advanced: emptyAdvancedOptions() };
   }
-  const mode = options.mode ?? (options.properties?.length ? "configured" : "auto");
+  const advanced = normalizeAdvancedOptions(options);
+  const hasConfigured = Boolean(options.properties?.length || advanced.composites.length || advanced.ranges.length || advanced.text.length || advanced.fullText.length || advanced.unique.length || advanced.expressions.length);
+  const mode = options.mode ?? (hasConfigured ? "configured" : "auto");
   return {
     mode,
     consistency: options.consistency ?? "strict",
     properties: normalizeIndexDefinitions(options.properties ?? []),
+    advanced,
   };
 }
 
@@ -45,9 +53,10 @@ export function buildStorageIndexRecord(
     source: "persistent",
     transactionId,
   });
+  const advanced = buildAdvancedIndexRecord(envelope, options.advanced);
   return {
     format: "graphvault-index",
-    version: 1,
+    version: 2,
     transactionId,
     createdAt: new Date().toISOString(),
     envelopeHash: indexEnvelopeHash(envelope),
@@ -58,6 +67,7 @@ export function buildStorageIndexRecord(
     byProperty: mapToRecord(index.byProperty),
     outgoing: edgeMapToRecord(index.outgoing),
     incoming: edgeMapToRecord(index.incoming),
+    ...(advanced ? { advanced } : {}),
   };
 }
 
@@ -67,6 +77,7 @@ export function graphIndexFromStorageRecord(envelope: SerializedEnvelope, record
     const [type = "*", path = ""] = key.split("\u0000", 2);
     indexedPropertyKeys.add(`${type}\u0000${path}`);
   }
+  const advanced = advancedIndexFromRecord(record.advanced);
   return {
     envelope,
     nodes: nodesFromEnvelope(envelope),
@@ -74,6 +85,7 @@ export function graphIndexFromStorageRecord(envelope: SerializedEnvelope, record
     byProperty: recordToMap(record.byProperty),
     outgoing: edgeRecordToMap(record.outgoing),
     incoming: edgeRecordToMap(record.incoming),
+    ...(advanced ? { advanced } : {}),
     propertyIndexMode: record.mode === "configured" ? "configured" : "all",
     indexedPropertyKeys,
     source: "persistent",
@@ -108,6 +120,7 @@ export function storageIndexStatus(input: {
     nodeCount: input.record.nodeCount,
     propertyKeys: Object.keys(input.record.byProperty).length,
     edgeCount: edgeCount(input.record),
+    ...advancedStatus(input.record),
     source: input.record.transactionId === input.transactionId ? "storage" : "stale",
   };
 }
@@ -135,6 +148,67 @@ function normalizeIndexDefinitions(properties: Array<string | StorageIndexDefini
     normalized.push(definition.type ? { type: definition.type, path: definition.path } : { path: definition.path });
   }
   return normalized;
+}
+
+function normalizeAdvancedOptions(options: StorageIndexOptions): AdvancedIndexOptions {
+  return {
+    composites: normalizeComposites(options.composites ?? []),
+    ranges: normalizePathDefinitions(options.ranges ?? []),
+    text: normalizePathDefinitions(options.text ?? []).map((item) => ({ minGram: 2, maxGram: 4, ...item })),
+    fullText: normalizePathDefinitions(options.fullText ?? []),
+    unique: normalizeUniqueDefinitions(options.unique ?? []),
+    expressions: normalizeExpressionDefinitions(options.expressions ?? []),
+  };
+}
+
+function emptyAdvancedOptions(): AdvancedIndexOptions {
+  return { composites: [], ranges: [], text: [], fullText: [], unique: [], expressions: [] };
+}
+
+function normalizeComposites(items: StorageCompositeIndexDefinition[]): StorageCompositeIndexDefinition[] {
+  return items.filter((item) => item.paths.length > 1).map((item) => ({ ...item, paths: [...new Set(item.paths)] }));
+}
+
+function normalizePathDefinitions<T extends StorageIndexDefinition>(items: Array<string | T>): T[] {
+  const seen = new Set<string>();
+  const result: T[] = [];
+  for (const item of items) {
+    const definition = typeof item === "string" ? ({ path: item } as T) : item;
+    const key = `${definition.type ?? "*"}\u0000${definition.path}`;
+    if (!definition.path || seen.has(key)) continue;
+    seen.add(key);
+    result.push(definition);
+  }
+  return result;
+}
+
+function normalizeUniqueDefinitions(items: Array<string | StorageUniqueIndexDefinition>): StorageUniqueIndexDefinition[] {
+  return items
+    .map((item) => typeof item === "string" ? { path: item } : item)
+    .filter((item) => item.path || item.paths?.length)
+    .map((item) => ({ ...item, paths: item.paths ?? (item.path ? [item.path] : []) }));
+}
+
+function normalizeExpressionDefinitions(items: StorageExpressionIndexDefinition[]): StorageExpressionIndexDefinition[] {
+  return items.filter((item) => item.expression.path);
+}
+
+function advancedStatus(record: StorageIndexRecord): Partial<StorageIndexStatus> {
+  const advanced = record.advanced;
+  if (!advanced) return {};
+  return {
+    advancedIndexes: advanced.definitions.length,
+    compositeKeys: countKeys(advanced.composite),
+    rangeKeys: Object.values(advanced.range).reduce((count, entries) => count + entries.length, 0),
+    textTerms: countKeys(advanced.text),
+    fullTextTerms: countKeys(advanced.fullText),
+    expressionKeys: countKeys(advanced.expression),
+    uniqueKeys: countKeys(advanced.unique),
+  };
+}
+
+function countKeys(record: Record<string, Record<string, unknown>>): number {
+  return Object.values(record).reduce((count, bucket) => count + Object.keys(bucket).length, 0);
 }
 
 function nodesFromEnvelope(envelope: SerializedEnvelope): Map<string, GvqlGraphNode> {

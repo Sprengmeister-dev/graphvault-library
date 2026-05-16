@@ -1,6 +1,6 @@
 {
   "name": "@sprengmeister/graphvault",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "description": "TypeScript object graph persistence for application-owned object models.",
   "repository": {
     "type": "git",

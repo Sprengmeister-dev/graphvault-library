@@ -13,6 +13,7 @@ import { assessStorageSafety } from "./storage-safety.js";
 import { buildStorageHealthReport } from "./storage-health.js";
 import { collectStorageGarbage } from "./storage-garbage.js";
 import { collectObjectIdsForTargets } from "./storage-object-collector.js";
+import { verifyStorageIndexRecord } from "./storage-index-maintenance.js";
 import { buildStorageIndexRecord, graphIndexFromStorageRecord, isUsableStorageIndexRecord, resolveStorageIndexOptions, storageIndexStatus, type ResolvedStorageIndexOptions } from "./storage-index.js";
 import { migrationContext, migrationMetadata, migrationPlan, sortedSchemaMigrations, targetSchemaVersion } from "./storage-migrations.js";
 import { bindStorageLazyRefs, storeLoadedStorageLazyRefs } from "./storage-lazy-helpers.js";
@@ -49,6 +50,7 @@ import type {
   StorageSchemaMigration,
   StorageIndexRecord,
   StorageIndexStatus,
+  StorageIndexVerificationResult,
   TransactionLockMode,
   TransactionMetadata,
   VerificationResult,
@@ -533,18 +535,23 @@ export class StorageManager<TRoot = unknown> {
   async rebuildIndexes(): Promise<StorageIndexStatus> {
     this.assertStarted();
     this.assertWritable();
-    return this.mutex.runExclusive(() =>
-      this.withWriteLock(async (lock) => {
-        await lock.assertValid();
-        const envelope = this.serializer.serialize(this.rootValue);
-        await this.writer.writePersistentIndex(envelope, this.transactionId);
-        await lock.assertValid();
-        this.storageIndexRecord = this.indexRecordForEnvelope(envelope, this.transactionId);
-        return this.indexStatus();
-      }),
-    );
+    return this.mutex.runExclusive(() => this.withWriteLock(async (lock) => {
+      await lock.assertValid();
+      const envelope = this.serializer.serialize(this.rootValue);
+      await this.writer.writePersistentIndex(envelope, this.transactionId);
+      await lock.assertValid();
+      this.storageIndexRecord = this.indexRecordForEnvelope(envelope, this.transactionId);
+      return this.indexStatus();
+    }));
   }
 
+  async verifyIndexes(): Promise<StorageIndexVerificationResult> { this.assertStarted(); const envelope = this.serializer.serialize(this.rootValue);
+    const expected = this.indexRecordForEnvelope(envelope, this.transactionId);
+    const actual = this.storageIndexRecord ?? await this.reader.readStorageIndex();
+    this.storageIndexRecord = actual;
+    return verifyStorageIndexRecord({ expected, actual });
+  }
+  async repairIndexes(): Promise<StorageIndexStatus> { return this.rebuildIndexes(); }
   currentSchemaVersion(): number {
     return this.schemaVersion;
   }

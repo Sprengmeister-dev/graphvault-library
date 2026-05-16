@@ -126,15 +126,83 @@ export interface StorageIndexDefinition {
   path: string;
 }
 
+export type StorageIndexConditionOperator = "=" | "!=" | "IN" | "IS NULL" | "IS NOT NULL";
+
+export interface StorageIndexCondition {
+  type?: string;
+  path: string;
+  operator?: StorageIndexConditionOperator;
+  value?: unknown;
+  values?: unknown[];
+}
+
+export interface StorageCompositeIndexDefinition {
+  name?: string;
+  type?: string;
+  paths: string[];
+  unique?: boolean;
+  sparse?: boolean;
+  partial?: StorageIndexCondition;
+}
+
+export interface StorageRangeIndexDefinition extends StorageIndexDefinition {
+  name?: string;
+  sparse?: boolean;
+  partial?: StorageIndexCondition;
+}
+
+export interface StorageTextIndexDefinition extends StorageIndexDefinition {
+  name?: string;
+  caseSensitive?: boolean;
+  minGram?: number;
+  maxGram?: number;
+  sparse?: boolean;
+  partial?: StorageIndexCondition;
+}
+
+export interface StorageFullTextIndexDefinition extends StorageIndexDefinition {
+  name?: string;
+  caseSensitive?: boolean;
+  sparse?: boolean;
+  partial?: StorageIndexCondition;
+}
+
+export interface StorageUniqueIndexDefinition {
+  name?: string;
+  type?: string;
+  path?: string;
+  paths?: string[];
+  sparse?: boolean;
+  partial?: StorageIndexCondition;
+}
+
+export interface StorageExpressionIndexDefinition {
+  name?: string;
+  type?: string;
+  expression: {
+    fn: "lower" | "upper" | "trim" | "length";
+    path: string;
+  };
+  unique?: boolean;
+  sparse?: boolean;
+  partial?: StorageIndexCondition;
+}
+
 export interface StorageIndexOptions {
   mode?: StorageIndexMode;
   consistency?: StorageIndexConsistency;
   properties?: Array<string | StorageIndexDefinition>;
+  composites?: StorageCompositeIndexDefinition[];
+  ranges?: Array<string | StorageRangeIndexDefinition>;
+  text?: Array<string | StorageTextIndexDefinition>;
+  fullText?: Array<string | StorageFullTextIndexDefinition>;
+  unique?: Array<string | StorageUniqueIndexDefinition>;
+  expressions?: StorageExpressionIndexDefinition[];
 }
 
 export interface StorageIndexRecord {
   format: "graphvault-index";
-  version: 1;
+  version: 2;
   transactionId: number;
   createdAt: string;
   envelopeHash: string;
@@ -145,6 +213,7 @@ export interface StorageIndexRecord {
   byProperty: Record<string, string[]>;
   outgoing: Record<string, StorageIndexEdge[]>;
   incoming: Record<string, StorageIndexEdge[]>;
+  advanced?: StorageAdvancedIndexRecord;
 }
 
 export interface StorageIndexEdge {
@@ -152,6 +221,46 @@ export interface StorageIndexEdge {
   to: string;
   path: string;
   label: string;
+}
+
+export interface StorageAdvancedIndexRecord {
+  definitions: StorageAdvancedIndexDefinitionRecord[];
+  composite: Record<string, Record<string, string[]>>;
+  range: Record<string, StorageRangeIndexEntry[]>;
+  text: Record<string, Record<string, string[]>>;
+  fullText: Record<string, Record<string, string[]>>;
+  expression: Record<string, Record<string, string[]>>;
+  unique: Record<string, Record<string, string>>;
+  statistics: Record<string, StorageIndexStatistics>;
+}
+
+export interface StorageAdvancedIndexDefinitionRecord {
+  name: string;
+  kind: "composite" | "range" | "text" | "fullText" | "unique" | "expression";
+  type?: string;
+  path?: string;
+  paths?: string[];
+  expression?: StorageExpressionIndexDefinition["expression"];
+  unique?: boolean;
+  sparse?: boolean;
+  caseSensitive?: boolean;
+  minGram?: number;
+  maxGram?: number;
+  partial?: StorageIndexCondition;
+}
+
+export interface StorageRangeIndexEntry {
+  value: string;
+  raw: unknown;
+  objectIds: string[];
+}
+
+export interface StorageIndexStatistics {
+  entries: number;
+  keys: number;
+  maxBucketSize: number;
+  averageBucketSize: number;
+  selectivity: number;
 }
 
 export interface StorageIndexStatus {
@@ -162,7 +271,21 @@ export interface StorageIndexStatus {
   nodeCount: number;
   propertyKeys: number;
   edgeCount: number;
+  advancedIndexes?: number;
+  compositeKeys?: number;
+  rangeKeys?: number;
+  textTerms?: number;
+  fullTextTerms?: number;
+  expressionKeys?: number;
+  uniqueKeys?: number;
   source: "memory" | "storage" | "missing" | "stale" | "disabled";
+}
+
+export interface StorageIndexVerificationResult {
+  ok: boolean;
+  checkedIndexes: number;
+  errors: string[];
+  warnings: string[];
 }
 
 export interface SubtreeLoadOptions {

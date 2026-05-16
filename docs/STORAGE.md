@@ -190,4 +190,4 @@ const storage = await EmbeddedStorage.start({
 - `prettyJson`: keeps metadata human-formatted when `true`; compact JSON is faster and smaller.
 - `writeDurability`: `strict` fsyncs local atomic writes; `relaxed` favors throughput.
 - `writeSnapshots`: controls checkpoint snapshot writes; manifest-based loading still works without snapshots.
-- `indexes`: controls the persistent GVQL index sidecar. Omit it or pass `true` for automatic direct-property indexes, use `mode: "configured"` with selected paths for very large graphs, or `mode: "off"` for disposable stores that do not query.
+- `indexes`: controls the persistent GVQL index sidecar. Omit it or pass `true` for automatic direct-property indexes, use `mode: "configured"` with selected property, composite, range, text/substring, full-text token, unique, partial/sparse, and expression indexes for large graphs, or `mode: "off"` for disposable stores that do not query.

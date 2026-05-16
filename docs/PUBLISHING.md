@@ -46,16 +46,16 @@ git tag -a v0.1.0 -m "GraphVault Library 0.1.0"
 git push origin v0.1.0
 ```
 
-For the current 0.2.3 release:
+For the current 0.2.4 release:
 
 ```bash
-git tag -a v0.2.3 -m "GraphVault Library 0.2.3"
-git push origin v0.2.3
+git tag -a v0.2.4 -m "GraphVault Library 0.2.4"
+git push origin v0.2.4
 ```
 
 ## Publishing
 
-Use the GitHub Actions `Release` workflow with the matching tag input, for example `v0.2.3`, and set the confirmation input to `PUBLISH`.
+Use the GitHub Actions `Release` workflow with the matching tag input, for example `v0.2.4`, and set the confirmation input to `PUBLISH`.
 
 The workflow checks out the tag, installs with `npm ci`, runs tests, runs the benchmark regression gate, validates the npm tarball with `npm run pack:dry-run`, installs the tarball in a clean smoke project, and publishes with npm provenance.
 

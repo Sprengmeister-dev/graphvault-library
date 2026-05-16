@@ -12,7 +12,7 @@ GraphVault is embedded object-graph persistence for TypeScript and NestJS applic
 
 It is not a SQL server and it is not an ORM. You keep your domain model in memory, mutate normal TypeScript objects, then explicitly commit a verifiable graph store with WAL recovery, locking, indexes, GVQL, and an admin UI.
 
-Current release: [0.2.3](./docs/RELEASE_NOTES_0.2.3.md), with persistent indexes, Node.js 26 validation, NestJS smoke tests, and a slimmer TypeScript-developer README.
+Current release: [0.2.4](./docs/RELEASE_NOTES_0.2.4.md), with professional persistent index families, index verification/repair, Node.js 26 validation, and NestJS smoke tests.
 
 ## 30-Second Quickstart
 
@@ -130,7 +130,7 @@ The default filesystem profile favors inspectable JSON sidecars and conservative
 ## Important Workflows
 
 - Query and manipulate graphs with [GVQL](./docs/GVQL.md): graph patterns, joins, aggregates, execution plans, previews, and batch updates.
-- Keep large stores fast with [persistent indexes](./docs/INDEXES.md): automatic indexes by default, configured property indexes for predictable index size, and rebuild/status operations.
+- Keep large stores fast with [persistent indexes](./docs/INDEXES.md): property, composite, range, text/substring, full-text token, unique, partial/sparse, and expression indexes with verify/repair operations.
 - Protect concurrent writers with [transactions](./docs/TRANSACTIONS.md): rollback, optimistic and pessimistic locking, fencing tokens, stale-lock recovery, and NestJS decorators.
 - Run production checks with [operations guidance](./docs/PRODUCTION.md) and [ACID configuration](./docs/ACID.md): WAL recovery, strict durability, verification, backups, health reports, and safety profiles.
 - Expose bounded graph slices with [subtree loading](./docs/API.md#subtree-loading) and [NestJS REST examples](./docs/NESTJS.md#rest-subtree-endpoints).
@@ -170,7 +170,8 @@ Then open `http://127.0.0.1:4177`.
 - [NestJS integration](./docs/NESTJS.md) - module setup, async config, multiple stores, and shutdown hooks.
 - [API reference](./docs/API.md) - public entry points and important options.
 - [Benchmarks](./docs/BENCHMARKS.md) - reproducible performance numbers and write profiles.
-- [0.2.3 release notes](./docs/RELEASE_NOTES_0.2.3.md) - persistent indexes, Node.js 26, NestJS smoke tests, and current package baseline.
+- [0.2.4 release notes](./docs/RELEASE_NOTES_0.2.4.md) - professional persistent indexes, index verification/repair, and current package baseline.
+- [0.2.3 release notes](./docs/RELEASE_NOTES_0.2.3.md) - Node.js 26, NestJS smoke tests, and TypeScript developer polish.
 - [0.2.0 release notes](./docs/RELEASE_NOTES_0.2.0.md) - production hardening, ACID-oriented recovery, subtree exports, and encrypted storage.
 - [0.1.0 release notes](./docs/RELEASE_NOTES_0.1.0.md) - package overview for the first public release.
 - [Publishing checklist](./docs/PUBLISHING.md) - local release checks, tagging, npm provenance, and GitHub topics.

@@ -38,7 +38,12 @@ export class StorageWriter {
     this.objectRecordFormat = options.objectRecordFormat ?? "binary-and-json";
     this.objectRecordWriteConcurrency = options.objectRecordWriteConcurrency ?? OBJECT_RECORD_WRITE_CONCURRENCY;
     this.prettyJson = options.prettyJson ?? true;
-    this.indexes = options.indexes ?? { mode: "auto", consistency: "strict", properties: [] };
+    this.indexes = options.indexes ?? {
+      mode: "auto",
+      consistency: "strict",
+      properties: [],
+      advanced: { composites: [], ranges: [], text: [], fullText: [], unique: [], expressions: [] },
+    };
   }
 
   async writeJson(path: string, value: unknown): Promise<void> {

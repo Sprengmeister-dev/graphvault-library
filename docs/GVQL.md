@@ -164,7 +164,7 @@ Current GVQL supports:
 - `HAVING` over returned aliases for aggregate filtering, with `AND`, `OR`, `NOT`, and parentheses
 - `ORDER BY` paths and returned aliases, with multiple criteria plus `LIMIT` and `OFFSET`
 - `CREATE (alias:Type { ... }) INTO parent.collection`, `MERGE (alias:Type { ... }) INTO parent.collection ON alias.field` for idempotent collection upserts, `SET` for primitive field updates, arithmetic and `CASE`-based `SET` expressions, `REMOVE` for object-field cleanup, and parent-aware `DELETE alias`
-- type indexes, primitive-property index intersections, indexed `IN` unions, and indexed `OR` unions for common filters on the first matched node
+- type indexes, primitive-property index intersections, indexed `IN` unions, indexed `OR` unions, composite indexes, range indexes, text/substring indexes, full-text token indexes, unique indexes, and expression indexes for common filters on the first matched node
 - indexed virtual metadata filters for `$id` and `$type`
 - persistent storage indexes for committed graphs, with full-scan fallback when a configured property index is unavailable
 

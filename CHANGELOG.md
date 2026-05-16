@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.4
+
+- Add professional persistent index families: composite, range, text/substring, full-text token, unique, partial/sparse, and expression indexes.
+- Add `verifyIndexes()` and `repairIndexes()` for operational index checks and repair.
+- Teach the GVQL planner to use advanced persistent indexes for common candidate selection.
+
 ## 0.2.3
 
 - Fix NestJS `GraphVaultModule.forRoot(...)` and `forRootAsync(...)` TypeScript compatibility with real Nest module imports.
