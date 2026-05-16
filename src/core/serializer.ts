@@ -11,6 +11,7 @@ import type {
   TypeDictionaryEntry,
 } from "./types.js";
 import { UnknownTypeError } from "./errors.js";
+import { shouldIgnoreGraphVaultField } from "./field-annotations.js";
 
 interface RegisteredType {
   name: string;
@@ -226,7 +227,7 @@ export class GraphSerializer {
       }
 
       const registration = this.types.byConstructor(value);
-      const state = registration?.serialize ? registration.serialize(value) : (value as Record<string, unknown>);
+      const state = this.serializableState(value, registration);
       const props: Record<string, EncodedValue> = {};
       for (const key of Object.keys(state)) {
         props[key] = encode(state[key]);
@@ -391,6 +392,7 @@ export class GraphSerializer {
           return shell;
         case "object": {
           let props = Object.fromEntries(Object.entries(node.props).map(([key, value]) => [key, decode(value)]));
+          props = filterLoadableState(shell as object, props);
           if (node.type) {
             const registration = this.types.byTypeName(node.type);
             const fromVersion = node.version ?? 1;
@@ -413,6 +415,9 @@ export class GraphSerializer {
             if (typeof symbolKey !== "symbol") {
               throw new UnknownTypeError("Serialized symbol property key did not decode to a symbol.");
             }
+            if (shouldIgnoreGraphVaultField(shell as object, symbolKey, "load")) {
+              continue;
+            }
             (shell as Record<symbol, unknown>)[symbolKey] = decode(value);
           }
           hydrating.delete(id);
@@ -424,6 +429,30 @@ export class GraphSerializer {
 
     return decode(envelope.root) as TRoot;
   }
+
+  private serializableState(value: object, registration: RegisteredType | undefined): Record<string, unknown> {
+    const state = registration?.serialize ? registration.serialize(value) : (value as Record<string, unknown>);
+    return filterSavableState(value, state);
+  }
+}
+
+function filterSavableState(owner: object, state: Record<string, unknown>): Record<string, unknown> {
+  const filtered: Record<string, unknown> & Record<symbol, unknown> = {};
+  for (const key of Object.keys(state)) {
+    if (!shouldIgnoreGraphVaultField(owner, key, "save")) {
+      filtered[key] = state[key];
+    }
+  }
+  for (const key of Object.getOwnPropertySymbols(state)) {
+    if (Object.prototype.propertyIsEnumerable.call(state, key) && !shouldIgnoreGraphVaultField(owner, key, "save")) {
+      filtered[key] = (state as Record<symbol, unknown>)[key];
+    }
+  }
+  return filtered;
+}
+
+function filterLoadableState(owner: object, state: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(state).filter(([key]) => !shouldIgnoreGraphVaultField(owner, key, "load")));
 }
 
 function specialNumberFrom(value: "NaN" | "Infinity" | "-Infinity" | "-0"): number {

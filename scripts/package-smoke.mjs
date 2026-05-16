@@ -51,6 +51,7 @@ import assert from "node:assert/strict";
 import {
   EmbeddedStorage,
   EncryptedStorageTarget,
+  GraphVaultIgnore,
   GraphSerializer,
   MemoryStorageTarget,
   assessStorageSafety,
@@ -117,6 +118,15 @@ const serializer = new GraphSerializer();
 const envelope = serializer.serialize({ child: { ok: true } });
 const rootNode = envelope.nodes[envelope.root.$ref];
 assert.equal(referencedEdges(envelope.root.$ref, rootNode).length, 1);
+class PackageAnnotatedModel {
+  constructor() {
+    this.visible = "visible";
+    this.secret = "hidden";
+  }
+}
+GraphVaultIgnore()(PackageAnnotatedModel.prototype, "secret");
+const annotatedEnvelope = serializer.serialize(new PackageAnnotatedModel());
+assert.equal("secret" in annotatedEnvelope.nodes[annotatedEnvelope.root.$ref].props, false);
 assert.equal(new StorageLayout("store").manifestFile, "store/manifest.json");
 assert.equal(new InternalMemoryStorageTarget() instanceof MemoryStorageTarget, true);
 

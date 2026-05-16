@@ -12,7 +12,7 @@ GraphVault is embedded object-graph persistence for TypeScript and NestJS applic
 
 It is not a SQL server and it is not an ORM. You keep your domain model in memory, mutate normal TypeScript objects, then explicitly commit a verifiable graph store with WAL recovery, locking, indexes, GVQL, and an admin UI.
 
-Current release: [0.2.4](./docs/RELEASE_NOTES_0.2.4.md), with professional persistent index families, index verification/repair, Node.js 26 validation, and NestJS smoke tests.
+Current release: [0.2.5](./docs/RELEASE_NOTES_0.2.5.md), with field annotations for save/load filtering, professional persistent indexes, Node.js 26 validation, and NestJS smoke tests.
 
 ## 30-Second Quickstart
 
@@ -53,6 +53,7 @@ Reach for Postgres, SQLite, MongoDB, or Redis when:
 ## Core Capabilities
 
 - Persist rich TypeScript object graphs with identity, shared references, cycles, classes, `Map`, `Set`, `Date`, `Buffer`, `bigint`, typed arrays, and other JS values.
+- Exclude sensitive or runtime-only class fields with field decorators such as `@GraphVaultIgnore()`, `@GraphVaultIgnoreSave()`, and `@GraphVaultIgnoreLoad()`.
 - Query and batch-update committed graphs with GVQL, persistent indexes, execution plans, aggregates, previews, and GraphVault Studio.
 - Run explicit transactions with rollback, optimistic or pessimistic locking, WAL recovery, fencing tokens, transaction metadata, and a tamper-evident hash chain.
 - Operate stores with health/safety reports, verification, consistent backup, schema migrations, bounded subtree exports, and pluggable local, memory, HTTP, S3-compatible, SQLite-tested, and PostgreSQL-tested SQL storage targets.
@@ -130,6 +131,7 @@ The default filesystem profile favors inspectable JSON sidecars and conservative
 ## Important Workflows
 
 - Query and manipulate graphs with [GVQL](./docs/GVQL.md): graph patterns, joins, aggregates, execution plans, previews, and batch updates.
+- Keep sensitive or runtime-only model fields out of persistence with [field annotations](./docs/USAGE.md#field-annotations).
 - Keep large stores fast with [persistent indexes](./docs/INDEXES.md): property, composite, range, text/substring, full-text token, unique, partial/sparse, and expression indexes with verify/repair operations.
 - Protect concurrent writers with [transactions](./docs/TRANSACTIONS.md): rollback, optimistic and pessimistic locking, fencing tokens, stale-lock recovery, and NestJS decorators.
 - Run production checks with [operations guidance](./docs/PRODUCTION.md) and [ACID configuration](./docs/ACID.md): WAL recovery, strict durability, verification, backups, health reports, and safety profiles.
@@ -174,6 +176,7 @@ For a fuller graph-shaped product demo, see the [CaseGraph demo concept](./docs/
 - [CaseGraph demo concept](./docs/CASEGRAPH.md) - the reference use case for graph-shaped, audit-heavy application data.
 - [API reference](./docs/API.md) - public entry points and important options.
 - [Benchmarks](./docs/BENCHMARKS.md) - reproducible performance numbers and write profiles.
+- [0.2.5 release notes](./docs/RELEASE_NOTES_0.2.5.md) - field annotations for save/load filtering and current package baseline.
 - [0.2.4 release notes](./docs/RELEASE_NOTES_0.2.4.md) - professional persistent indexes, index verification/repair, and current package baseline.
 - [0.2.3 release notes](./docs/RELEASE_NOTES_0.2.3.md) - Node.js 26, NestJS smoke tests, and TypeScript developer polish.
 - [0.2.0 release notes](./docs/RELEASE_NOTES_0.2.0.md) - production hardening, ACID-oriented recovery, subtree exports, and encrypted storage.

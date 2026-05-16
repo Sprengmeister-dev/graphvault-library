@@ -86,6 +86,34 @@ You can version and migrate classes:
 }
 ```
 
+### Field Annotations
+
+Use field annotations when a class has sensitive, derived, or runtime-only fields that should not be persisted exactly like normal domain state.
+
+```ts
+import { GraphVaultIgnore, GraphVaultIgnoreLoad, GraphVaultIgnoreSave } from "@sprengmeister/graphvault";
+
+class Account {
+  constructor(
+    readonly id: string,
+    public email: string,
+  ) {}
+
+  @GraphVaultIgnore()
+  passwordHash = "";
+
+  @GraphVaultIgnoreSave()
+  requestCache = new Map<string, unknown>();
+
+  @GraphVaultIgnoreLoad()
+  serverComputedRisk = "fresh-default";
+}
+```
+
+`@GraphVaultIgnore()` excludes the field from both saving and loading. `@GraphVaultIgnoreSave()` omits the field from new commits but still allows older stored values to hydrate it. `@GraphVaultIgnoreLoad()` allows the field to be present in stored envelopes but skips assigning it during deserialization, leaving constructor or `create()` defaults intact.
+
+For TypeScript legacy property decorators, enable `experimentalDecorators` in the consuming app. The annotations are applied by the serializer, so they also affect custom type registrations that provide their own `serialize` or `hydrate` functions.
+
 ### Read And Write Data
 
 Mutate your root like normal TypeScript objects, then store explicitly. `storeRoot()` writes the full reachable root graph, so nested changes in arrays, maps, sets, and child objects are durable even when the root object identity did not change.

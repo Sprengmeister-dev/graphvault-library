@@ -85,6 +85,16 @@ export { PersistentCache } from "./cache/persistent-cache.js";
 export type { PersistentCacheRoot } from "./cache/persistent-cache.js";
 /** Serialization building blocks for object identity, type registration, and graph envelopes. */
 export { GraphSerializer, ObjectIdRegistry, TypeRegistry } from "./core/serializer.js";
+/** Field decorators for excluding class fields from save and load phases. */
+export {
+  GraphVaultIgnore,
+  GraphVaultIgnoreLoad,
+  GraphVaultIgnoreSave,
+  registerGraphVaultFieldAnnotation,
+  shouldIgnoreGraphVaultField,
+} from "./core/field-annotations.js";
+/** Field annotation configuration types. */
+export type { GraphVaultFieldAnnotation, GraphVaultIgnoreOptions } from "./core/field-annotations.js";
 /** Storage target implementations for local, memory, encrypted, HTTP, S3, and SQL backends. */
 export {
   copyStorageTargetTree,

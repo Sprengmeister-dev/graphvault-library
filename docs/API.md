@@ -94,6 +94,28 @@ await storage.migrateTo(1);
 
 See [schema migrations](./SCHEMA_MIGRATIONS.md) for the full operational pattern.
 
+### Field Annotations
+
+- `GraphVaultIgnore(options?)`: property decorator for excluding fields from save and/or load phases. Without options it excludes both.
+- `GraphVaultIgnoreSave()`: shortcut for fields that must never be written to the store.
+- `GraphVaultIgnoreLoad()`: shortcut for fields that may exist in stored envelopes but should not be assigned while loading.
+- `registerGraphVaultFieldAnnotation(...)`: low-level hook for custom decorator integrations.
+
+```ts
+class Session {
+  @GraphVaultIgnore()
+  accessToken = "";
+
+  @GraphVaultIgnoreSave()
+  memoizedPermissions = new Set<string>();
+
+  @GraphVaultIgnoreLoad()
+  runtimeState = "fresh";
+}
+```
+
+Ignored fields are filtered after custom `serialize(...)` and before custom `hydrate(...)`, so class registrations and field annotations compose.
+
 ### Storage Targets
 
 - `LocalFilesystemTarget`: default target for file-based embedded storage.

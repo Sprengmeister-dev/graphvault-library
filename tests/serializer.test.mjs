@@ -2,6 +2,12 @@ import assert from "node:assert/strict";
 import { Buffer } from "node:buffer";
 import { GraphSerializer, TypeRegistry } from "../dist/core/serializer.js";
 import { UnknownTypeError } from "../dist/core/errors.js";
+import {
+  GraphVaultIgnore,
+  GraphVaultIgnoreLoad,
+  GraphVaultIgnoreSave,
+  shouldIgnoreGraphVaultField,
+} from "../dist/core/field-annotations.js";
 
 class EventItem {
   constructor(id, seen = new Date("2026-01-01T00:00:00.000Z")) {
@@ -165,6 +171,90 @@ const hydratedId = Object.keys(hydratedEnvelope.nodes)[0];
 hydratedEnvelope.nodes[hydratedId].props.value = "custom";
 const hydratedThing = hydratedSerializer.deserialize(hydratedEnvelope);
 assert.equal(hydratedThing.value, "custom:1");
+
+const hiddenSymbol = Symbol.for("graphvault.hidden");
+class AnnotatedAccount {
+  constructor() {
+    this.id = "account-1";
+    this.secret = "constructor-secret";
+    this.runtimeCache = "constructor-cache";
+    this.loadFiltered = "constructor-load";
+    this.visible = "constructor-visible";
+    this[hiddenSymbol] = "constructor-symbol";
+  }
+}
+GraphVaultIgnore()(AnnotatedAccount.prototype, "secret");
+GraphVaultIgnoreSave()(AnnotatedAccount.prototype, "runtimeCache");
+GraphVaultIgnoreLoad()(AnnotatedAccount.prototype, "loadFiltered");
+GraphVaultIgnore()(AnnotatedAccount.prototype, hiddenSymbol);
+const annotatedSerializer = new GraphSerializer([
+  {
+    name: "AnnotatedAccount",
+    ctor: AnnotatedAccount,
+    create: () => new AnnotatedAccount(),
+    serialize: (value) => ({
+      id: value.id,
+      secret: value.secret,
+      runtimeCache: value.runtimeCache,
+      loadFiltered: value.loadFiltered,
+      visible: value.visible,
+      [hiddenSymbol]: value[hiddenSymbol],
+    }),
+    hydrate: (target, state) => {
+      Object.assign(target, state);
+    },
+  },
+]);
+const annotatedEnvelope = annotatedSerializer.serialize(new AnnotatedAccount());
+const annotatedNode = annotatedEnvelope.nodes[annotatedEnvelope.root.$ref];
+assert.equal("secret" in annotatedNode.props, false);
+assert.equal("runtimeCache" in annotatedNode.props, false);
+assert.equal("loadFiltered" in annotatedNode.props, true);
+assert.equal(annotatedNode.symbolProps, undefined);
+const annotatedRoundtrip = annotatedSerializer.deserialize(annotatedEnvelope);
+assert.equal(annotatedRoundtrip.secret, "constructor-secret");
+assert.equal(annotatedRoundtrip.runtimeCache, "constructor-cache");
+assert.equal(annotatedRoundtrip.loadFiltered, "constructor-load");
+assert.equal(annotatedRoundtrip.visible, "constructor-visible");
+
+const legacyAnnotatedEnvelope = {
+  ...annotatedEnvelope,
+  nodes: {
+    ...annotatedEnvelope.nodes,
+    [annotatedEnvelope.root.$ref]: {
+      ...annotatedNode,
+      props: {
+        ...annotatedNode.props,
+        secret: "legacy-secret",
+        loadFiltered: "legacy-load-filtered",
+        visible: "legacy-visible",
+      },
+      symbolProps: [[{ $type: "symbol", global: true, key: "graphvault.hidden" }, "legacy-symbol"]],
+    },
+  },
+};
+const legacyAnnotated = annotatedSerializer.deserialize(legacyAnnotatedEnvelope);
+assert.equal(legacyAnnotated.secret, "constructor-secret");
+assert.equal(legacyAnnotated.loadFiltered, "constructor-load");
+assert.equal(legacyAnnotated.visible, "legacy-visible");
+assert.equal(legacyAnnotated[hiddenSymbol], "constructor-symbol");
+
+let standardInitializer;
+GraphVaultIgnore({ save: true, load: false })({}, {
+  kind: "field",
+  name: "standardField",
+  addInitializer: (initializer) => {
+    standardInitializer = initializer;
+  },
+});
+const standardInstance = {};
+standardInitializer.call(standardInstance);
+assert.equal(shouldIgnoreGraphVaultField(standardInstance, "standardField", "save"), true);
+assert.equal(shouldIgnoreGraphVaultField(standardInstance, "standardField", "load"), false);
+assert.throws(
+  () => GraphVaultIgnore()({}, { kind: "method", name: "notField" }),
+  /can only decorate fields/,
+);
 
 const invalidSymbolEnvelope = {
   format: "graphvault",

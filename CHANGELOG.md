@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.5
+
+- Add field annotations for excluding class fields during save and/or load.
+- Export `GraphVaultIgnore`, `GraphVaultIgnoreSave`, `GraphVaultIgnoreLoad`, and low-level annotation helpers.
+- Apply field annotations after custom `serialize(...)` and before custom `hydrate(...)` so class registrations compose with filtering.
+- Document field annotations in README, usage guide, and API reference.
+
 ## 0.2.4
 
 - Add professional persistent index families: composite, range, text/substring, full-text token, unique, partial/sparse, and expression indexes.
