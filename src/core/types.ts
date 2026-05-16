@@ -1,5 +1,6 @@
 export type ClassConstructor<T = object> = new (...args: never[]) => T;
 
+/** Describes the public TypeRegistration contract. */
 export interface TypeRegistration<T extends object = object> {
   name: string;
   ctor: ClassConstructor<T>;
@@ -10,6 +11,7 @@ export interface TypeRegistration<T extends object = object> {
   migrate?: (state: Record<string, unknown>, fromVersion: number) => Record<string, unknown>;
 }
 
+/** Describes the public SerializedEnvelope contract. */
 export interface SerializedEnvelope {
   format: "graphvault";
   version: 1;
@@ -18,6 +20,7 @@ export interface SerializedEnvelope {
   nodes: Record<string, EncodedNode>;
 }
 
+/** Describes the public ObjectRecord contract. */
 export interface ObjectRecord {
   format: "graphvault-object";
   version: 1;
@@ -27,6 +30,7 @@ export interface ObjectRecord {
   node: EncodedNode;
 }
 
+/** Describes the public StorageManifest contract. */
 export interface StorageManifest {
   format: "graphvault-manifest";
   version: 1;
@@ -39,6 +43,7 @@ export interface StorageManifest {
   schemaVersion?: number;
 }
 
+/** Describes the public TransactionRecord contract. */
 export interface TransactionRecord {
   format: "graphvault-transaction";
   version: 1;
@@ -55,6 +60,7 @@ export interface TransactionRecord {
   schemaVersion?: number;
 }
 
+/** Describes the public TransactionMetadata contract. */
 export interface TransactionMetadata {
   actor?: string;
   reason?: string;
@@ -65,6 +71,7 @@ export interface TransactionMetadata {
   schemaMigration?: SchemaMigrationMetadata;
 }
 
+/** Describes the public SchemaMigrationMetadata contract. */
 export interface SchemaMigrationMetadata {
   version: number;
   name?: string;
@@ -73,6 +80,7 @@ export interface SchemaMigrationMetadata {
   toVersion: number;
 }
 
+/** Describes the public WalPrepareRecord contract. */
 export interface WalPrepareRecord {
   format: "graphvault-wal";
   version: 1;
@@ -87,6 +95,7 @@ export interface WalPrepareRecord {
   schemaVersion?: number;
 }
 
+/** Describes the public WalCommitRecord contract. */
 export interface WalCommitRecord {
   format: "graphvault-wal";
   version: 1;
@@ -99,12 +108,14 @@ export interface WalCommitRecord {
 
 export type WalRecord = WalPrepareRecord | WalCommitRecord;
 
+/** Describes the public TypeDictionary contract. */
 export interface TypeDictionary {
   format: "graphvault-type-dictionary";
   version: 1;
   types: TypeDictionaryEntry[];
 }
 
+/** Describes the public ParentIndexRecord contract. */
 export interface ParentIndexRecord {
   format: "graphvault-parent-index";
   version: 1;
@@ -113,6 +124,7 @@ export interface ParentIndexRecord {
   parents: Record<string, ParentReference[]>;
 }
 
+/** Describes the public ParentReference contract. */
 export interface ParentReference {
   parentObjectId: string;
   path: string;
@@ -121,6 +133,7 @@ export interface ParentReference {
 export type StorageIndexMode = "off" | "auto" | "configured";
 export type StorageIndexConsistency = "strict" | "committed";
 
+/** Describes the public StorageIndexDefinition contract. */
 export interface StorageIndexDefinition {
   type?: string;
   path: string;
@@ -128,6 +141,7 @@ export interface StorageIndexDefinition {
 
 export type StorageIndexConditionOperator = "=" | "!=" | "IN" | "IS NULL" | "IS NOT NULL";
 
+/** Describes the public StorageIndexCondition contract. */
 export interface StorageIndexCondition {
   type?: string;
   path: string;
@@ -136,6 +150,7 @@ export interface StorageIndexCondition {
   values?: unknown[];
 }
 
+/** Describes the public StorageCompositeIndexDefinition contract. */
 export interface StorageCompositeIndexDefinition {
   name?: string;
   type?: string;
@@ -145,12 +160,14 @@ export interface StorageCompositeIndexDefinition {
   partial?: StorageIndexCondition;
 }
 
+/** Describes the public StorageRangeIndexDefinition contract. */
 export interface StorageRangeIndexDefinition extends StorageIndexDefinition {
   name?: string;
   sparse?: boolean;
   partial?: StorageIndexCondition;
 }
 
+/** Describes the public StorageTextIndexDefinition contract. */
 export interface StorageTextIndexDefinition extends StorageIndexDefinition {
   name?: string;
   caseSensitive?: boolean;
@@ -160,6 +177,7 @@ export interface StorageTextIndexDefinition extends StorageIndexDefinition {
   partial?: StorageIndexCondition;
 }
 
+/** Describes the public StorageFullTextIndexDefinition contract. */
 export interface StorageFullTextIndexDefinition extends StorageIndexDefinition {
   name?: string;
   caseSensitive?: boolean;
@@ -167,6 +185,7 @@ export interface StorageFullTextIndexDefinition extends StorageIndexDefinition {
   partial?: StorageIndexCondition;
 }
 
+/** Describes the public StorageUniqueIndexDefinition contract. */
 export interface StorageUniqueIndexDefinition {
   name?: string;
   type?: string;
@@ -176,6 +195,7 @@ export interface StorageUniqueIndexDefinition {
   partial?: StorageIndexCondition;
 }
 
+/** Describes the public StorageExpressionIndexDefinition contract. */
 export interface StorageExpressionIndexDefinition {
   name?: string;
   type?: string;
@@ -188,6 +208,7 @@ export interface StorageExpressionIndexDefinition {
   partial?: StorageIndexCondition;
 }
 
+/** Describes the public StorageIndexOptions contract. */
 export interface StorageIndexOptions {
   mode?: StorageIndexMode;
   consistency?: StorageIndexConsistency;
@@ -200,6 +221,7 @@ export interface StorageIndexOptions {
   expressions?: StorageExpressionIndexDefinition[];
 }
 
+/** Describes the public StorageIndexRecord contract. */
 export interface StorageIndexRecord {
   format: "graphvault-index";
   version: 2;
@@ -216,6 +238,7 @@ export interface StorageIndexRecord {
   advanced?: StorageAdvancedIndexRecord;
 }
 
+/** Describes the public StorageIndexEdge contract. */
 export interface StorageIndexEdge {
   from: string;
   to: string;
@@ -223,6 +246,7 @@ export interface StorageIndexEdge {
   label: string;
 }
 
+/** Describes the public StorageAdvancedIndexRecord contract. */
 export interface StorageAdvancedIndexRecord {
   definitions: StorageAdvancedIndexDefinitionRecord[];
   composite: Record<string, Record<string, string[]>>;
@@ -234,6 +258,7 @@ export interface StorageAdvancedIndexRecord {
   statistics: Record<string, StorageIndexStatistics>;
 }
 
+/** Describes the public StorageAdvancedIndexDefinitionRecord contract. */
 export interface StorageAdvancedIndexDefinitionRecord {
   name: string;
   kind: "composite" | "range" | "text" | "fullText" | "unique" | "expression";
@@ -249,12 +274,14 @@ export interface StorageAdvancedIndexDefinitionRecord {
   partial?: StorageIndexCondition;
 }
 
+/** Describes the public StorageRangeIndexEntry contract. */
 export interface StorageRangeIndexEntry {
   value: string;
   raw: unknown;
   objectIds: string[];
 }
 
+/** Describes the public StorageIndexStatistics contract. */
 export interface StorageIndexStatistics {
   entries: number;
   keys: number;
@@ -263,6 +290,7 @@ export interface StorageIndexStatistics {
   selectivity: number;
 }
 
+/** Describes the public StorageIndexStatus contract. */
 export interface StorageIndexStatus {
   enabled: boolean;
   mode: StorageIndexMode;
@@ -281,6 +309,7 @@ export interface StorageIndexStatus {
   source: "memory" | "storage" | "missing" | "stale" | "disabled";
 }
 
+/** Describes the public StorageIndexVerificationResult contract. */
 export interface StorageIndexVerificationResult {
   ok: boolean;
   checkedIndexes: number;
@@ -288,11 +317,13 @@ export interface StorageIndexVerificationResult {
   warnings: string[];
 }
 
+/** Describes the public SubtreeLoadOptions contract. */
 export interface SubtreeLoadOptions {
   depth?: number;
   rootObjectId?: string;
 }
 
+/** Describes the public SubtreeReference contract. */
 export interface SubtreeReference {
   fromObjectId: string;
   toObjectId: string;
@@ -300,6 +331,7 @@ export interface SubtreeReference {
   depth: number;
 }
 
+/** Describes the public SubtreeLoadResult contract. */
 export interface SubtreeLoadResult {
   envelope: SerializedEnvelope;
   transactionId: number;
@@ -310,9 +342,11 @@ export interface SubtreeLoadResult {
   rootObjectId?: string;
 }
 
+/** Describes the public TypeDictionaryEntry contract. */
 export interface TypeDictionaryEntry {
   name: string;
   version: number;
+  /** Creates a TypeDictionaryEntry instance. */
   constructorName: string;
 }
 
@@ -357,6 +391,7 @@ export type EncodedNode =
   | { kind: "object"; type?: string; version?: number; props: Record<string, EncodedValue>; symbolProps?: Array<[EncodedValue, EncodedValue]> }
   | { kind: "lazy"; key: string };
 
+/** Describes the public StorageManagerOptions contract. */
 export interface StorageManagerOptions<TRoot = unknown> {
   storageDirectory: string;
   rootFactory: () => TRoot;
@@ -394,29 +429,45 @@ export type StorageCommitValidator<TRoot = unknown> = (context: {
   transactionId: number;
 }) => void | Promise<void>;
 
+/** Describes the public StorageTarget contract. */
 export interface StorageTarget {
+  /** Runs StorageTarget.ensureDirectory. */
   ensureDirectory(path: string): Promise<void>;
+  /** Runs StorageTarget.exists. */
   exists(path: string): Promise<boolean>;
+  /** Runs StorageTarget.list. */
   list(path: string): Promise<string[]>;
+  /** Runs StorageTarget.readText. */
   readText(path: string): Promise<string>;
+  /** Runs StorageTarget.readBuffer. */
   readBuffer(path: string): Promise<Buffer>;
+  /** Runs StorageTarget.writeTextAtomic. */
   writeTextAtomic(path: string, value: string): Promise<void>;
+  /** Runs StorageTarget.writeBufferAtomic. */
   writeBufferAtomic(path: string, value: Buffer): Promise<void>;
+  /** Runs StorageTarget.appendText. */
   appendText(path: string, value: string): Promise<void>;
+  /** Runs StorageTarget.remove. */
   remove(path: string, options?: { recursive?: boolean }): Promise<void>;
+  /** Runs StorageTarget.acquireLock. */
   acquireLock(path: string, timeoutMs: number, options?: StorageLockOptions): Promise<StorageTargetLock>;
 }
 
+/** Describes the public StorageLockOptions contract. */
 export interface StorageLockOptions {
   staleLockTimeoutMs?: number;
 }
 
+/** Describes the public StorageTargetLock contract. */
 export interface StorageTargetLock {
   fencingToken: number;
+  /** Runs StorageTargetLock.assertValid. */
   assertValid(): Promise<void>;
+  /** Runs StorageTargetLock.release. */
   release(): Promise<void>;
 }
 
+/** Describes the public StoreMetadata contract. */
 export interface StoreMetadata {
   transactionId: number;
   storedAt: Date;
@@ -428,12 +479,14 @@ export interface StoreMetadata {
   metadata?: TransactionMetadata;
 }
 
+/** Describes the public GraphVaultTransactionContext contract. */
 export interface GraphVaultTransactionContext<TRoot = unknown> {
   root: TRoot;
   transactionId: number;
   attempt: number;
 }
 
+/** Describes the public GraphVaultTransactionOptions contract. */
 export interface GraphVaultTransactionOptions<TRoot = unknown> {
   mode?: TransactionLockMode;
   maxRetries?: number;
@@ -442,6 +495,7 @@ export interface GraphVaultTransactionOptions<TRoot = unknown> {
   metadata?: TransactionMetadata;
 }
 
+/** Describes the public GraphVaultTransactionResult contract. */
 export interface GraphVaultTransactionResult<T = unknown> {
   value: T;
   metadata: StoreMetadata;
@@ -452,6 +506,7 @@ export interface GraphVaultTransactionResult<T = unknown> {
 
 export type StorageMigrationDirection = "up" | "down";
 
+/** Describes the public StorageSchemaMigrationContext contract. */
 export interface StorageSchemaMigrationContext<TRoot = unknown> {
   root: TRoot;
   direction: StorageMigrationDirection;
@@ -461,6 +516,7 @@ export interface StorageSchemaMigrationContext<TRoot = unknown> {
   name?: string;
 }
 
+/** Describes the public StorageSchemaMigration contract. */
 export interface StorageSchemaMigration<TRoot = unknown> {
   version: number;
   name?: string;
@@ -468,6 +524,7 @@ export interface StorageSchemaMigration<TRoot = unknown> {
   down: (context: StorageSchemaMigrationContext<TRoot>) => void | Promise<void>;
 }
 
+/** Describes the public StorageMigrationStatus contract. */
 export interface StorageMigrationStatus {
   currentVersion: number;
   targetVersion: number;
@@ -475,6 +532,7 @@ export interface StorageMigrationStatus {
   pending: StorageMigrationPlanStep[];
 }
 
+/** Describes the public StorageMigrationPlanStep contract. */
 export interface StorageMigrationPlanStep {
   version: number;
   name?: string;
@@ -483,10 +541,12 @@ export interface StorageMigrationPlanStep {
   toVersion: number;
 }
 
+/** Describes the public StorageMigrationStepResult contract. */
 export interface StorageMigrationStepResult extends StorageMigrationPlanStep {
   metadata: StoreMetadata;
 }
 
+/** Describes the public StorageMigrationResult contract. */
 export interface StorageMigrationResult {
   fromVersion: number;
   toVersion: number;
@@ -494,6 +554,7 @@ export interface StorageMigrationResult {
   skipped: boolean;
 }
 
+/** Describes the public StorageStatus contract. */
 export interface StorageStatus {
   started: boolean;
   readOnly: boolean;
@@ -508,6 +569,7 @@ export interface StorageStatus {
   lockStrategy: StorageLockStrategy;
 }
 
+/** Describes the public StorageOperationsStatus contract. */
 export interface StorageOperationsStatus {
   status: "healthy" | "recovery-pending";
   storageDirectory: string;
@@ -533,6 +595,7 @@ export type StorageSafetyStatus = "production-ready" | "warning" | "unsafe";
 
 export type StorageSafetySeverity = "info" | "warning" | "critical";
 
+/** Describes the public StorageSafetyIssue contract. */
 export interface StorageSafetyIssue {
   code: string;
   severity: StorageSafetySeverity;
@@ -540,6 +603,7 @@ export interface StorageSafetyIssue {
   recommendation: string;
 }
 
+/** Describes the public StorageSafetyProfile contract. */
 export interface StorageSafetyProfile {
   status: StorageSafetyStatus;
   score: number;
@@ -560,12 +624,14 @@ export interface StorageSafetyProfile {
   issues: StorageSafetyIssue[];
 }
 
+/** Describes the public StorageHealthOptions contract. */
 export interface StorageHealthOptions {
   verify?: boolean;
 }
 
 export type StorageHealthStatus = "healthy" | "warning" | "unsafe" | "error";
 
+/** Describes the public StorageHealthReport contract. */
 export interface StorageHealthReport {
   ok: boolean;
   status: StorageHealthStatus;
@@ -575,11 +641,13 @@ export interface StorageHealthReport {
   verification?: VerificationResult;
 }
 
+/** Describes the public CompactionResult contract. */
 export interface CompactionResult {
   kept: number;
   removed: number;
 }
 
+/** Describes the public GarbageCollectionResult contract. */
 export interface GarbageCollectionResult {
   keptObjects: number;
   removedObjects: number;
@@ -589,12 +657,14 @@ export interface GarbageCollectionResult {
   removedLazyFiles: number;
 }
 
+/** Describes the public BackupResult contract. */
 export interface BackupResult {
   filesCopied: number;
   transactionId: number;
   consistent: boolean;
 }
 
+/** Describes the public VerificationResult contract. */
 export interface VerificationResult {
   ok: boolean;
   checkedObjects: number;
@@ -606,11 +676,13 @@ export interface VerificationResult {
   errors: string[];
 }
 
+/** Describes the public MaintenanceOptions contract. */
 export interface MaintenanceOptions {
   keepSnapshots?: number;
   verify?: boolean;
 }
 
+/** Describes the public MaintenanceResult contract. */
 export interface MaintenanceResult {
   garbageCollection: GarbageCollectionResult;
   compaction: CompactionResult;

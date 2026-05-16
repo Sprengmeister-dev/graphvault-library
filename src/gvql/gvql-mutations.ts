@@ -10,6 +10,7 @@ import type {
 } from "./gvql-types.js";
 import type { GvqlPathReader } from "./gvql-expressions.js";
 
+/** Runs the public applyGvqlMutations helper. */
 export function applyGvqlMutations(
   index: GvqlGraphIndex,
   bindings: GvqlBinding[],

@@ -13,6 +13,7 @@ import type {
   StorageUniqueIndexDefinition,
 } from "../core/types.js";
 
+/** Describes the public ResolvedStorageIndexOptions contract. */
 export interface ResolvedStorageIndexOptions {
   mode: "off" | "auto" | "configured";
   consistency: "strict" | "committed";
@@ -20,6 +21,7 @@ export interface ResolvedStorageIndexOptions {
   advanced: AdvancedIndexOptions;
 }
 
+/** Runs the public resolveStorageIndexOptions helper. */
 export function resolveStorageIndexOptions(options: boolean | StorageIndexOptions | undefined): ResolvedStorageIndexOptions {
   if (options === false) {
     return { mode: "off", consistency: "strict", properties: [], advanced: emptyAdvancedOptions() };
@@ -38,6 +40,7 @@ export function resolveStorageIndexOptions(options: boolean | StorageIndexOption
   };
 }
 
+/** Runs the public buildStorageIndexRecord helper. */
 export function buildStorageIndexRecord(
   envelope: SerializedEnvelope,
   transactionId: number,
@@ -71,6 +74,7 @@ export function buildStorageIndexRecord(
   };
 }
 
+/** Runs the public graphIndexFromStorageRecord helper. */
 export function graphIndexFromStorageRecord(envelope: SerializedEnvelope, record: StorageIndexRecord): GvqlGraphIndex {
   const indexedPropertyKeys = new Set<string>();
   for (const key of Object.keys(record.byProperty)) {
@@ -93,6 +97,7 @@ export function graphIndexFromStorageRecord(envelope: SerializedEnvelope, record
   };
 }
 
+/** Runs the public storageIndexStatus helper. */
 export function storageIndexStatus(input: {
   options: ResolvedStorageIndexOptions;
   record: StorageIndexRecord | undefined;
@@ -125,10 +130,12 @@ export function storageIndexStatus(input: {
   };
 }
 
+/** Runs the public isUsableStorageIndexRecord helper. */
 export function isUsableStorageIndexRecord(record: StorageIndexRecord | undefined, envelope: SerializedEnvelope, transactionId: number): record is StorageIndexRecord {
   return Boolean(record && record.transactionId === transactionId && record.envelopeHash === indexEnvelopeHash(envelope));
 }
 
+/** Runs the public indexEnvelopeHash helper. */
 export function indexEnvelopeHash(envelope: SerializedEnvelope): string {
   return createHash("sha256")
     .update(JSON.stringify({ format: envelope.format, version: envelope.version, root: envelope.root, nodes: envelope.nodes }))

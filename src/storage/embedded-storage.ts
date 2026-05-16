@@ -1,14 +1,19 @@
 import { StorageManager } from "./storage-manager.js";
 import type { StorageManagerOptions } from "../core/types.js";
 
+/** Describes the public EmbeddedStorageStartOptions contract. */
 export interface EmbeddedStorageStartOptions<TRoot> extends Omit<StorageManagerOptions<TRoot>, "rootFactory"> {
   root?: TRoot;
   rootFactory?: () => TRoot;
 }
 
+/** Provides the public EmbeddedStorage API. */
 export class EmbeddedStorage {
+  /** Creates or configures EmbeddedStorage through start. */
   static start<TRoot>(root: TRoot, storageDirectory?: string): Promise<StorageManager<TRoot>>;
+  /** Creates or configures EmbeddedStorage through start. */
   static start<TRoot>(options: EmbeddedStorageStartOptions<TRoot>): Promise<StorageManager<TRoot>>;
+  /** Creates or configures EmbeddedStorage through start. */
   static start<TRoot extends object>(): Promise<StorageManager<Record<string, never>>>;
   static async start<TRoot>(
     rootOrOptions?: TRoot | EmbeddedStorageStartOptions<TRoot>,

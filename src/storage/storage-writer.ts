@@ -17,6 +17,7 @@ import type {
 
 const OBJECT_RECORD_WRITE_CONCURRENCY = 32;
 
+/** Describes the public StorageWriterOptions contract. */
 export interface StorageWriterOptions {
   objectRecordFormat?: ObjectRecordWriteFormat;
   objectRecordWriteConcurrency?: number;
@@ -24,12 +25,14 @@ export interface StorageWriterOptions {
   indexes?: ResolvedStorageIndexOptions;
 }
 
+/** Provides the public StorageWriter API. */
 export class StorageWriter {
   private readonly objectRecordFormat: ObjectRecordWriteFormat;
   private readonly objectRecordWriteConcurrency: number;
   private readonly prettyJson: boolean;
   private readonly indexes: ResolvedStorageIndexOptions;
 
+  /** Creates a StorageWriter instance. */
   constructor(
     private readonly target: StorageTarget,
     private readonly layout: StorageLayout,
@@ -46,11 +49,13 @@ export class StorageWriter {
     };
   }
 
+  /** Runs StorageWriter.writeJson asynchronously. */
   async writeJson(path: string, value: unknown): Promise<void> {
     const spacing = this.prettyJson ? 2 : 0;
     await this.target.writeTextAtomic(path, `${JSON.stringify(value, null, spacing)}\n`);
   }
 
+  /** Runs StorageWriter.writeObjectRecords asynchronously. */
   async writeObjectRecords(envelope: SerializedEnvelope, transactionId: number, objectIds: readonly string[]): Promise<void> {
     const storedAt = new Date().toISOString();
     await mapWithConcurrency(objectIds, this.objectRecordWriteConcurrency, async (objectId) => {
@@ -77,6 +82,7 @@ export class StorageWriter {
     });
   }
 
+  /** Runs StorageWriter.writeManifest asynchronously. */
   async writeManifest(
     envelope: SerializedEnvelope,
     transactionId: number,
@@ -101,10 +107,12 @@ export class StorageWriter {
     } satisfies StorageManifest);
   }
 
+  /** Runs StorageWriter.writeParentIndex asynchronously. */
   async writeParentIndex(envelope: SerializedEnvelope, transactionId: number): Promise<void> {
     await this.writeJson(this.layout.parentIndexFile, buildParentIndexRecord(envelope, transactionId));
   }
 
+  /** Runs StorageWriter.writePersistentIndex asynchronously. */
   async writePersistentIndex(envelope: SerializedEnvelope, transactionId: number): Promise<void> {
     const record = buildStorageIndexRecord(envelope, transactionId, this.indexes);
     if (record) {
@@ -114,6 +122,7 @@ export class StorageWriter {
     }
   }
 
+  /** Runs StorageWriter.writeTransactionRecord asynchronously. */
   async writeTransactionRecord(record: TransactionRecord): Promise<string> {
     const journalFile = `transaction-${String(record.transactionId).padStart(12, "0")}.json`;
     await this.writeJson(join(this.layout.transactionsDirectory, journalFile), record);
@@ -121,18 +130,21 @@ export class StorageWriter {
     return journalFile;
   }
 
+  /** Runs StorageWriter.writeWalPrepare asynchronously. */
   async writeWalPrepare(record: WalPrepareRecord): Promise<string> {
     const file = `transaction-${String(record.transactionId).padStart(12, "0")}.prepare.json`;
     await this.writeJson(join(this.layout.walDirectory, file), record);
     return file;
   }
 
+  /** Runs StorageWriter.writeWalCommit asynchronously. */
   async writeWalCommit(record: WalCommitRecord): Promise<string> {
     const file = `transaction-${String(record.transactionId).padStart(12, "0")}.commit.json`;
     await this.writeJson(join(this.layout.walDirectory, file), record);
     return file;
   }
 
+  /** Runs StorageWriter.writeTypeDictionary asynchronously. */
   async writeTypeDictionary(types: TypeDictionaryEntry[]): Promise<void> {
     await this.writeJson(this.layout.typeDictionaryFile, {
       format: "graphvault-type-dictionary",

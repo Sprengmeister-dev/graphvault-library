@@ -9,7 +9,9 @@ import type {
   SubtreeReference,
 } from "../core/types.js";
 
+/** Describes the public ManifestSubtreeReader contract. */
 export interface ManifestSubtreeReader {
+  /** Runs ManifestSubtreeReader.readObjectRecord. */
   readObjectRecord(objectId: string, transactionId?: number): Promise<ObjectRecord>;
 }
 
@@ -52,6 +54,7 @@ export async function loadSubtreeFromManifest(
   });
 }
 
+/** Runs the public loadSubtreeFromEnvelope helper. */
 export function loadSubtreeFromEnvelope(envelope: SerializedEnvelope, options: SubtreeLoadOptions = {}, transactionId = 0): SubtreeLoadResult {
   const depth = normalizeDepth(options.depth);
   const rootObjectId = options.rootObjectId ?? objectIdFromRef(envelope.root);

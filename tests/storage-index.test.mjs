@@ -3,6 +3,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { EmbeddedStorage } from "../dist/index.js";
+import { storageIndexStatus } from "../dist/storage/storage-index.js";
 
 const directory = await mkdtemp(join(tmpdir(), "graphvault-index-"));
 const configuredDirectory = await mkdtemp(join(tmpdir(), "graphvault-configured-index-"));
@@ -10,6 +11,31 @@ const advancedDirectory = await mkdtemp(join(tmpdir(), "graphvault-advanced-inde
 const uniqueDirectory = await mkdtemp(join(tmpdir(), "graphvault-unique-index-"));
 
 try {
+  assert.deepEqual(storageIndexStatus({
+    options: { mode: "off", consistency: "strict", properties: [], advanced: emptyAdvancedOptions() },
+    transactionId: 3,
+  }), {
+    enabled: false,
+    mode: "off",
+    consistency: "strict",
+    nodeCount: 0,
+    propertyKeys: 0,
+    edgeCount: 0,
+    source: "disabled",
+  });
+  assert.deepEqual(storageIndexStatus({
+    options: { mode: "auto", consistency: "committed", properties: [], advanced: emptyAdvancedOptions() },
+    transactionId: 3,
+  }), {
+    enabled: true,
+    mode: "auto",
+    consistency: "committed",
+    nodeCount: 0,
+    propertyKeys: 0,
+    edgeCount: 0,
+    source: "missing",
+  });
+
   const storage = await EmbeddedStorage.start({
     storageDirectory: directory,
     rootFactory: () => ({
@@ -183,4 +209,8 @@ try {
   await rm(configuredDirectory, { recursive: true, force: true });
   await rm(advancedDirectory, { recursive: true, force: true });
   await rm(uniqueDirectory, { recursive: true, force: true });
+}
+
+function emptyAdvancedOptions() {
+  return { composites: [], ranges: [], text: [], fullText: [], unique: [], expressions: [] };
 }

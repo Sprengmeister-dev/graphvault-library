@@ -1,7 +1,9 @@
+/** Runs the public isIterable helper. */
 export function isIterable(value: unknown): value is Iterable<unknown> {
   return Boolean(value) && typeof (value as { [Symbol.iterator]?: unknown })[Symbol.iterator] === "function";
 }
 
+/** Runs the public replaceObjectContents helper. */
 export function replaceObjectContents(target: object, source: object): void {
   if (Array.isArray(target) && Array.isArray(source)) {
     target.splice(0, target.length, ...source);

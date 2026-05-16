@@ -1,6 +1,7 @@
 import { StorageLockError } from "../../core/errors.js";
 import type { StorageLockOptions, StorageTarget, StorageTargetLock } from "../../core/types.js";
 
+/** Describes the public SqlStorageTargetOptions contract. */
 export interface SqlStorageTargetOptions {
   client: SqlStorageClient;
   tableName?: string;
@@ -10,16 +11,20 @@ export interface SqlStorageTargetOptions {
 
 export type SqlStorageDialect = "sqlite" | "postgres" | "question";
 
+/** Describes the public SqlStorageClient contract. */
 export interface SqlStorageClient {
+  /** Runs SqlStorageClient.execute. */
   execute(sql: string, parameters?: readonly unknown[]): Promise<SqlQueryResult>;
   transaction?<T>(work: () => Promise<T>): Promise<T>;
 }
 
+/** Describes the public SqlQueryResult contract. */
 export interface SqlQueryResult {
   rows?: Array<Record<string, unknown>>;
   rowCount?: number;
 }
 
+/** Provides the public SqlStorageTarget API. */
 export class SqlStorageTarget implements StorageTarget {
   private readonly client: SqlStorageClient;
   private readonly tableName: string;
@@ -27,6 +32,7 @@ export class SqlStorageTarget implements StorageTarget {
   private readonly dialect: SqlStorageDialect;
   private schemaReady = false;
 
+  /** Creates a SqlStorageTarget instance. */
   constructor(options: SqlStorageTargetOptions) {
     this.client = options.client;
     this.tableName = quoteSqlIdentifier(options.tableName ?? "graphvault_objects");
@@ -34,10 +40,12 @@ export class SqlStorageTarget implements StorageTarget {
     this.dialect = options.dialect ?? "question";
   }
 
+  /** Runs SqlStorageTarget.ensureDirectory asynchronously. */
   async ensureDirectory(path: string): Promise<void> {
     await this.writeBufferAtomic(`${path}/.dir`, Buffer.alloc(0));
   }
 
+  /** Runs SqlStorageTarget.exists asynchronously. */
   async exists(path: string): Promise<boolean> {
     await this.ensureSchema();
     const key = normalize(path);
@@ -53,6 +61,7 @@ export class SqlStorageTarget implements StorageTarget {
     return (nested.rows?.length ?? 0) > 0;
   }
 
+  /** Runs SqlStorageTarget.list asynchronously. */
   async list(path: string): Promise<string[]> {
     await this.ensureSchema();
     const prefix = `${normalize(path)}/`;
@@ -71,10 +80,12 @@ export class SqlStorageTarget implements StorageTarget {
     return Array.from(names).sort();
   }
 
+  /** Runs SqlStorageTarget.readText asynchronously. */
   async readText(path: string): Promise<string> {
     return this.readBuffer(path).then((buffer) => buffer.toString("utf8"));
   }
 
+  /** Runs SqlStorageTarget.readBuffer asynchronously. */
   async readBuffer(path: string): Promise<Buffer> {
     await this.ensureSchema();
     const result = await this.client.execute(`SELECT body FROM ${this.tableName} WHERE path = ${this.parameter(1)} LIMIT 1`, [
@@ -87,10 +98,12 @@ export class SqlStorageTarget implements StorageTarget {
     return sqlBodyToBuffer(body);
   }
 
+  /** Runs SqlStorageTarget.writeTextAtomic asynchronously. */
   async writeTextAtomic(path: string, value: string): Promise<void> {
     await this.writeBufferAtomic(path, Buffer.from(value));
   }
 
+  /** Runs SqlStorageTarget.writeBufferAtomic asynchronously. */
   async writeBufferAtomic(path: string, value: Buffer): Promise<void> {
     await this.ensureSchema();
     await this.withTransaction(async () => {
@@ -102,6 +115,7 @@ export class SqlStorageTarget implements StorageTarget {
     });
   }
 
+  /** Runs SqlStorageTarget.appendText asynchronously. */
   async appendText(path: string, value: string): Promise<void> {
     let current: Buffer = Buffer.alloc(0);
     if (await this.exists(path)) {
@@ -110,6 +124,7 @@ export class SqlStorageTarget implements StorageTarget {
     await this.writeBufferAtomic(path, Buffer.concat([current, Buffer.from(value)]));
   }
 
+  /** Runs SqlStorageTarget.remove asynchronously. */
   async remove(path: string, options: { recursive?: boolean } = {}): Promise<void> {
     await this.ensureSchema();
     await this.client.execute(`DELETE FROM ${this.tableName} WHERE path = ${this.parameter(1)}`, [normalize(path)]);
@@ -119,6 +134,7 @@ export class SqlStorageTarget implements StorageTarget {
     }
   }
 
+  /** Runs SqlStorageTarget.acquireLock asynchronously. */
   async acquireLock(path: string, timeoutMs: number, options: StorageLockOptions = {}): Promise<StorageTargetLock> {
     await this.ensureSchema();
     const key = normalize(path);

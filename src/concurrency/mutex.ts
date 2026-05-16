@@ -1,3 +1,4 @@
+/** Provides the public AsyncMutex API. */
 export class AsyncMutex {
   private tail: Promise<void> = Promise.resolve();
 

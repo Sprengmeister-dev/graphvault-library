@@ -1,6 +1,7 @@
 import type { EncodedNode, EncodedValue } from "../core/types.js";
 import type { GvqlLiteral } from "./gvql-types.js";
 
+/** Runs the public encodedValueToJs helper. */
 export function encodedValueToJs(value: EncodedValue | undefined): unknown {
   if (value === undefined) return undefined;
   if (value === null || typeof value === "string" || typeof value === "number" || typeof value === "boolean") return value;
@@ -35,6 +36,7 @@ export function encodedValueToJs(value: EncodedValue | undefined): unknown {
   }
 }
 
+/** Runs the public jsValueToEncoded helper. */
 export function jsValueToEncoded(value: unknown): EncodedValue {
   if (value === null || typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
     return value;
@@ -51,6 +53,7 @@ export function jsValueToEncoded(value: unknown): EncodedValue {
   throw new Error("GVQL SET currently supports primitives, bigint, Date, null, and undefined.");
 }
 
+/** Runs the public literalToJs helper. */
 export function literalToJs(literal: GvqlLiteral, parameters: Record<string, unknown> = {}): unknown {
   if (Array.isArray(literal)) {
     return literal.map((item) => literalToJs(item, parameters));
@@ -61,6 +64,7 @@ export function literalToJs(literal: GvqlLiteral, parameters: Record<string, unk
   return literal;
 }
 
+/** Runs the public getNodePath helper. */
 export function getNodePath(node: EncodedNode, path: string | undefined): EncodedValue | undefined {
   if (!path) {
     return nodeSummary(node) as EncodedValue;
@@ -80,6 +84,7 @@ export function getNodePath(node: EncodedNode, path: string | undefined): Encode
   return undefined;
 }
 
+/** Runs the public setNodePath helper. */
 export function setNodePath(node: EncodedNode, path: string | undefined, value: EncodedValue): void {
   if (!path) {
     throw new Error("GVQL SET requires an aliased property path, for example SET doc.status = \"archived\".");
@@ -105,6 +110,7 @@ export function setNodePath(node: EncodedNode, path: string | undefined, value: 
   throw new Error(`GVQL cannot set fields on ${node.kind} nodes.`);
 }
 
+/** Runs the public removeNodePath helper. */
 export function removeNodePath(node: EncodedNode, path: string | undefined): { before: EncodedValue | undefined; removed: boolean } {
   if (!path) {
     throw new Error("GVQL REMOVE requires an aliased property path, for example REMOVE doc.archivedAt.");
@@ -120,6 +126,7 @@ export function removeNodePath(node: EncodedNode, path: string | undefined): { b
   return { before, removed: true };
 }
 
+/** Runs the public nodeSummary helper. */
 export function nodeSummary(node: EncodedNode): unknown {
   if (node.kind === "object") {
     const result: Record<string, unknown> = { kind: "object", ...(node.type ? { type: node.type } : {}) };

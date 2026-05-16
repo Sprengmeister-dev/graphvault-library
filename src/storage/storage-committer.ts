@@ -13,6 +13,7 @@ import type { StorageLayout } from "./storage-layout.js";
 import type { StorageWriter } from "./storage-writer.js";
 import type { ResolvedStorageWriteOptions } from "./storage-write-options.js";
 
+/** Describes the public StorageCommitterDependencies contract. */
 export interface StorageCommitterDependencies {
   target: StorageTarget;
   layout: StorageLayout;
@@ -26,6 +27,7 @@ export interface StorageCommitterDependencies {
   schemaVersion: () => number;
 }
 
+/** Describes the public CommitEnvelopeOptions contract. */
 export interface CommitEnvelopeOptions {
   envelope: SerializedEnvelope;
   baseTransactionId: number;
@@ -38,9 +40,12 @@ export interface CommitEnvelopeOptions {
   metadata?: TransactionMetadata;
 }
 
+/** Provides the public StorageCommitter API. */
 export class StorageCommitter {
+  /** Creates a StorageCommitter instance. */
   constructor(private readonly dependencies: StorageCommitterDependencies) {}
 
+  /** Runs StorageCommitter.commitEnvelope asynchronously. */
   async commitEnvelope(options: CommitEnvelopeOptions): Promise<StoreMetadata> {
     const { envelope, baseTransactionId, mode, allObjectIds, targetCount, lock } = options;
     const nextTransactionId = baseTransactionId + 1;
@@ -105,6 +110,7 @@ export class StorageCommitter {
     };
   }
 
+  /** Runs StorageCommitter.publishPreparedCommit asynchronously. */
   async publishPreparedCommit(options: {
     envelope: SerializedEnvelope;
     transactionId: number;
@@ -157,6 +163,7 @@ export class StorageCommitter {
   }
 }
 
+/** Runs the public sortedObjectIds helper. */
 export function sortedObjectIds(envelope: SerializedEnvelope): string[] {
   return Object.keys(envelope.nodes).sort((a, b) => Number(a) - Number(b));
 }

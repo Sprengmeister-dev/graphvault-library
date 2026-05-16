@@ -25,6 +25,7 @@ import type {
   GvqlAggregateFunction,
 } from "./gvql-types.js";
 
+/** Runs the public parseGvql helper. */
 export function parseGvql(source: string): GvqlStatement {
   const clauseList = splitGvqlClauses(source);
   const clauses = clausesByName(clauseList);

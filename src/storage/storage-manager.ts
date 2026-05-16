@@ -60,6 +60,7 @@ import type {
 import type { GvqlExecutionOptions, GvqlResult } from "../gvql/gvql-types.js";
 import type { GvqlGraphIndex } from "../gvql/gvql-types.js";
 
+/** Provides the public StorageManager API. */
 export class StorageManager<TRoot = unknown> {
   private readonly options: Required<Pick<StorageManagerOptions<TRoot>, "lockTimeoutMs" | "housekeepingIntervalMs">> &
     StorageManagerOptions<TRoot>;
@@ -85,6 +86,7 @@ export class StorageManager<TRoot = unknown> {
   private schemaVersion = 0;
   private storageIndexRecord: StorageIndexRecord | undefined;
 
+  /** Creates a StorageManager instance. */
   constructor(options: StorageManagerOptions<TRoot>, serializer = new GraphSerializer(options.types ?? [])) {
     this.options = { lockTimeoutMs: 5_000, housekeepingIntervalMs: 0, ...options };
     this.writeOptions = resolveStorageWriteOptions(this.options);
@@ -112,6 +114,7 @@ export class StorageManager<TRoot = unknown> {
     });
   }
 
+  /** Returns the current root value. */
   get root(): TRoot {
     if (!this.started) {
       throw new StorageNotStartedError("Storage manager has not been started.");
@@ -119,6 +122,7 @@ export class StorageManager<TRoot = unknown> {
     return this.rootValue as TRoot;
   }
 
+  /** Runs StorageManager.start asynchronously. */
   async start(): Promise<this> {
     if (this.started) {
       return this;
@@ -170,6 +174,7 @@ export class StorageManager<TRoot = unknown> {
     return this;
   }
 
+  /** Runs StorageManager.shutdown asynchronously. */
   async shutdown(): Promise<void> {
     this.stopHousekeeping();
     if (this.lockHandle) {
@@ -179,10 +184,12 @@ export class StorageManager<TRoot = unknown> {
     this.started = false;
   }
 
+  /** Runs StorageManager.onApplicationShutdown asynchronously. */
   async onApplicationShutdown(): Promise<void> {
     await this.shutdown();
   }
 
+  /** Runs StorageManager.storeRoot asynchronously. */
   async storeRoot(): Promise<StoreMetadata> {
     this.assertStarted();
     this.assertWritable();
@@ -190,6 +197,7 @@ export class StorageManager<TRoot = unknown> {
     return this.mutex.runExclusive(() => this.writeWithConflictCheck((lock) => this.storeLocked("eager", [this.root], lock)));
   }
 
+  /** Runs StorageManager.store asynchronously. */
   async store(_modifiedObject: unknown): Promise<StoreMetadata> {
     this.assertStarted();
     this.assertWritable();
@@ -198,8 +206,11 @@ export class StorageManager<TRoot = unknown> {
     return this.mutex.runExclusive(() => this.writeWithConflictCheck((lock) => this.storeLocked(mode, [_modifiedObject], lock)));
   }
 
+  /** Runs StorageManager.storeAll asynchronously. */
   async storeAll(instances: Iterable<unknown>): Promise<StoreMetadata>;
+  /** Runs StorageManager.storeAll asynchronously. */
   async storeAll(...instances: unknown[]): Promise<StoreMetadata>;
+  /** Runs StorageManager.storeAll asynchronously. */
   async storeAll(firstOrInstances: Iterable<unknown> | unknown, ...rest: unknown[]): Promise<StoreMetadata> {
     this.assertStarted();
     this.assertWritable();
@@ -208,18 +219,22 @@ export class StorageManager<TRoot = unknown> {
     return this.mutex.runExclusive(() => this.writeWithConflictCheck((lock) => this.storeLocked("standard", targets, lock)));
   }
 
+  /** Runs StorageManager.createStorer. */
   createStorer(): Storer {
     return new Storer(this, "standard");
   }
 
+  /** Runs StorageManager.createLazyStorer. */
   createLazyStorer(): Storer {
     return new Storer(this, "lazy");
   }
 
+  /** Runs StorageManager.createEagerStorer. */
   createEagerStorer(): Storer {
     return new Storer(this, "eager");
   }
 
+  /** Runs StorageManager.commitStorer asynchronously. */
   async commitStorer(mode: StoreMode, targets: readonly unknown[]): Promise<StoreMetadata> {
     this.assertStarted();
     this.assertWritable();
@@ -250,6 +265,7 @@ export class StorageManager<TRoot = unknown> {
     });
   }
 
+  /** Runs StorageManager.transaction asynchronously. */
   async transaction<T>(
     work: (context: GraphVaultTransactionContext<TRoot>) => T | Promise<T>,
     options: GraphVaultTransactionOptions<TRoot> = {},
@@ -260,6 +276,7 @@ export class StorageManager<TRoot = unknown> {
     return mode === "optimistic" ? this.optimisticTransaction(work, options) : this.pessimisticTransaction(work, options);
   }
 
+  /** Runs StorageManager.createLazyRef asynchronously. */
   async createLazyRef<T>(key: string, initialValue: T): Promise<LazyRef<T>> {
     this.assertStarted();
     this.assertWritable();
@@ -270,11 +287,13 @@ export class StorageManager<TRoot = unknown> {
     return ref;
   }
 
+  /** Runs StorageManager.loadLazy asynchronously. */
   async loadLazy<T>(key: string): Promise<T> {
     const content = await this.target.readText(join(this.layout.lazyDirectory, `${encodeURIComponent(key)}.json`));
     return this.serializer.deserialize<T>(JSON.parse(content) as SerializedEnvelope);
   }
 
+  /** Runs StorageManager.storeLazy asynchronously. */
   async storeLazy<T>(key: string, value: T): Promise<void> {
     this.assertStarted();
     this.assertWritable();
@@ -282,6 +301,7 @@ export class StorageManager<TRoot = unknown> {
     await this.writer.writeJson(join(this.layout.lazyDirectory, `${encodeURIComponent(key)}.json`), this.serializer.serialize(value));
   }
 
+  /** Runs StorageManager.compact asynchronously. */
   async compact(keepLatest = 2): Promise<CompactionResult> {
     this.assertStarted();
     this.assertWritable();
@@ -304,12 +324,14 @@ export class StorageManager<TRoot = unknown> {
     return { kept: snapshots.length - removed, removed };
   }
 
+  /** Runs StorageManager.collectGarbage asynchronously. */
   async collectGarbage(): Promise<GarbageCollectionResult> {
     this.assertStarted();
     this.assertWritable();
     return this.mutex.runExclusive(() => this.collectGarbageLocked());
   }
 
+  /** Runs StorageManager.backup asynchronously. */
   async backup(destination: { storageDirectory: string; storageTarget?: StorageTarget; consistent?: boolean }): Promise<BackupResult> {
     this.assertStarted();
     this.assertOutsideTransaction("backup()");
@@ -340,6 +362,7 @@ export class StorageManager<TRoot = unknown> {
     );
   }
 
+  /** Runs StorageManager.verify asynchronously. */
   async verify(): Promise<VerificationResult> {
     return verifyStorage({
       target: this.target,
@@ -354,6 +377,7 @@ export class StorageManager<TRoot = unknown> {
     });
   }
 
+  /** Runs StorageManager.maintain asynchronously. */
   async maintain(options: MaintenanceOptions = {}): Promise<MaintenanceResult> {
     const garbageCollection = await this.collectGarbage();
     const compaction = await this.compact(options.keepSnapshots ?? 2);
@@ -363,26 +387,32 @@ export class StorageManager<TRoot = unknown> {
     return { garbageCollection, compaction, verification: await this.verify() };
   }
 
+  /** Runs StorageManager.issueFullGarbageCollection asynchronously. */
   async issueFullGarbageCollection(): Promise<GarbageCollectionResult> {
     return this.collectGarbage();
   }
 
+  /** Runs StorageManager.issueGarbageCollection asynchronously. */
   async issueGarbageCollection(_timeBudgetMs?: number): Promise<GarbageCollectionResult> {
     return this.collectGarbage();
   }
 
+  /** Runs StorageManager.issueFullFileCheck asynchronously. */
   async issueFullFileCheck(): Promise<VerificationResult> {
     return this.verify();
   }
 
+  /** Runs StorageManager.issueFileCheck asynchronously. */
   async issueFileCheck(_timeBudgetMs?: number): Promise<VerificationResult> {
     return this.verify();
   }
 
+  /** Runs StorageManager.issueFullMaintenance asynchronously. */
   async issueFullMaintenance(options: MaintenanceOptions = {}): Promise<MaintenanceResult> {
     return this.maintain({ keepSnapshots: 1, ...options });
   }
 
+  /** Runs StorageManager.gvql asynchronously. */
   async gvql(query: string, options: GvqlExecutionOptions = {}): Promise<GvqlResult> {
     this.assertStarted();
     const statement = parseGvql(query);
@@ -431,12 +461,16 @@ export class StorageManager<TRoot = unknown> {
     });
   }
 
+  /** Runs StorageManager.previewGvql asynchronously. */
   async previewGvql(query: string, options: Omit<GvqlExecutionOptions, "dryRun"> = {}): Promise<GvqlResult> {
     return this.gvql(query, { ...options, dryRun: true });
   }
 
+  /** Runs StorageManager.loadSubtree asynchronously. */
   async loadSubtree(options?: SubtreeLoadOptions): Promise<SubtreeLoadResult>;
+  /** Runs StorageManager.loadSubtree asynchronously. */
   async loadSubtree(rootObjectId: string, options?: SubtreeLoadOptions): Promise<SubtreeLoadResult>;
+  /** Runs StorageManager.loadSubtree asynchronously. */
   async loadSubtree(rootObjectIdOrOptions: string | SubtreeLoadOptions = {}, options: SubtreeLoadOptions = {}): Promise<SubtreeLoadResult> {
     this.assertStarted();
     const subtreeOptions = typeof rootObjectIdOrOptions === "string" ? { ...options, rootObjectId: rootObjectIdOrOptions } : rootObjectIdOrOptions;
@@ -453,6 +487,7 @@ export class StorageManager<TRoot = unknown> {
     return collectStorageGarbage({ target: this.target, layout: this.layout, reader: this.reader });
   }
 
+  /** Runs StorageManager.status. */
   status(): StorageStatus {
     return {
       started: this.started,
@@ -469,6 +504,7 @@ export class StorageManager<TRoot = unknown> {
     };
   }
 
+  /** Runs StorageManager.operations asynchronously. */
   async operations(): Promise<StorageOperationsStatus> {
     const manifest = await this.reader.readManifest();
     const latestTransaction = await this.reader.readLatestTransactionRecord();
@@ -499,6 +535,7 @@ export class StorageManager<TRoot = unknown> {
     };
   }
 
+  /** Runs StorageManager.safetyProfile asynchronously. */
   async safetyProfile(): Promise<StorageSafetyProfile> {
     return assessStorageSafety({
       operations: await this.operations(),
@@ -511,6 +548,7 @@ export class StorageManager<TRoot = unknown> {
     });
   }
 
+  /** Runs StorageManager.health asynchronously. */
   async health(options: StorageHealthOptions = {}): Promise<StorageHealthReport> {
     return buildStorageHealthReport({
       options,
@@ -525,6 +563,7 @@ export class StorageManager<TRoot = unknown> {
     });
   }
 
+  /** Runs StorageManager.indexStatus asynchronously. */
   async indexStatus(): Promise<StorageIndexStatus> {
     this.assertStarted();
     const record = this.storageIndexRecord ?? await this.reader.readStorageIndex();
@@ -532,6 +571,7 @@ export class StorageManager<TRoot = unknown> {
     return storageIndexStatus({ options: this.indexOptions, record, transactionId: this.transactionId });
   }
 
+  /** Runs StorageManager.rebuildIndexes asynchronously. */
   async rebuildIndexes(): Promise<StorageIndexStatus> {
     this.assertStarted();
     this.assertWritable();
@@ -545,17 +585,21 @@ export class StorageManager<TRoot = unknown> {
     }));
   }
 
+  /** Runs StorageManager.verifyIndexes asynchronously. */
   async verifyIndexes(): Promise<StorageIndexVerificationResult> { this.assertStarted(); const envelope = this.serializer.serialize(this.rootValue);
     const expected = this.indexRecordForEnvelope(envelope, this.transactionId);
     const actual = this.storageIndexRecord ?? await this.reader.readStorageIndex();
     this.storageIndexRecord = actual;
     return verifyStorageIndexRecord({ expected, actual });
   }
+  /** Runs StorageManager.repairIndexes asynchronously. */
   async repairIndexes(): Promise<StorageIndexStatus> { return this.rebuildIndexes(); }
+  /** Runs StorageManager.currentSchemaVersion. */
   currentSchemaVersion(): number {
     return this.schemaVersion;
   }
 
+  /** Runs StorageManager.migrationStatus. */
   migrationStatus(targetVersion = this.targetSchemaVersion()): StorageMigrationStatus {
     const migrations = this.sortedSchemaMigrations();
     return {
@@ -566,6 +610,7 @@ export class StorageManager<TRoot = unknown> {
     };
   }
 
+  /** Runs StorageManager.migrateTo asynchronously. */
   async migrateTo(targetVersion = this.targetSchemaVersion()): Promise<StorageMigrationResult> {
     this.assertStarted();
     this.assertWritable();
@@ -605,19 +650,23 @@ export class StorageManager<TRoot = unknown> {
     };
   }
 
+  /** Runs StorageManager.getRoot. */
   getRoot(): TRoot {
     return this.root;
   }
 
+  /** Runs StorageManager.setRoot. */
   setRoot(root: TRoot): void {
     this.rootValue = root;
     this.bindLazyRefs(this.rootValue);
   }
 
+  /** Runs StorageManager.defaultRoot. */
   defaultRoot(): TRoot {
     return this.root;
   }
 
+  /** Runs StorageManager.customRoot. */
   customRoot(): TRoot | undefined {
     return this.options.customRoot;
   }

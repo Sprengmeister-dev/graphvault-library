@@ -9,6 +9,7 @@ import type {
   VerificationResult,
 } from "../core/types.js";
 
+/** Describes the public BuildStorageHealthReportInput contract. */
 export interface BuildStorageHealthReportInput {
   options: StorageHealthOptions;
   operations: StorageOperationsStatus;

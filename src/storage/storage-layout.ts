@@ -3,72 +3,89 @@ import { CorruptStorageError } from "../core/errors.js";
 
 export type ObjectRecordKind = "json" | "binary";
 
+/** Provides the public StorageLayout API. */
 export class StorageLayout {
   readonly storageDirectory: string;
   readonly channelCount: number;
 
+  /** Creates a StorageLayout instance. */
   constructor(storageDirectory: string, channelCount = 1) {
     validateChannelCount(channelCount);
     this.storageDirectory = storageDirectory;
     this.channelCount = channelCount;
   }
 
+  /** Returns the current snapshotsDirectory value. */
   get snapshotsDirectory(): string {
     return join(this.storageDirectory, "snapshots");
   }
 
+  /** Returns the current lazyDirectory value. */
   get lazyDirectory(): string {
     return join(this.storageDirectory, "lazy");
   }
 
+  /** Returns the current objectsDirectory value. */
   get objectsDirectory(): string {
     return join(this.storageDirectory, "objects");
   }
 
+  /** Returns the current binaryObjectsDirectory value. */
   get binaryObjectsDirectory(): string {
     return join(this.storageDirectory, "objects-bin");
   }
 
+  /** Returns the current currentFile value. */
   get currentFile(): string {
     return join(this.storageDirectory, "CURRENT");
   }
 
+  /** Returns the current manifestFile value. */
   get manifestFile(): string {
     return join(this.storageDirectory, "manifest.json");
   }
 
+  /** Returns the current typeDictionaryFile value. */
   get typeDictionaryFile(): string {
     return join(this.storageDirectory, "type-dictionary.json");
   }
 
+  /** Returns the current parentIndexFile value. */
   get parentIndexFile(): string {
     return join(this.storageDirectory, "parent-index.json");
   }
 
+  /** Returns the current indexFile value. */
   get indexFile(): string {
     return join(this.storageDirectory, "index.json");
   }
 
+  /** Returns the current journalFile value. */
   get journalFile(): string {
     return join(this.storageDirectory, "journal.log");
   }
 
+  /** Returns the current transactionsDirectory value. */
   get transactionsDirectory(): string {
     return join(this.storageDirectory, "transactions");
   }
 
+  /** Returns the current walDirectory value. */
   get walDirectory(): string {
     return join(this.storageDirectory, "wal");
   }
 
+  /** Returns the current channelsDirectory value. */
   get channelsDirectory(): string {
     return join(this.storageDirectory, "channels");
   }
 
+  /** Returns the current lockFile value. */
   get lockFile(): string {
     return join(this.storageDirectory, "LOCK");
   }
 
+  /** Runs StorageLayout.objectRecordPath. */
   objectRecordPath(objectId: string, transactionId?: number): string {
     const fileName = transactionId ? `${objectId}.${transactionId}.json` : `${objectId}.json`;
     if (this.channelCount === 1) {
@@ -77,6 +94,7 @@ export class StorageLayout {
     return join(this.channelDirectoryFor(objectId), "objects", fileName);
   }
 
+  /** Runs StorageLayout.binaryObjectPath. */
   binaryObjectPath(objectId: string, transactionId?: number): string {
     const fileName = transactionId ? `${objectId}.${transactionId}.bin` : `${objectId}.bin`;
     if (this.channelCount === 1) {
@@ -85,6 +103,7 @@ export class StorageLayout {
     return join(this.channelDirectoryFor(objectId), "objects-bin", fileName);
   }
 
+  /** Runs StorageLayout.objectRecordDirectories. */
   objectRecordDirectories(kind: ObjectRecordKind): string[] {
     if (this.channelCount === 1) {
       return [kind === "json" ? this.objectsDirectory : this.binaryObjectsDirectory];
@@ -92,6 +111,7 @@ export class StorageLayout {
     return this.channelDirectories().map((directory) => join(directory, kind === "json" ? "objects" : "objects-bin"));
   }
 
+  /** Runs StorageLayout.channelDirectories. */
   channelDirectories(): string[] {
     if (this.channelCount === 1) {
       return [];
@@ -99,6 +119,7 @@ export class StorageLayout {
     return Array.from({ length: this.channelCount }, (_, index) => join(this.channelsDirectory, `ch_${index}`));
   }
 
+  /** Runs StorageLayout.parseTransactionId. */
   parseTransactionId(snapshotFile: string): number {
     const match = /^snapshot-(\d+)\.json$/.exec(snapshotFile);
     if (!match?.[1]) {
@@ -107,10 +128,12 @@ export class StorageLayout {
     return Number(match[1]);
   }
 
+  /** Runs StorageLayout.walPrepareFile. */
   walPrepareFile(transactionId: number): string {
     return join(this.walDirectory, `transaction-${String(transactionId).padStart(12, "0")}.prepare.json`);
   }
 
+  /** Runs StorageLayout.walCommitFile. */
   walCommitFile(transactionId: number): string {
     return join(this.walDirectory, `transaction-${String(transactionId).padStart(12, "0")}.commit.json`);
   }

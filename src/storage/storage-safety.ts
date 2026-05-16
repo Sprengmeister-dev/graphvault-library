@@ -6,6 +6,7 @@ import type {
   StorageWriteProfile,
 } from "../core/types.js";
 
+/** Describes the public StorageSafetyAssessmentInput contract. */
 export interface StorageSafetyAssessmentInput {
   operations: StorageOperationsStatus;
   writeProfile: StorageWriteProfile;
@@ -16,6 +17,7 @@ export interface StorageSafetyAssessmentInput {
   commitValidatorCount: number;
 }
 
+/** Runs the public assessStorageSafety helper. */
 export function assessStorageSafety(input: StorageSafetyAssessmentInput): StorageSafetyProfile {
   const issues: StorageSafetyIssue[] = [];
   const { operations } = input;

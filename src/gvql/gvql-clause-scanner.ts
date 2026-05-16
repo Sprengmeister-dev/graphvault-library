@@ -15,6 +15,7 @@ export type GvqlClauseName =
   | "LIMIT"
   | "OFFSET";
 
+/** Describes the public GvqlClause contract. */
 export interface GvqlClause {
   name: GvqlClauseName;
   body: string;
@@ -39,6 +40,7 @@ const CLAUSE_NAMES: GvqlClauseName[] = [
   "SET",
 ];
 
+/** Runs the public splitGvqlClauses helper. */
 export function splitGvqlClauses(source: string): GvqlClause[] {
   const normalized = source.trim().replace(/;$/, "");
   const matches: Array<{ name: GvqlClauseName; index: number; end: number }> = [];
@@ -60,6 +62,7 @@ export function splitGvqlClauses(source: string): GvqlClause[] {
   }));
 }
 
+/** Runs the public clausesByName helper. */
 export function clausesByName(clauses: GvqlClause[]): Map<GvqlClauseName, string> {
   const result = new Map<GvqlClauseName, string>();
   for (const clause of clauses) {

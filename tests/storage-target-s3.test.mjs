@@ -116,3 +116,47 @@ const invalidBodyClient = new MockS3Client();
 invalidBodyClient.store.set("gv-invalid/bad", { body: { stream: "not-a-buffer" } });
 const invalidTarget = new S3StorageTarget({ client: invalidBodyClient, bucket: "gv-invalid" });
 await assert.rejects(() => invalidTarget.readBuffer("bad"));
+
+const bodyClient = new MockS3Client();
+const bodyTarget = new S3StorageTarget({ client: bodyClient, bucket: "gv-body" });
+bodyClient.store.set("gv-body/string", { body: "text-body" });
+assert.equal((await bodyTarget.readBuffer("string")).toString("utf8"), "text-body");
+bodyClient.store.set("gv-body/array-buffer", { body: new TextEncoder().encode("array-buffer").buffer });
+assert.equal((await bodyTarget.readBuffer("array-buffer")).toString("utf8"), "array-buffer");
+bodyClient.store.set("gv-body/uint8", { body: new TextEncoder().encode("uint8") });
+assert.equal((await bodyTarget.readBuffer("uint8")).toString("utf8"), "uint8");
+bodyClient.store.set("gv-body/transform", { body: { transformToByteArray: async () => new TextEncoder().encode("transform") } });
+assert.equal((await bodyTarget.readBuffer("transform")).toString("utf8"), "transform");
+bodyClient.store.set("gv-body/stream", { body: streamChunks(["stream-", "body"]) });
+assert.equal((await bodyTarget.readBuffer("stream")).toString("utf8"), "stream-body");
+bodyClient.store.set("gv-body/empty", {});
+await assert.rejects(() => bodyTarget.readBuffer("empty"), /No body returned/);
+
+const staleClient = new MockS3Client();
+staleClient.store.set("gv-stale/locks/test", {
+  body: Buffer.from(JSON.stringify({ createdAt: new Date(Date.now() - 10_000).toISOString(), fencingToken: 1 })),
+});
+staleClient.store.set("gv-stale/locks/test.fencing-token", { body: Buffer.from("41") });
+const staleTarget = new S3StorageTarget({ client: staleClient, bucket: "gv-stale" });
+const staleHandle = await staleTarget.acquireLock("locks/test", 0, { staleLockTimeoutMs: 1 });
+assert.equal(staleHandle.fencingToken, 42);
+await staleHandle.assertValid();
+await staleHandle.release();
+
+const invalidTokenClient = new MockS3Client();
+const invalidTokenTarget = new S3StorageTarget({ client: invalidTokenClient, bucket: "gv-invalid-token" });
+const invalidTokenHandle = await invalidTokenTarget.acquireLock("lock", 0);
+invalidTokenClient.store.set("gv-invalid-token/lock", { body: Buffer.from(JSON.stringify({ createdAt: new Date().toISOString(), fencingToken: 999 })) });
+await assert.rejects(() => invalidTokenHandle.assertValid(), /no longer valid/);
+await assert.doesNotReject(() => invalidTokenHandle.release());
+
+const nonStaleClient = new MockS3Client();
+nonStaleClient.store.set("gv-non-stale/lock", { body: Buffer.from("{not json") });
+const nonStaleTarget = new S3StorageTarget({ client: nonStaleClient, bucket: "gv-non-stale" });
+await assert.rejects(() => nonStaleTarget.acquireLock("lock", 0, { staleLockTimeoutMs: 1 }), /already locked/);
+
+async function* streamChunks(chunks) {
+  for (const chunk of chunks) {
+    yield new TextEncoder().encode(chunk);
+  }
+}

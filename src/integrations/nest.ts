@@ -6,28 +6,34 @@ export const GRAPHVAULT_OPTIONS = Symbol("GRAPHVAULT_OPTIONS");
 
 export type NestInjectionToken = string | symbol | Function | NestType;
 
+/** Describes the public NestType contract. */
 export interface NestType<T = unknown> extends Function {
+  /** Runs NestType.new. */
   new (...args: any[]): T;
 }
 
 export type NestProvider = NestValueProvider | NestFactoryProvider | NestExistingProvider;
 
+/** Describes the public NestValueProvider contract. */
 export interface NestValueProvider {
   provide: NestInjectionToken;
   useValue: unknown;
 }
 
+/** Describes the public NestFactoryProvider contract. */
 export interface NestFactoryProvider {
   provide: NestInjectionToken;
   useFactory: (...args: any[]) => unknown;
   inject?: NestInjectionToken[];
 }
 
+/** Describes the public NestExistingProvider contract. */
 export interface NestExistingProvider {
   provide: NestInjectionToken;
   useExisting: NestInjectionToken;
 }
 
+/** Describes the public DynamicModuleLike contract. */
 export interface DynamicModuleLike {
   module: NestType;
   global?: boolean;
@@ -37,17 +43,21 @@ export interface DynamicModuleLike {
 
 export type GraphVaultModuleOptions<TRoot> = StorageManagerOptions<TRoot> & { global?: boolean };
 
+/** Describes the public GraphVaultModuleAsyncOptions contract. */
 export interface GraphVaultModuleAsyncOptions<TRoot> {
   global?: boolean;
   inject?: NestInjectionToken[];
   useFactory: (...args: any[]) => StorageManagerOptions<TRoot> | Promise<StorageManagerOptions<TRoot>>;
 }
 
+/** Describes the public GraphVaultTransactionalOptions contract. */
 export interface GraphVaultTransactionalOptions<TRoot = unknown> extends GraphVaultTransactionOptions<TRoot> {
   managerProperty?: string | symbol;
 }
 
+/** Provides the public GraphVaultModule API. */
 export class GraphVaultModule {
+  /** Creates or configures GraphVaultModule through forRoot. */
   static forRoot<TRoot>(options: GraphVaultModuleOptions<TRoot>): DynamicModuleLike {
     return this.moduleFromOptionsProvider(options.global, {
       provide: GRAPHVAULT_OPTIONS,
@@ -55,6 +65,7 @@ export class GraphVaultModule {
     });
   }
 
+  /** Creates or configures GraphVaultModule through forRootAsync. */
   static forRootAsync<TRoot>(options: GraphVaultModuleAsyncOptions<TRoot>): DynamicModuleLike {
     return this.moduleFromOptionsProvider(options.global, {
       provide: GRAPHVAULT_OPTIONS,
@@ -84,6 +95,7 @@ export class GraphVaultModule {
   }
 }
 
+/** Runs the public GraphVaultTransactional helper. */
 export function GraphVaultTransactional<TRoot = unknown>(
   options: GraphVaultTransactionalOptions<TRoot> = {},
 ): MethodDecorator {

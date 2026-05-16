@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { LazyArrayList } from "../dist/lazy/lazy-array-list.js";
 import { lazy, LazyRef } from "../dist/lazy/lazy-ref.js";
 import { startStorage, Storer } from "../dist/index.js";
+import { bindStorageLazyRefs, storeLoadedStorageLazyRefs } from "../dist/storage/storage-lazy-helpers.js";
 
 const saved = [];
 const loadedRef = LazyRef.unloaded("item-1");
@@ -22,6 +23,23 @@ await assert.rejects(() => LazyRef.unloaded("missing-loader").get(), /no loader 
 await assert.doesNotReject(() => LazyRef.unloaded("not-loaded").store());
 await assert.rejects(() => lazy("missing-saver", 1).store(), /no saver bound/);
 assert.equal(await lazy("eager", 42).get(), 42);
+
+const helperSaved = [];
+const nestedLazy = LazyRef.unloaded("nested");
+const loadedLazy = lazy("loaded", { done: true });
+const cyclicObject = { nestedLazy };
+cyclicObject.self = cyclicObject;
+const lazyGraph = {
+  map: new Map([[nestedLazy, new Set([loadedLazy, cyclicObject])]]),
+};
+bindStorageLazyRefs(lazyGraph, {
+  load: async (key) => ({ key, loaded: true }),
+  store: async (key, value) => helperSaved.push({ key, value }),
+});
+assert.deepEqual(await nestedLazy.get(), { key: "nested", loaded: true });
+await storeLoadedStorageLazyRefs(lazyGraph);
+assert.equal(helperSaved.some((entry) => entry.key === "nested"), true);
+assert.equal(helperSaved.some((entry) => entry.key === "loaded"), true);
 
 assert.throws(() => new LazyArrayList(0), /segmentSize/);
 const list = new LazyArrayList(2);

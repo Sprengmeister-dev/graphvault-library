@@ -1,5 +1,6 @@
 import type { StorageIndexStatistics } from "../core/types.js";
 
+/** Runs the public stableIndexValueKey helper. */
 export function stableIndexValueKey(value: unknown): string {
   if (typeof value === "bigint") return `bigint:${value.toString()}`;
   if (value instanceof Date) return `date:${value.toISOString()}`;
@@ -7,20 +8,24 @@ export function stableIndexValueKey(value: unknown): string {
   return `${typeof value}:${String(value)}`;
 }
 
+/** Runs the public tupleIndexKey helper. */
 export function tupleIndexKey(values: readonly unknown[]): string {
   return values.map(stableIndexValueKey).join("\u0001");
 }
 
+/** Runs the public normalizeIndexText helper. */
 export function normalizeIndexText(value: unknown, caseSensitive = false): string {
   const text = String(value ?? "").normalize("NFKC");
   return caseSensitive ? text : text.toLocaleLowerCase();
 }
 
+/** Runs the public tokenizeIndexText helper. */
 export function tokenizeIndexText(value: unknown, caseSensitive = false): string[] {
   const normalized = normalizeIndexText(value, caseSensitive);
   return Array.from(new Set(normalized.match(/[\p{L}\p{N}_]+/gu) ?? []));
 }
 
+/** Runs the public textIndexTerms helper. */
 export function textIndexTerms(value: unknown, options: { caseSensitive?: boolean; minGram?: number; maxGram?: number }): string[] {
   const text = normalizeIndexText(value, options.caseSensitive);
   if (!text) return [];
@@ -43,6 +48,7 @@ export function textIndexTerms(value: unknown, options: { caseSensitive?: boolea
   return Array.from(terms);
 }
 
+/** Runs the public textLookupTerms helper. */
 export function textLookupTerms(operator: "CONTAINS" | "STARTS WITH" | "ENDS WITH", value: unknown, options: { caseSensitive?: boolean; minGram?: number; maxGram?: number }): string[] {
   const text = normalizeIndexText(value, options.caseSensitive);
   if (!text) return [];
@@ -59,6 +65,7 @@ export function textLookupTerms(operator: "CONTAINS" | "STARTS WITH" | "ENDS WIT
   return terms;
 }
 
+/** Runs the public indexStatistics helper. */
 export function indexStatistics(buckets: Iterable<readonly unknown[]>): StorageIndexStatistics {
   let keys = 0;
   let entries = 0;

@@ -22,10 +22,12 @@ interface RegisteredType {
   migrate?: (state: Record<string, unknown>, fromVersion: number) => Record<string, unknown>;
 }
 
+/** Provides the public TypeRegistry API. */
 export class TypeRegistry {
   private byName = new Map<string, RegisteredType>();
   private byCtor = new Map<ClassConstructor, RegisteredType>();
 
+  /** Creates a TypeRegistry instance. */
   constructor(types: Array<TypeRegistration<any>> = []) {
     this.register({ name: "LazyArrayList", ctor: LazyArrayList });
     for (const type of types) {
@@ -33,6 +35,7 @@ export class TypeRegistry {
     }
   }
 
+  /** Runs TypeRegistry.register. */
   register<T extends object>(type: TypeRegistration<T>): void {
     const registered: RegisteredType = {
       name: type.name,
@@ -47,14 +50,17 @@ export class TypeRegistry {
     this.byCtor.set(type.ctor, registered);
   }
 
+  /** Runs TypeRegistry.byConstructor. */
   byConstructor(value: object): RegisteredType | undefined {
     return this.byCtor.get(value.constructor as ClassConstructor);
   }
 
+  /** Runs TypeRegistry.byTypeName. */
   byTypeName(name: string): RegisteredType | undefined {
     return this.byName.get(name);
   }
 
+  /** Runs TypeRegistry.entries. */
   entries(): TypeDictionaryEntry[] {
     return Array.from(this.byName.values())
       .map((type) => ({
@@ -66,10 +72,12 @@ export class TypeRegistry {
   }
 }
 
+/** Provides the public ObjectIdRegistry API. */
 export class ObjectIdRegistry {
   private readonly ids = new WeakMap<object, string>();
   private nextId = 1;
 
+  /** Runs ObjectIdRegistry.idFor. */
   idFor(value: object): string {
     const existing = this.ids.get(value);
     if (existing) {
@@ -80,6 +88,7 @@ export class ObjectIdRegistry {
     return id;
   }
 
+  /** Runs ObjectIdRegistry.remember. */
   remember(id: string, value: object): void {
     this.ids.set(value, id);
     const numeric = Number(id);
@@ -89,15 +98,18 @@ export class ObjectIdRegistry {
   }
 }
 
+/** Provides the public GraphSerializer API. */
 export class GraphSerializer {
   readonly types: TypeRegistry;
   readonly objectIds: ObjectIdRegistry;
 
+  /** Creates a GraphSerializer instance. */
   constructor(types: Array<TypeRegistration<any>> | TypeRegistry = [], objectIds = new ObjectIdRegistry()) {
     this.types = Array.isArray(types) ? new TypeRegistry(types) : types;
     this.objectIds = objectIds;
   }
 
+  /** Runs GraphSerializer.serialize. */
   serialize(root: unknown): SerializedEnvelope {
     const seen = new Map<object, string>();
     const nodes: Record<string, EncodedNode> = {};
@@ -240,6 +252,7 @@ export class GraphSerializer {
     };
   }
 
+  /** Runs GraphSerializer.deserialize. */
   deserialize<TRoot>(envelope: SerializedEnvelope): TRoot {
     const cache = new Map<string, unknown>();
     const hydrated = new Set<string>();

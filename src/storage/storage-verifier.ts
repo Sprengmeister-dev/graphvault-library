@@ -14,6 +14,7 @@ import { envelopeHash, transactionHashPayload, transactionRecordHash } from "../
 import { objectVersionsFromManifest } from "./storage-reader.js";
 import { indexEnvelopeHash } from "./storage-index.js";
 
+/** Describes the public StorageVerifierOptions contract. */
 export interface StorageVerifierOptions {
   target: StorageTarget;
   lazyDirectory: string;

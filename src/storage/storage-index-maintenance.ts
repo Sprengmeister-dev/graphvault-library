@@ -1,5 +1,6 @@
 import type { StorageIndexRecord, StorageIndexVerificationResult } from "../core/types.js";
 
+/** Runs the public verifyStorageIndexRecord helper. */
 export function verifyStorageIndexRecord(input: {
   expected: StorageIndexRecord | undefined;
   actual: StorageIndexRecord | undefined;

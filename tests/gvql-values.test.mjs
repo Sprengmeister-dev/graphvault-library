@@ -17,9 +17,18 @@ assert.equal(encodedValueToJs({ $type: "undefined" }), undefined);
 assert.equal(encodedValueToJs({ $type: "bigint", value: "9007199254740991" }), 9007199254740991n);
 assert.equal(encodedValueToJs({ $type: "date", value: "2026-01-01T00:00:00.000Z" }), "2026-01-01T00:00:00.000Z");
 assert.equal(encodedValueToJs({ $type: "buffer", value: Buffer.from("aGVsbG8=").toString("base64") }), Buffer.from("aGVsbG8=").toString("base64"));
+assert.equal(encodedValueToJs({ $type: "arraybuffer", value: "AQI=" }), "AQI=");
+assert.equal(encodedValueToJs({ $type: "sharedarraybuffer", value: "AQI=" }), "AQI=");
+assert.equal(encodedValueToJs({ $type: "dataview", value: "AQI=" }), "AQI=");
+assert.equal(encodedValueToJs({ $type: "typedarray", value: "AQI=" }), "AQI=");
 assert.equal(encodedValueToJs({ $type: "regexp", source: "test", flags: "gi" }), "/test/gi");
+assert.equal(encodedValueToJs({ $type: "url", value: "https://example.com/" }), "https://example.com/");
+assert.equal(encodedValueToJs({ $type: "urlsearchparams", value: "q=x" }), "q=x");
 assert.equal(encodedValueToJs({ $type: "symbol", key: "x" }), "Symbol(x)");
 assert.equal(encodedValueToJs({ $type: "symbol", global: true, key: "global" }), "Symbol(global)");
+assert.equal(encodedValueToJs({ $type: "symbol", key: null }), "Symbol()");
+assert.equal(encodedValueToJs({ $type: "error", message: "boom" }), "boom");
+assert.equal(encodedValueToJs(undefined), undefined);
 
 assert.deepEqual(encodedValueToJs({ $ref: "a" }), { $ref: "a" });
 
@@ -70,8 +79,19 @@ const mapNode = {
 };
 assert.deepEqual(getNodePath(mapNode, "entries[1].key"), { $type: "number", value: "3" });
 assert.deepEqual(getNodePath(mapNode, "entries[0].value"), { $type: "number", value: "2" });
+assert.equal(getNodePath(mapNode, "entries[x].value"), undefined);
 setNodePath(mapNode, "entries[1].value", { $type: "number", value: "8" });
 assert.deepEqual(mapNode.entries[1][1], { $type: "number", value: "8" });
+setNodePath(mapNode, "entries[0].key", { $type: "number", value: "10" });
+assert.deepEqual(mapNode.entries[0][0], { $type: "number", value: "10" });
+assert.throws(() => setNodePath(mapNode, "bad", 1), /Unsupported GVQL map path/);
+assert.throws(() => setNodePath(mapNode, "entries[9].value", 1), /Unsupported GVQL map path/);
+assert.throws(() => setNodePath({ kind: "lazy", key: "segment" }, "value", 1), /cannot set fields/);
+assert.throws(() => setNodePath(arrayNode, "bad", 1), /Unsupported GVQL array path/);
+assert.throws(() => setNodePath(objectNode, undefined, 1), /requires an aliased property path/);
+assert.deepEqual(removeNodePath(changedObject, "missing"), { before: undefined, removed: false });
+assert.throws(() => removeNodePath(changedObject, undefined), /requires an aliased property path/);
+assert.deepEqual(getNodePath({ kind: "lazy", key: "segment" }), { kind: "lazy", key: "segment" });
 
 const literal = {
   path: "$id",

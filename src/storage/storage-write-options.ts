@@ -5,6 +5,7 @@ import type {
   StorageWriteProfile,
 } from "../core/types.js";
 
+/** Describes the public ResolvedStorageWriteOptions contract. */
 export interface ResolvedStorageWriteOptions {
   profile: StorageWriteProfile;
   objectRecordFormat: ObjectRecordWriteFormat;
@@ -14,6 +15,7 @@ export interface ResolvedStorageWriteOptions {
   writeSnapshots: boolean;
 }
 
+/** Runs the public resolveStorageWriteOptions helper. */
 export function resolveStorageWriteOptions(options: StorageManagerOptions<any>): ResolvedStorageWriteOptions {
   const profile = options.writeProfile ?? "standard";
   return {

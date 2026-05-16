@@ -18,12 +18,15 @@ export type LoadedEnvelope =
   | { source: "snapshot"; envelope: SerializedEnvelope; transactionId: number; objectVersions: Map<string, number>; schemaVersion: number }
   | { source: "wal"; envelope: SerializedEnvelope; transactionId: number; objectVersions: Map<string, number>; schemaVersion: number };
 
+/** Provides the public StorageReader API. */
 export class StorageReader {
+  /** Creates a StorageReader instance. */
   constructor(
     private readonly target: StorageTarget,
     private readonly layout: StorageLayout,
   ) {}
 
+  /** Runs StorageReader.loadExistingEnvelope asynchronously. */
   async loadExistingEnvelope(options: { includeWal?: boolean } = {}): Promise<LoadedEnvelope | undefined> {
     const manifest = await this.readManifest();
     if (options.includeWal ?? true) {
@@ -84,11 +87,13 @@ export class StorageReader {
     return undefined;
   }
 
+  /** Runs StorageReader.readLatestTransactionRecord asynchronously. */
   async readLatestTransactionRecord(): Promise<TransactionRecord | undefined> {
     const records = await this.readTransactionRecords();
     return records.sort((a, b) => b.transactionId - a.transactionId)[0];
   }
 
+  /** Runs StorageReader.readTransactionRecords asynchronously. */
   async readTransactionRecords(): Promise<TransactionRecord[]> {
     const records: TransactionRecord[] = [];
     for (const file of await this.readDirectoryIfExists(this.layout.transactionsDirectory)) {
@@ -107,6 +112,7 @@ export class StorageReader {
     return records.sort((a, b) => a.transactionId - b.transactionId);
   }
 
+  /** Runs StorageReader.readCommittedWalRecords asynchronously. */
   async readCommittedWalRecords(): Promise<WalCommitRecord[]> {
     const records: WalCommitRecord[] = [];
     for (const file of await this.readDirectoryIfExists(this.layout.walDirectory)) {
@@ -125,6 +131,7 @@ export class StorageReader {
     return records.sort((a, b) => a.transactionId - b.transactionId);
   }
 
+  /** Runs StorageReader.readWalPrepareRecord asynchronously. */
   async readWalPrepareRecord(file: string): Promise<WalPrepareRecord | undefined> {
     try {
       const record = JSON.parse(await this.target.readText(join(this.layout.walDirectory, file))) as WalPrepareRecord;
@@ -137,6 +144,7 @@ export class StorageReader {
     return undefined;
   }
 
+  /** Runs StorageReader.readCurrentPointer asynchronously. */
   async readCurrentPointer(): Promise<string | undefined> {
     try {
       if (!(await this.target.exists(this.layout.currentFile))) {
@@ -149,6 +157,7 @@ export class StorageReader {
     }
   }
 
+  /** Runs StorageReader.readManifest asynchronously. */
   async readManifest(): Promise<StorageManifest | undefined> {
     try {
       if (!(await this.target.exists(this.layout.manifestFile))) {
@@ -160,6 +169,7 @@ export class StorageReader {
     }
   }
 
+  /** Runs StorageReader.readParentIndex asynchronously. */
   async readParentIndex(): Promise<ParentIndexRecord | undefined> {
     try {
       if (!(await this.target.exists(this.layout.parentIndexFile))) {
@@ -171,6 +181,7 @@ export class StorageReader {
     }
   }
 
+  /** Runs StorageReader.readStorageIndex asynchronously. */
   async readStorageIndex(): Promise<StorageIndexRecord | undefined> {
     try {
       if (!(await this.target.exists(this.layout.indexFile))) {
@@ -183,6 +194,7 @@ export class StorageReader {
     }
   }
 
+  /** Runs StorageReader.envelopeFromManifest asynchronously. */
   async envelopeFromManifest(manifest: StorageManifest): Promise<SerializedEnvelope> {
     const nodes: SerializedEnvelope["nodes"] = {};
     const objectVersions = objectVersionsFromManifest(manifest);
@@ -199,6 +211,7 @@ export class StorageReader {
     };
   }
 
+  /** Runs StorageReader.readObjectRecord asynchronously. */
   async readObjectRecord(objectId: string, transactionId?: number): Promise<ObjectRecord> {
     try {
       return decodeBinaryRecord<ObjectRecord>(await this.target.readBuffer(this.layout.binaryObjectPath(objectId, transactionId)));
@@ -214,6 +227,7 @@ export class StorageReader {
     }
   }
 
+  /** Runs StorageReader.readDirectoryIfExists asynchronously. */
   async readDirectoryIfExists(path: string): Promise<string[]> {
     try {
       return await this.target.list(path);
@@ -223,6 +237,7 @@ export class StorageReader {
   }
 }
 
+/** Runs the public objectVersionsFromManifest helper. */
 export function objectVersionsFromManifest(manifest: StorageManifest): Map<string, number> {
   const versions = new Map<string, number>();
   for (const objectId of manifest.objectIds) {
@@ -231,6 +246,7 @@ export function objectVersionsFromManifest(manifest: StorageManifest): Map<strin
   return versions;
 }
 
+/** Runs the public schemaVersionFromManifest helper. */
 export function schemaVersionFromManifest(manifest: StorageManifest): number {
   return manifest.schemaVersion ?? 0;
 }

@@ -4,12 +4,14 @@ import type {
   StorageSchemaMigration,
 } from "../core/types.js";
 
+/** Runs the public targetSchemaVersion helper. */
 export function targetSchemaVersion<TRoot>(explicitVersion: number | undefined, migrations: readonly StorageSchemaMigration<TRoot>[]): number {
   const targetVersion = explicitVersion ?? sortedSchemaMigrations(migrations).at(-1)?.version ?? 0;
   validateSchemaVersion(targetVersion, "schemaVersion");
   return targetVersion;
 }
 
+/** Runs the public sortedSchemaMigrations helper. */
 export function sortedSchemaMigrations<TRoot>(migrations: readonly StorageSchemaMigration<TRoot>[]): Array<StorageSchemaMigration<TRoot>> {
   const sorted = [...migrations].sort((a, b) => a.version - b.version);
   const seen = new Set<number>();
@@ -25,6 +27,7 @@ export function sortedSchemaMigrations<TRoot>(migrations: readonly StorageSchema
   return sorted;
 }
 
+/** Runs the public migrationPlan helper. */
 export function migrationPlan<TRoot>(
   currentVersion: number,
   targetVersion: number,
@@ -40,6 +43,7 @@ export function migrationPlan<TRoot>(
     : downMigrationPlan(currentVersion, targetVersion, migrations);
 }
 
+/** Runs the public migrationContext helper. */
 export function migrationContext<TRoot>(
   root: TRoot,
   step: StorageMigrationPlanStep,
@@ -54,6 +58,7 @@ export function migrationContext<TRoot>(
   };
 }
 
+/** Runs the public migrationMetadata helper. */
 export function migrationMetadata(step: StorageMigrationPlanStep): SchemaMigrationMetadata {
   return {
     version: step.version,
@@ -64,6 +69,7 @@ export function migrationMetadata(step: StorageMigrationPlanStep): SchemaMigrati
   };
 }
 
+/** Runs the public validateSchemaVersion helper. */
 export function validateSchemaVersion(version: number, label: string): void {
   if (!Number.isSafeInteger(version) || version < 0) {
     throw new RangeError(`${label} must be a non-negative safe integer.`);

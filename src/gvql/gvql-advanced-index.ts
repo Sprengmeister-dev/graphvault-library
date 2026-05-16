@@ -15,6 +15,7 @@ import type {
 } from "../core/types.js";
 import type { GvqlAdvancedGraphIndex } from "./gvql-types.js";
 
+/** Describes the public AdvancedIndexOptions contract. */
 export interface AdvancedIndexOptions {
   composites: StorageCompositeIndexDefinition[];
   ranges: StorageRangeIndexDefinition[];
@@ -24,6 +25,7 @@ export interface AdvancedIndexOptions {
   expressions: StorageExpressionIndexDefinition[];
 }
 
+/** Runs the public buildAdvancedIndexRecord helper. */
 export function buildAdvancedIndexRecord(envelope: SerializedEnvelope, options: AdvancedIndexOptions): StorageAdvancedIndexRecord | undefined {
   const definitions = advancedDefinitions(options);
   if (definitions.length === 0) return undefined;
@@ -65,6 +67,7 @@ export function buildAdvancedIndexRecord(envelope: SerializedEnvelope, options: 
   };
 }
 
+/** Runs the public advancedIndexFromRecord helper. */
 export function advancedIndexFromRecord(record: StorageAdvancedIndexRecord | undefined): GvqlAdvancedGraphIndex | undefined {
   if (!record) return undefined;
   return {
@@ -79,6 +82,7 @@ export function advancedIndexFromRecord(record: StorageAdvancedIndexRecord | und
   };
 }
 
+/** Runs the public advancedDefinitions helper. */
 export function advancedDefinitions(options: AdvancedIndexOptions): StorageAdvancedIndexDefinitionRecord[] {
   return [
     ...options.composites.map((item) => ({ ...item, kind: "composite" as const, name: item.name ?? indexName("composite", item.type, item.paths) })),
