@@ -6,7 +6,7 @@
 ![TypeScript](https://img.shields.io/badge/TypeScript-first-315c92)
 ![License](https://img.shields.io/badge/license-MIT-2f2f2f)
 
-![GraphVault logo](./assets/graphvault-logo.png)
+![GraphVault logo](./assets/graphvault-logo.jpg)
 
 GraphVault is embedded object-graph persistence for TypeScript and NestJS applications whose natural data model is a live object graph: a root object with nested objects, arrays, maps, sets, shared references, cycles, and domain classes.
 
