@@ -1,6 +1,6 @@
-# GraphVault Library 0.1.0 Release Notes
+# GraphVault TS 0.1.0 Release Notes
 
-GraphVault Library 0.1.0 is the first public TypeScript implementation of GraphVault: an embedded object-graph database for application-owned domain models.
+GraphVault TS 0.1.0 is the first public TypeScript implementation of GraphVault: an embedded object-graph database for application-owned domain models.
 
 ## What Is Included
 

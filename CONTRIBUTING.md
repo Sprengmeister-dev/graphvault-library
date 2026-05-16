@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for helping improve GraphVault Library.
+Thanks for helping improve GraphVault TS.
 
 ## Local Development
 

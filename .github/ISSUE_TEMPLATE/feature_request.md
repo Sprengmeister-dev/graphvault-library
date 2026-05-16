@@ -1,6 +1,6 @@
 ---
 name: Feature request
-about: Suggest an improvement for GraphVault Library
+about: Suggest an improvement for GraphVault TS
 title: "[Feature]: "
 labels: enhancement
 ---

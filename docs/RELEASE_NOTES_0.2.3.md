@@ -1,6 +1,6 @@
-# GraphVault Library 0.2.3 Release Notes
+# GraphVault TS 0.2.3 Release Notes
 
-GraphVault Library 0.2.3 is the current public TypeScript developer release. It builds on the 0.2.0 production-hardening work with persistent indexes, Node.js 26 validation, a tighter package smoke test, and clearer documentation for NestJS and production adoption.
+GraphVault TS 0.2.3 is the current public TypeScript developer release. It builds on the 0.2.0 production-hardening work with persistent indexes, Node.js 26 validation, a tighter package smoke test, and clearer documentation for NestJS and production adoption.
 
 ## Why Upgrade
 

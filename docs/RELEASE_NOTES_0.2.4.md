@@ -1,6 +1,6 @@
-# GraphVault Library 0.2.4 Release Notes
+# GraphVault TS 0.2.4 Release Notes
 
-GraphVault Library 0.2.4 is the professional indexing release. It turns the persistent index sidecar into a modular index subsystem for large GraphVault stores and admin-heavy GVQL workloads.
+GraphVault TS 0.2.4 is the professional indexing release. It turns the persistent index sidecar into a modular index subsystem for large GraphVault stores and admin-heavy GVQL workloads.
 
 ## Why Upgrade
 

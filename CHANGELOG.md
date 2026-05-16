@@ -61,7 +61,7 @@
 
 ## 0.1.0
 
-- Initial GraphVault Library package.
+- Initial GraphVault TS package.
 - Embedded TypeScript object graph persistence.
 - Local filesystem and in-memory storage targets.
 - HTTP, S3-compatible, and SQL storage target adapters.

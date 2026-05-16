@@ -1,6 +1,6 @@
-# GraphVault Library 0.2.0 Release Notes
+# GraphVault TS 0.2.0 Release Notes
 
-GraphVault Library 0.2.0 is the production-hardening release. It focuses on multi-pod write safety, crash recovery, auditability, operational visibility, bounded graph export, and better performance gates.
+GraphVault TS 0.2.0 is the production-hardening release. It focuses on multi-pod write safety, crash recovery, auditability, operational visibility, bounded graph export, and better performance gates.
 
 ## Why Upgrade
 

@@ -1,4 +1,4 @@
-# GraphVault Library
+# GraphVault TS
 
 [![CI](https://github.com/Sprengmeister-dev/graphvault-library/actions/workflows/ci.yml/badge.svg)](https://github.com/Sprengmeister-dev/graphvault-library/actions/workflows/ci.yml)
 ![npm](https://img.shields.io/npm/v/%40sprengmeister%2Fgraphvault)

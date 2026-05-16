@@ -1,6 +1,6 @@
 ---
 name: Bug report
-about: Report a reproducible GraphVault Library issue
+about: Report a reproducible GraphVault TS issue
 title: "[Bug]: "
 labels: bug
 ---

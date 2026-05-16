@@ -1,6 +1,6 @@
-# GraphVault Library 0.2.5 Release Notes
+# GraphVault TS 0.2.5 Release Notes
 
-GraphVault Library 0.2.5 adds field annotations for sensitive, derived, and runtime-only class fields.
+GraphVault TS 0.2.5 adds field annotations for sensitive, derived, and runtime-only class fields.
 
 ## Why Upgrade
 

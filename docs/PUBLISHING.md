@@ -1,4 +1,4 @@
-# Publishing GraphVault Library
+# Publishing GraphVault TS
 
 This checklist keeps package releases boring and repeatable.
 
@@ -42,14 +42,14 @@ Inspect the dry-run file list and confirm it contains `README.md`, `LICENSE`, `C
 Create the release tag only after the local release check passes:
 
 ```bash
-git tag -a v0.1.0 -m "GraphVault Library 0.1.0"
+git tag -a v0.1.0 -m "GraphVault TS 0.1.0"
 git push origin v0.1.0
 ```
 
 For the current 0.2.5 release:
 
 ```bash
-git tag -a v0.2.5 -m "GraphVault Library 0.2.5"
+git tag -a v0.2.5 -m "GraphVault TS 0.2.5"
 git push origin v0.2.5
 ```
 
