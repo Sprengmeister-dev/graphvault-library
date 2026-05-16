@@ -5,19 +5,6 @@ import { SqlStorageTarget } from "../dist/storage/targets/sql.js";
 
 const databaseUrl = process.env.GRAPHVAULT_POSTGRES_URL;
 
-if (!databaseUrl) {
-  console.log("Skipping Postgres integration test: GRAPHVAULT_POSTGRES_URL is not set.");
-} else {
-  await withPostgres(databaseUrl, async (pool) => {
-    await resetTables(pool);
-    await assertSqlStorageTargetOnRealPostgres(pool);
-    await resetTables(pool);
-    await assertPostgresTransactionRollback(pool);
-    await resetTables(pool);
-    await assertEmbeddedStorageRoundTripOnPostgres(pool);
-  });
-}
-
 async function assertSqlStorageTargetOnRealPostgres(pool) {
   const targetA = createPostgresTarget(pool);
   const targetB = createPostgresTarget(pool);
@@ -122,6 +109,19 @@ async function withPostgres(connectionString, work) {
   } finally {
     await pool.end();
   }
+}
+
+if (!databaseUrl) {
+  console.log("Skipping Postgres integration test: GRAPHVAULT_POSTGRES_URL is not set.");
+} else {
+  await withPostgres(databaseUrl, async (pool) => {
+    await resetTables(pool);
+    await assertSqlStorageTargetOnRealPostgres(pool);
+    await resetTables(pool);
+    await assertPostgresTransactionRollback(pool);
+    await resetTables(pool);
+    await assertEmbeddedStorageRoundTripOnPostgres(pool);
+  });
 }
 
 class PgStorageClient {
