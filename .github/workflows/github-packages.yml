@@ -1,0 +1,54 @@
+name: GitHub Packages Mirror
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/github-packages.yml"
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish:
+    name: Publish GitHub Packages mirror
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 26.x
+          check-latest: true
+          cache: npm
+          registry-url: https://npm.pkg.github.com
+          scope: "@sprengmeister-dev"
+      - run: npm ci
+      - run: npm run quality
+      - run: npm test
+      - run: npm run benchmark:check
+      - run: npm run pack:dry-run
+      - name: Prepare GitHub Packages metadata
+        run: |
+          node --input-type=module <<'JS'
+          import { readFile, writeFile } from "node:fs/promises";
+
+          const packageJsonPath = "package.json";
+          const packageJson = JSON.parse(await readFile(packageJsonPath, "utf8"));
+
+          packageJson.name = "@sprengmeister-dev/graphvault";
+          packageJson.repository = {
+            type: "git",
+            url: "git+https://github.com/Sprengmeister-dev/graphvault-library.git"
+          };
+          packageJson.publishConfig = {
+            registry: "https://npm.pkg.github.com"
+          };
+
+          await writeFile(packageJsonPath, `${JSON.stringify(packageJson, null, 2)}\n`);
+          JS
+      - name: Publish mirror
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm publish --registry=https://npm.pkg.github.com --access public
