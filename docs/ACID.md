@@ -2,6 +2,8 @@
 
 GraphVault is an embedded object-graph store, not a clustered database server. It still provides explicit ACID-oriented controls for applications that need strong local or shared-store write behavior.
 
+For the precise contract in one place, read [Guarantees and boundaries](./GUARANTEES.md).
+
 ## Recommended Production Profile
 
 ```ts

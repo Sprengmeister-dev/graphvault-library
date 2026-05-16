@@ -83,7 +83,9 @@ For production shared stores, the target must provide:
 - token-aware lock release so stale writers cannot delete a newer lock
 - read-after-write consistency for commit metadata
 
-The local filesystem target is suitable for a single host or a filesystem that preserves these semantics. Object-storage, HTTP, and SQL-backed targets should be tested in the exact infrastructure configuration you will run in production. The repository includes `tests/storage-target-conformance.test.mjs` as a shared contract test for local filesystem, memory, and HTTP-style targets; custom gateways should pass an equivalent suite before they hold critical data.
+The local filesystem target is suitable for a single host or a filesystem that preserves these semantics. Object-storage, HTTP, and SQL-backed targets should be tested in the exact infrastructure configuration you will run in production. The repository includes `tests/storage-target-conformance.test.mjs` as a shared contract test for local filesystem, memory, and HTTP-style targets. SQLite and PostgreSQL have real integration tests; custom gateways should pass an equivalent suite before they hold critical data.
+
+For PostgreSQL-backed shared stores, use `SqlStorageTarget` with `dialect: "postgres"`, one shared database, stable table names, and a transaction-aware client adapter. See [storage configuration](./STORAGE.md#sql-storage). GitHub Actions runs the Postgres integration test against a real service and checks SQL locks, rollback, BLOB payloads, fencing tokens, and full `EmbeddedStorage` reload.
 
 ## Commit Path
 
@@ -233,6 +235,8 @@ GraphVault can protect the graph commit path, but it cannot prove that applicati
 - Long-running transactions hold or risk conflicts on the shared writer path. Keep transaction callbacks deterministic and short.
 - All writers must use the same storage target configuration and a compatible GraphVault version.
 - External tools should not mutate GraphVault storage files directly.
+
+For the compact contract statement, see [Guarantees and boundaries](./GUARANTEES.md).
 
 ## Deployment Checklist
 

@@ -55,7 +55,7 @@ Reach for Postgres, SQLite, MongoDB, or Redis when:
 - Persist rich TypeScript object graphs with identity, shared references, cycles, classes, `Map`, `Set`, `Date`, `Buffer`, `bigint`, typed arrays, and other JS values.
 - Query and batch-update committed graphs with GVQL, persistent indexes, execution plans, aggregates, previews, and GraphVault Studio.
 - Run explicit transactions with rollback, optimistic or pessimistic locking, WAL recovery, fencing tokens, transaction metadata, and a tamper-evident hash chain.
-- Operate stores with health/safety reports, verification, consistent backup, schema migrations, bounded subtree exports, and pluggable local, memory, HTTP, S3-compatible, or SQL-backed storage targets.
+- Operate stores with health/safety reports, verification, consistent backup, schema migrations, bounded subtree exports, and pluggable local, memory, HTTP, S3-compatible, SQLite-tested, and PostgreSQL-tested SQL storage targets.
 
 ## NestJS In A Minute
 
@@ -114,7 +114,7 @@ Then open `http://127.0.0.1:4177`.
 
 ## Performance Snapshot
 
-The benchmark is reproducible with `npm run benchmark`; the full table lives in [docs/BENCHMARKS.md](./docs/BENCHMARKS.md). Latest local run on macOS/Apple Silicon:
+The benchmark is reproducible with `npm run benchmark`; a comparative JSON/SQLite/GraphVault benchmark is available with `npm run benchmark:compare`. The full tables live in [docs/BENCHMARKS.md](./docs/BENCHMARKS.md). Latest local run on macOS/Apple Silicon:
 
 | target | documents | storeRoot | indexed GVQL aggregate | reload | storage size |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -140,7 +140,7 @@ The default filesystem profile favors inspectable JSON sidecars and conservative
 
 GraphVault is intentionally application-owned embedded storage, not a drop-in replacement for a server database. It does not provide SQL wire-protocol compatibility, external user/role management, built-in replication, or distributed consensus. Multi-pod writers can share a store through the configured storage target and GraphVault's lock/transaction path, but high-availability replication and quorum semantics remain an infrastructure concern.
 
-For critical production workloads, read [ACID configuration](./docs/ACID.md) and [Production operations](./docs/PRODUCTION.md), run the storage-target conformance tests for any custom target, and use application-specific `commitValidators` for domain invariants.
+For critical production workloads, read [Guarantees and boundaries](./docs/GUARANTEES.md), [ACID configuration](./docs/ACID.md), and [Production operations](./docs/PRODUCTION.md), run the storage-target conformance tests for any custom target, and use application-specific `commitValidators` for domain invariants.
 
 ## Example Project
 
@@ -158,9 +158,12 @@ npx graphvault-studio --dir ./graphvault-example-store --port 4177
 
 Then open `http://127.0.0.1:4177`.
 
+For a fuller graph-shaped product demo, see the [CaseGraph demo concept](./docs/CASEGRAPH.md): an investigation/case-management app where people, companies, accounts, payments, documents, notes, hypotheses, and timeline events form one navigable object graph.
+
 ## Documentation
 
 - [Usage guide](./docs/USAGE.md) - modeling roots, registering classes, writing data, lazy data, cycles, verification, and lifecycle.
+- [Guarantees and boundaries](./docs/GUARANTEES.md) - the precise contract for ACID-oriented behavior, storage-target requirements, tested paths, and when not to use GraphVault.
 - [ACID configuration](./docs/ACID.md) - WAL, recovery, fencing tokens, validators, and durability tradeoffs.
 - [Production operations](./docs/PRODUCTION.md) - production profiles, backup/restore, verification, monitoring, and known boundaries.
 - [GVQL guide](./docs/GVQL.md) - graph queries, indexed filtering, aggregates, execution plans, and mutation previews.
@@ -168,6 +171,7 @@ Then open `http://127.0.0.1:4177`.
 - [Transactions and concurrency](./docs/TRANSACTIONS.md) - optimistic and pessimistic locking for multi-pod writers.
 - [Storage configuration](./docs/STORAGE.md) - local filesystem, memory, HTTP, S3-compatible, SQL, and operational options.
 - [NestJS integration](./docs/NESTJS.md) - module setup, async config, multiple stores, and shutdown hooks.
+- [CaseGraph demo concept](./docs/CASEGRAPH.md) - the reference use case for graph-shaped, audit-heavy application data.
 - [API reference](./docs/API.md) - public entry points and important options.
 - [Benchmarks](./docs/BENCHMARKS.md) - reproducible performance numbers and write profiles.
 - [0.2.4 release notes](./docs/RELEASE_NOTES_0.2.4.md) - professional persistent indexes, index verification/repair, and current package baseline.

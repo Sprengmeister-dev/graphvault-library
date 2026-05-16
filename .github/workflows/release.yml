@@ -20,6 +20,22 @@ jobs:
   publish:
     name: Publish npm package
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: graphvault_test
+          POSTGRES_USER: graphvault
+          POSTGRES_PASSWORD: graphvault
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U graphvault -d graphvault_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      GRAPHVAULT_POSTGRES_URL: postgresql://graphvault:graphvault@localhost:5432/graphvault_test
     steps:
       - name: Confirm release intent
         env:

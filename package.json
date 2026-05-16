@@ -71,11 +71,12 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "test:unit": "npm run build && node tests/smoke.mjs && node tests/parser.test.mjs && node tests/engine.test.mjs && node tests/storage-manager.test.mjs && node tests/concurrency-transactions.test.mjs && node tests/wal-crash-matrix.test.mjs && node tests/storage-target-conformance.test.mjs && node tests/clause-scanner.test.mjs && node tests/gvql-values.test.mjs && node tests/binary-codec.test.mjs && node tests/gvql-index.test.mjs && node tests/mutex.test.mjs && node tests/storage-target-sql.test.mjs && node tests/storage-target-sqlite.integration.test.mjs && node tests/storage-target-s3.test.mjs && node tests/persistent-cache.test.mjs && node tests/serializer.test.mjs && node tests/lazy-and-storer.test.mjs && node tests/storage-modules.test.mjs && node tests/storage-index.test.mjs && node tests/parser-fuzz.test.mjs",
+    "test:unit": "npm run build && node tests/smoke.mjs && node tests/parser.test.mjs && node tests/engine.test.mjs && node tests/storage-manager.test.mjs && node tests/concurrency-transactions.test.mjs && node tests/wal-crash-matrix.test.mjs && node tests/storage-target-conformance.test.mjs && node tests/clause-scanner.test.mjs && node tests/gvql-values.test.mjs && node tests/binary-codec.test.mjs && node tests/gvql-index.test.mjs && node tests/mutex.test.mjs && node tests/storage-target-sql.test.mjs && node tests/storage-target-sqlite.integration.test.mjs && node tests/storage-target-postgres.integration.test.mjs && node tests/storage-target-s3.test.mjs && node tests/persistent-cache.test.mjs && node tests/serializer.test.mjs && node tests/lazy-and-storer.test.mjs && node tests/storage-modules.test.mjs && node tests/storage-index.test.mjs && node tests/parser-fuzz.test.mjs",
     "test": "npm run quality:source && c8 npm run test:unit",
     "coverage": "npm run test",
     "benchmark": "npm run build && node benchmarks/object-graph.mjs",
     "benchmark:json": "npm run build && node benchmarks/object-graph.mjs --json --output benchmark-results.json",
+    "benchmark:compare": "npm run build && node benchmarks/comparative.mjs",
     "benchmark:check": "npm run build && node benchmarks/object-graph.mjs --sizes 100 --targets memory,filesystem/maximum --assert --json --output benchmark-check.json",
     "pack:dry-run": "npm pack --dry-run --cache ./.npm-cache",
     "package:smoke": "node scripts/package-smoke.mjs",
@@ -111,6 +112,7 @@
   "devDependencies": {
     "@types/node": "^22.15.3",
     "c8": "^11.0.0",
+    "pg": "^8.20.0",
     "sql.js": "^1.14.1",
     "typescript": "^5.8.3"
   },

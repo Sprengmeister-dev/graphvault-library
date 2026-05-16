@@ -62,6 +62,44 @@ import { GraphVaultModule } from "@sprengmeister/graphvault";
 export class AppModule {}
 ```
 
+For a shared PostgreSQL-backed store, create the SQL client adapter once and pass `dialect: "postgres"`:
+
+```ts
+import pg from "pg";
+import { Module } from "@nestjs/common";
+import { ConfigModule, ConfigService } from "@nestjs/config";
+import { GraphVaultModule, SqlStorageTarget } from "@sprengmeister/graphvault";
+
+@Module({
+  imports: [
+    ConfigModule.forRoot(),
+    GraphVaultModule.forRootAsync<AppRoot>({
+      global: true,
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => {
+        const pool = new pg.Pool({
+          connectionString: config.getOrThrow("GRAPHVAULT_POSTGRES_URL"),
+        });
+        return {
+          storageDirectory: config.get("GRAPHVAULT_STORE", "main"),
+          storageTarget: new SqlStorageTarget({
+            client: createPgGraphVaultClient(pool),
+            dialect: "postgres",
+          }),
+          rootFactory: () => ({ documents: [] }),
+          lockStrategy: "pessimistic",
+          transactionLog: "full",
+          staleLockTimeoutMs: 120_000,
+        };
+      },
+    }),
+  ],
+})
+export class AppModule {}
+```
+
+See [storage configuration](./STORAGE.md#sql-storage) for the complete `pg` adapter, transaction handling, and integration-test setup.
+
 ### Multiple Stores In NestJS
 
 For one store, direct `StorageManager<AppRoot>` injection is the cleanest option. If you need multiple stores in the same Nest app, inject by token from custom providers or wrap each store in a domain-specific service. The built-in token is exported as `GRAPHVAULT_MANAGER`:

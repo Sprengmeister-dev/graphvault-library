@@ -136,7 +136,7 @@ const storage = await EmbeddedStorage.start({
 
 ### SQL Storage
 
-`SqlStorageTarget` stores each GraphVault storage path as a row and uses a separate lock table for single-writer coordination. The adapter only needs to expose parameterized `execute(...)` calls, so you can wrap your preferred PostgreSQL, MySQL, SQLite, or other SQL client.
+`SqlStorageTarget` stores each GraphVault storage path as a row and uses a separate lock table for single-writer coordination. The adapter only needs to expose parameterized `execute(...)` calls, so you can wrap your preferred PostgreSQL, SQLite, MySQL-style, or other SQL client.
 
 ```ts
 import { EmbeddedStorage, SqlStorageTarget } from "@sprengmeister/graphvault";
@@ -147,9 +147,73 @@ const storage = await EmbeddedStorage.start({
     client: sqlClientAdapter,
     tableName: "graphvault_objects",
     lockTableName: "graphvault_locks",
+    dialect: "postgres",
   }),
   rootFactory: () => ({ documents: [] }),
 });
+```
+
+Dialects:
+
+- `postgres`: uses `$1`, `$2`, ... placeholders and `BYTEA` payload columns.
+- `sqlite`: uses `?` placeholders and `BLOB` payload columns.
+- `question`: default compatibility mode for SQL clients that accept `?` placeholders.
+
+PostgreSQL with `pg`:
+
+```ts
+import pg from "pg";
+import { EmbeddedStorage, SqlStorageTarget, type SqlStorageClient } from "@sprengmeister/graphvault";
+
+const pool = new pg.Pool({
+  connectionString: process.env.GRAPHVAULT_POSTGRES_URL,
+});
+
+class PgGraphVaultClient implements SqlStorageClient {
+  private transactionClient?: pg.PoolClient;
+
+  async execute(sql: string, parameters: readonly unknown[] = []) {
+    const client = this.transactionClient ?? pool;
+    const result = await client.query(sql, parameters);
+    return { rows: result.rows, rowCount: result.rowCount ?? 0 };
+  }
+
+  async transaction<T>(work: () => Promise<T>) {
+    if (this.transactionClient) return work();
+    const client = await pool.connect();
+    this.transactionClient = client;
+    try {
+      await client.query("BEGIN");
+      const result = await work();
+      await client.query("COMMIT");
+      return result;
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => {});
+      throw error;
+    } finally {
+      this.transactionClient = undefined;
+      client.release();
+    }
+  }
+}
+
+const storage = await EmbeddedStorage.start({
+  storageDirectory: "prod/main",
+  storageTarget: new SqlStorageTarget({
+    client: new PgGraphVaultClient(),
+    dialect: "postgres",
+  }),
+  rootFactory: () => ({ documents: [] }),
+  lockStrategy: "pessimistic",
+  transactionLog: "full",
+  staleLockTimeoutMs: 120_000,
+});
+```
+
+For multi-pod deployments, every pod must point at the same database, table names, `storageDirectory`, lock strategy, and compatible GraphVault version. The CI suite runs the PostgreSQL integration test against a real Postgres service, and the local test can be enabled with:
+
+```sh
+GRAPHVAULT_POSTGRES_URL=postgresql://user:password@localhost:5432/graphvault npm test
 ```
 
 ### Operational Options

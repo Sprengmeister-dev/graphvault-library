@@ -101,7 +101,7 @@ See [schema migrations](./SCHEMA_MIGRATIONS.md) for the full operational pattern
 - `EncryptedStorageTarget`: AES-256-GCM wrapper around another target for encrypted object payloads at rest.
 - `HttpStorageTarget`: remote service target.
 - `S3StorageTarget`: S3-compatible object storage target.
-- `SqlStorageTarget`: SQL-row-backed target.
+- `SqlStorageTarget`: SQL-row-backed target with `question`, `sqlite`, and `postgres` dialects.
 
 ### Important Options
 
@@ -110,6 +110,7 @@ See [schema migrations](./SCHEMA_MIGRATIONS.md) for the full operational pattern
 - `root`: short form for bootstrapping with a concrete object.
 - `types`: class registrations for prototype restoration and migrations.
 - `storageTarget`: custom target; defaults to local filesystem.
+- `SqlStorageTarget({ dialect })`: use `postgres` for `$1` placeholders and `BYTEA`, `sqlite` or `question` for `?` placeholders and `BLOB`.
 - `readOnly`: opens without writer lock and rejects writes.
 - `channelCount`: spreads object records across channel folders.
 - `lockTimeoutMs`: writer-lock timeout.

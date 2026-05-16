@@ -15,7 +15,7 @@ export type {
   S3StorageTargetOptions,
 } from "./targets/s3.js";
 export { SqlStorageTarget } from "./targets/sql.js";
-export type { SqlQueryResult, SqlStorageClient, SqlStorageTargetOptions } from "./targets/sql.js";
+export type { SqlQueryResult, SqlStorageClient, SqlStorageDialect, SqlStorageTargetOptions } from "./targets/sql.js";
 
 const ENCRYPTED_STORAGE_MAGIC = Buffer.from("GVENC1");
 const ENCRYPTED_STORAGE_IV_BYTES = 12;

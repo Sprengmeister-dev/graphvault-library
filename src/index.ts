@@ -94,6 +94,7 @@ export type {
   S3StorageTargetOptions,
   SqlQueryResult,
   SqlStorageClient,
+  SqlStorageDialect,
   SqlStorageTargetOptions,
 } from "./storage/storage-target.js";
 export { StorageManager } from "./storage/storage-manager.js";

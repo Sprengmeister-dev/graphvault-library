@@ -5,7 +5,10 @@ export interface SqlStorageTargetOptions {
   client: SqlStorageClient;
   tableName?: string;
   lockTableName?: string;
+  dialect?: SqlStorageDialect;
 }
+
+export type SqlStorageDialect = "sqlite" | "postgres" | "question";
 
 export interface SqlStorageClient {
   execute(sql: string, parameters?: readonly unknown[]): Promise<SqlQueryResult>;
@@ -21,12 +24,14 @@ export class SqlStorageTarget implements StorageTarget {
   private readonly client: SqlStorageClient;
   private readonly tableName: string;
   private readonly lockTableName: string;
+  private readonly dialect: SqlStorageDialect;
   private schemaReady = false;
 
   constructor(options: SqlStorageTargetOptions) {
     this.client = options.client;
     this.tableName = quoteSqlIdentifier(options.tableName ?? "graphvault_objects");
     this.lockTableName = quoteSqlIdentifier(options.lockTableName ?? "graphvault_locks");
+    this.dialect = options.dialect ?? "question";
   }
 
   async ensureDirectory(path: string): Promise<void> {
@@ -36,18 +41,24 @@ export class SqlStorageTarget implements StorageTarget {
   async exists(path: string): Promise<boolean> {
     await this.ensureSchema();
     const key = normalize(path);
-    const direct = await this.client.execute(`SELECT path FROM ${this.tableName} WHERE path = ? LIMIT 1`, [key]);
+    const direct = await this.client.execute(`SELECT path FROM ${this.tableName} WHERE path = ${this.parameter(1)} LIMIT 1`, [
+      key,
+    ]);
     if ((direct.rows?.length ?? 0) > 0) {
       return true;
     }
-    const nested = await this.client.execute(`SELECT path FROM ${this.tableName} WHERE path LIKE ? LIMIT 1`, [`${key}/%`]);
+    const nested = await this.client.execute(`SELECT path FROM ${this.tableName} WHERE path LIKE ${this.parameter(1)} LIMIT 1`, [
+      `${key}/%`,
+    ]);
     return (nested.rows?.length ?? 0) > 0;
   }
 
   async list(path: string): Promise<string[]> {
     await this.ensureSchema();
     const prefix = `${normalize(path)}/`;
-    const result = await this.client.execute(`SELECT path FROM ${this.tableName} WHERE path LIKE ?`, [`${prefix}%`]);
+    const result = await this.client.execute(`SELECT path FROM ${this.tableName} WHERE path LIKE ${this.parameter(1)}`, [
+      `${prefix}%`,
+    ]);
     const names = new Set<string>();
     for (const row of result.rows ?? []) {
       const storedPath = String(row.path);
@@ -66,7 +77,9 @@ export class SqlStorageTarget implements StorageTarget {
 
   async readBuffer(path: string): Promise<Buffer> {
     await this.ensureSchema();
-    const result = await this.client.execute(`SELECT body FROM ${this.tableName} WHERE path = ? LIMIT 1`, [normalize(path)]);
+    const result = await this.client.execute(`SELECT body FROM ${this.tableName} WHERE path = ${this.parameter(1)} LIMIT 1`, [
+      normalize(path),
+    ]);
     const body = result.rows?.[0]?.body;
     if (body === undefined) {
       throw new Error(`No such SQL storage object: ${path}`);
@@ -81,12 +94,11 @@ export class SqlStorageTarget implements StorageTarget {
   async writeBufferAtomic(path: string, value: Buffer): Promise<void> {
     await this.ensureSchema();
     await this.withTransaction(async () => {
-      await this.client.execute(`DELETE FROM ${this.tableName} WHERE path = ?`, [normalize(path)]);
-      await this.client.execute(`INSERT INTO ${this.tableName} (path, body, updated_at) VALUES (?, ?, ?)`, [
-        normalize(path),
-        value,
-        new Date().toISOString(),
-      ]);
+      await this.client.execute(`DELETE FROM ${this.tableName} WHERE path = ${this.parameter(1)}`, [normalize(path)]);
+      await this.client.execute(
+        `INSERT INTO ${this.tableName} (path, body, updated_at) VALUES (${this.parameters(3)})`,
+        [normalize(path), value, new Date().toISOString()],
+      );
     });
   }
 
@@ -100,10 +112,10 @@ export class SqlStorageTarget implements StorageTarget {
 
   async remove(path: string, options: { recursive?: boolean } = {}): Promise<void> {
     await this.ensureSchema();
-    await this.client.execute(`DELETE FROM ${this.tableName} WHERE path = ?`, [normalize(path)]);
-    await this.client.execute(`DELETE FROM ${this.tableName} WHERE path = ?`, [normalize(`${path}/.dir`)]);
+    await this.client.execute(`DELETE FROM ${this.tableName} WHERE path = ${this.parameter(1)}`, [normalize(path)]);
+    await this.client.execute(`DELETE FROM ${this.tableName} WHERE path = ${this.parameter(1)}`, [normalize(`${path}/.dir`)]);
     if (options.recursive) {
-      await this.client.execute(`DELETE FROM ${this.tableName} WHERE path LIKE ?`, [`${normalize(path)}/%`]);
+      await this.client.execute(`DELETE FROM ${this.tableName} WHERE path LIKE ${this.parameter(1)}`, [`${normalize(path)}/%`]);
     }
   }
 
@@ -113,24 +125,26 @@ export class SqlStorageTarget implements StorageTarget {
     const deadline = Date.now() + timeoutMs;
     while (true) {
       try {
-        await this.client.execute(`INSERT INTO ${this.lockTableName} (path, created_at, fencing_token) VALUES (?, ?, ?)`, [
+        await this.client.execute(`INSERT INTO ${this.lockTableName} (path, created_at, fencing_token) VALUES (${this.parameters(3)})`, [
           key,
           new Date().toISOString(),
           0,
         ]);
         const fencingToken = await this.nextFencingToken(key);
-        await this.client.execute(`UPDATE ${this.lockTableName} SET created_at = ?, fencing_token = ? WHERE path = ?`, [
-          new Date().toISOString(),
-          fencingToken,
-          key,
-        ]);
+        await this.client.execute(
+          `UPDATE ${this.lockTableName} SET created_at = ${this.parameter(1)}, fencing_token = ${this.parameter(2)} WHERE path = ${this.parameter(3)}`,
+          [new Date().toISOString(), fencingToken, key],
+        );
         return {
           fencingToken,
           assertValid: async () => {
             await this.assertLockToken(key, fencingToken);
           },
           release: async () => {
-            await this.client.execute(`DELETE FROM ${this.lockTableName} WHERE path = ? AND fencing_token = ?`, [key, fencingToken]);
+            await this.client.execute(
+              `DELETE FROM ${this.lockTableName} WHERE path = ${this.parameter(1)} AND fencing_token = ${this.parameter(2)}`,
+              [key, fencingToken],
+            );
           },
         };
       } catch (error) {
@@ -149,8 +163,9 @@ export class SqlStorageTarget implements StorageTarget {
     if (this.schemaReady) {
       return;
     }
+    const binaryType = this.dialect === "postgres" ? "BYTEA" : "BLOB";
     await this.client.execute(
-      `CREATE TABLE IF NOT EXISTS ${this.tableName} (path TEXT PRIMARY KEY, body BLOB NOT NULL, updated_at TEXT NOT NULL)`,
+      `CREATE TABLE IF NOT EXISTS ${this.tableName} (path TEXT PRIMARY KEY, body ${binaryType} NOT NULL, updated_at TEXT NOT NULL)`,
     );
     await this.client.execute(
       `CREATE TABLE IF NOT EXISTS ${this.lockTableName} (path TEXT PRIMARY KEY, created_at TEXT NOT NULL, fencing_token INTEGER NOT NULL DEFAULT 0)`,
@@ -175,7 +190,10 @@ export class SqlStorageTarget implements StorageTarget {
       return false;
     }
     try {
-      const result = await this.client.execute(`SELECT created_at FROM ${this.lockTableName} WHERE path = ? LIMIT 1`, [key]);
+      const result = await this.client.execute(
+        `SELECT created_at FROM ${this.lockTableName} WHERE path = ${this.parameter(1)} LIMIT 1`,
+        [key],
+      );
       const createdAt = result.rows?.[0]?.created_at;
       if (typeof createdAt !== "string") {
         return false;
@@ -184,7 +202,7 @@ export class SqlStorageTarget implements StorageTarget {
       if (!Number.isFinite(createdAtMs) || Date.now() - createdAtMs < staleLockTimeoutMs) {
         return false;
       }
-      await this.client.execute(`DELETE FROM ${this.lockTableName} WHERE path = ?`, [key]);
+      await this.client.execute(`DELETE FROM ${this.lockTableName} WHERE path = ${this.parameter(1)}`, [key]);
       return true;
     } catch {
       return false;
@@ -193,11 +211,14 @@ export class SqlStorageTarget implements StorageTarget {
 
   private async nextFencingToken(lockKey: string): Promise<number> {
     const counterKey = `${lockKey}.__fencing_counter`;
-    const result = await this.client.execute(`SELECT fencing_token FROM ${this.lockTableName} WHERE path = ? LIMIT 1`, [counterKey]);
+    const result = await this.client.execute(
+      `SELECT fencing_token FROM ${this.lockTableName} WHERE path = ${this.parameter(1)} LIMIT 1`,
+      [counterKey],
+    );
     const current = Number(result.rows?.[0]?.fencing_token ?? 0) || 0;
     const next = current + 1;
-    await this.client.execute(`DELETE FROM ${this.lockTableName} WHERE path = ?`, [counterKey]);
-    await this.client.execute(`INSERT INTO ${this.lockTableName} (path, created_at, fencing_token) VALUES (?, ?, ?)`, [
+    await this.client.execute(`DELETE FROM ${this.lockTableName} WHERE path = ${this.parameter(1)}`, [counterKey]);
+    await this.client.execute(`INSERT INTO ${this.lockTableName} (path, created_at, fencing_token) VALUES (${this.parameters(3)})`, [
       counterKey,
       new Date().toISOString(),
       next,
@@ -206,10 +227,21 @@ export class SqlStorageTarget implements StorageTarget {
   }
 
   private async assertLockToken(key: string, fencingToken: number): Promise<void> {
-    const result = await this.client.execute(`SELECT fencing_token FROM ${this.lockTableName} WHERE path = ? LIMIT 1`, [key]);
+    const result = await this.client.execute(
+      `SELECT fencing_token FROM ${this.lockTableName} WHERE path = ${this.parameter(1)} LIMIT 1`,
+      [key],
+    );
     if (Number(result.rows?.[0]?.fencing_token) !== fencingToken) {
       throw new StorageLockError(`Storage lock token ${fencingToken} is no longer valid in SQL target at ${key}.`);
     }
+  }
+
+  private parameter(index: number): string {
+    return this.dialect === "postgres" ? `$${index}` : "?";
+  }
+
+  private parameters(count: number): string {
+    return Array.from({ length: count }, (_, index) => this.parameter(index + 1)).join(", ");
   }
 }
 

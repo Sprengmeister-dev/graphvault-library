@@ -10,6 +10,7 @@ For automation, the same benchmark can emit JSON and run a small regression gate
 
 ```bash
 npm run benchmark:json
+npm run benchmark:compare
 npm run benchmark:check
 ```
 
@@ -19,6 +20,7 @@ The underlying script also supports direct options:
 
 ```bash
 node benchmarks/object-graph.mjs --sizes 100,300 --targets memory,filesystem/maximum --json --output results.json
+node benchmarks/comparative.mjs --count 500
 ```
 
 The benchmark creates a typed object graph with:
@@ -75,3 +77,21 @@ Version `0.2.x` adds WAL metadata and transaction-versioned object records for s
 For local development, small embedded apps, test harnesses, and admin tooling, the standard trade-off is usually comfortable. For write-heavy workloads, use a write profile explicitly and benchmark your own graph.
 
 Benchmarks are not a replacement for measuring your own graph. They are a regression guard and a quick way to understand the current storage profile.
+
+## Comparative Benchmark
+
+`npm run benchmark:compare` puts GraphVault beside two deliberately different baselines:
+
+- `json-file/projection`: a flat JSON projection that is fast but loses object identity, classes, cycles, `Map`, `Set`, transactional commits, WAL recovery, indexes, migrations, and admin tooling.
+- `sqlite/normalized`: a normalized row model in SQLite with an index on the measured filter, representing the shape you would hand-build in a relational schema.
+- `graphvault/maximum`: the same case-management data stored as a connected object graph with `writeProfile: "maximum"` and configured persistent indexes.
+
+Latest local smoke run on macOS/Apple Silicon with Node.js `v26.1.0`:
+
+| target | cases | store | indexed query | reload/open | storage size |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| graphvault/maximum | 50 | 38.5 ms | 3.1 ms | 19.5 ms | 0.19 MiB |
+| json-file/projection | 50 | 0.2 ms | 0.0 ms | 0.1 ms | 0.01 MiB |
+| sqlite/normalized | 50 | 9.6 ms | 0.2 ms | 0.1 ms | 0.03 MiB |
+
+The comparison is intentionally honest: flat JSON and normalized SQLite should win simple flat writes and simple indexed filters. GraphVault is competing on a different value proposition: preserving and operating a live object graph with explicit commits, references, graph queries, verification, and operational tooling. Use this benchmark to understand the cost of those guarantees, not to pretend every workload is a GraphVault workload.
