@@ -9,7 +9,7 @@ import type {
   VerificationResult,
 } from "../core/types.js";
 
-/** Describes the public BuildStorageHealthReportInput contract. */
+/** Inputs required to assemble a health report from operations, safety, and optional verification data. */
 export interface BuildStorageHealthReportInput {
   options: StorageHealthOptions;
   operations: StorageOperationsStatus;

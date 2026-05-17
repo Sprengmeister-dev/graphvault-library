@@ -1,7 +1,7 @@
 import { StorageLockError } from "../../core/errors.js";
 import type { StorageLockOptions, StorageTarget, StorageTargetLock } from "../../core/types.js";
 
-/** Describes the public SqlStorageTargetOptions contract. */
+/** Table, dialect, client, and lock settings for the SQL storage target. */
 export interface SqlStorageTargetOptions {
   client: SqlStorageClient;
   tableName?: string;
@@ -11,20 +11,21 @@ export interface SqlStorageTargetOptions {
 
 export type SqlStorageDialect = "sqlite" | "postgres" | "question";
 
-/** Describes the public SqlStorageClient contract. */
+/** Represents SQL Storage Client in the public GraphVault data model. */
 export interface SqlStorageClient {
-  /** Runs SqlStorageClient.execute. */
+  /** Executes one SQL statement with positional parameters and returns rows or affected-row metadata. */
   execute(sql: string, parameters?: readonly unknown[]): Promise<SqlQueryResult>;
+  /** Optionally wraps several statements in one SQL transaction supplied by the client implementation. */
   transaction?<T>(work: () => Promise<T>): Promise<T>;
 }
 
-/** Describes the public SqlQueryResult contract. */
+/** Result returned by SQL Query operations. */
 export interface SqlQueryResult {
   rows?: Array<Record<string, unknown>>;
   rowCount?: number;
 }
 
-/** Provides the public SqlStorageTarget API. */
+/** Storage target implementation backed by a SQL table containing GraphVault file records. */
 export class SqlStorageTarget implements StorageTarget {
   private readonly client: SqlStorageClient;
   private readonly tableName: string;
@@ -32,7 +33,7 @@ export class SqlStorageTarget implements StorageTarget {
   private readonly dialect: SqlStorageDialect;
   private schemaReady = false;
 
-  /** Creates a SqlStorageTarget instance. */
+  /** Creates a SQL Storage Target backed by the supplied target configuration. */
   constructor(options: SqlStorageTargetOptions) {
     this.client = options.client;
     this.tableName = quoteSqlIdentifier(options.tableName ?? "graphvault_objects");
@@ -40,12 +41,12 @@ export class SqlStorageTarget implements StorageTarget {
     this.dialect = options.dialect ?? "question";
   }
 
-  /** Runs SqlStorageTarget.ensureDirectory asynchronously. */
+  /** Creates the directory namespace required by the storage layout when the backend needs one. */
   async ensureDirectory(path: string): Promise<void> {
     await this.writeBufferAtomic(`${path}/.dir`, Buffer.alloc(0));
   }
 
-  /** Runs SqlStorageTarget.exists asynchronously. */
+  /** Returns whether a storage path currently exists and can be read by this target. */
   async exists(path: string): Promise<boolean> {
     await this.ensureSchema();
     const key = normalize(path);
@@ -61,7 +62,7 @@ export class SqlStorageTarget implements StorageTarget {
     return (nested.rows?.length ?? 0) > 0;
   }
 
-  /** Runs SqlStorageTarget.list asynchronously. */
+  /** Lists direct child names below a storage path. */
   async list(path: string): Promise<string[]> {
     await this.ensureSchema();
     const prefix = `${normalize(path)}/`;
@@ -80,12 +81,12 @@ export class SqlStorageTarget implements StorageTarget {
     return Array.from(names).sort();
   }
 
-  /** Runs SqlStorageTarget.readText asynchronously. */
+  /** Reads a storage object as UTF-8 text. */
   async readText(path: string): Promise<string> {
     return this.readBuffer(path).then((buffer) => buffer.toString("utf8"));
   }
 
-  /** Runs SqlStorageTarget.readBuffer asynchronously. */
+  /** Reads a storage object as bytes. */
   async readBuffer(path: string): Promise<Buffer> {
     await this.ensureSchema();
     const result = await this.client.execute(`SELECT body FROM ${this.tableName} WHERE path = ${this.parameter(1)} LIMIT 1`, [
@@ -98,12 +99,12 @@ export class SqlStorageTarget implements StorageTarget {
     return sqlBodyToBuffer(body);
   }
 
-  /** Runs SqlStorageTarget.writeTextAtomic asynchronously. */
+  /** Writes UTF-8 text so readers see either the previous complete value or the new complete value. */
   async writeTextAtomic(path: string, value: string): Promise<void> {
     await this.writeBufferAtomic(path, Buffer.from(value));
   }
 
-  /** Runs SqlStorageTarget.writeBufferAtomic asynchronously. */
+  /** Writes bytes so readers see either the previous complete value or the new complete value. */
   async writeBufferAtomic(path: string, value: Buffer): Promise<void> {
     await this.ensureSchema();
     await this.withTransaction(async () => {
@@ -115,7 +116,7 @@ export class SqlStorageTarget implements StorageTarget {
     });
   }
 
-  /** Runs SqlStorageTarget.appendText asynchronously. */
+  /** Appends UTF-8 text to an existing storage object, creating it when the backend supports that behavior. */
   async appendText(path: string, value: string): Promise<void> {
     let current: Buffer = Buffer.alloc(0);
     if (await this.exists(path)) {
@@ -124,7 +125,7 @@ export class SqlStorageTarget implements StorageTarget {
     await this.writeBufferAtomic(path, Buffer.concat([current, Buffer.from(value)]));
   }
 
-  /** Runs SqlStorageTarget.remove asynchronously. */
+  /** Deletes a storage path, optionally removing all nested children for directory-like backends. */
   async remove(path: string, options: { recursive?: boolean } = {}): Promise<void> {
     await this.ensureSchema();
     await this.client.execute(`DELETE FROM ${this.tableName} WHERE path = ${this.parameter(1)}`, [normalize(path)]);
@@ -134,7 +135,7 @@ export class SqlStorageTarget implements StorageTarget {
     }
   }
 
-  /** Runs SqlStorageTarget.acquireLock asynchronously. */
+  /** Acquires an exclusive storage lock and returns a fencing token that can be revalidated before publishing. */
   async acquireLock(path: string, timeoutMs: number, options: StorageLockOptions = {}): Promise<StorageTargetLock> {
     await this.ensureSchema();
     const key = normalize(path);

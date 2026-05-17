@@ -1,6 +1,6 @@
 import type { StorageIndexStatistics } from "../core/types.js";
 
-/** Runs the public stableIndexValueKey helper. */
+/** Normalizes an arbitrary value into a deterministic key for persisted index lookups. */
 export function stableIndexValueKey(value: unknown): string {
   if (typeof value === "bigint") return `bigint:${value.toString()}`;
   if (value instanceof Date) return `date:${value.toISOString()}`;
@@ -8,24 +8,24 @@ export function stableIndexValueKey(value: unknown): string {
   return `${typeof value}:${String(value)}`;
 }
 
-/** Runs the public tupleIndexKey helper. */
+/** Builds a deterministic composite key from multiple indexed values. */
 export function tupleIndexKey(values: readonly unknown[]): string {
   return values.map(stableIndexValueKey).join("\u0001");
 }
 
-/** Runs the public normalizeIndexText helper. */
+/** Normalizes text for case-insensitive text and full-text index terms. */
 export function normalizeIndexText(value: unknown, caseSensitive = false): string {
   const text = String(value ?? "").normalize("NFKC");
   return caseSensitive ? text : text.toLocaleLowerCase();
 }
 
-/** Runs the public tokenizeIndexText helper. */
+/** Tokenizes normalized text for full-text indexing. */
 export function tokenizeIndexText(value: unknown, caseSensitive = false): string[] {
   const normalized = normalizeIndexText(value, caseSensitive);
   return Array.from(new Set(normalized.match(/[\p{L}\p{N}_]+/gu) ?? []));
 }
 
-/** Runs the public textIndexTerms helper. */
+/** Creates n-gram terms for a stored text value according to text-index options. */
 export function textIndexTerms(value: unknown, options: { caseSensitive?: boolean; minGram?: number; maxGram?: number }): string[] {
   const text = normalizeIndexText(value, options.caseSensitive);
   if (!text) return [];
@@ -48,7 +48,7 @@ export function textIndexTerms(value: unknown, options: { caseSensitive?: boolea
   return Array.from(terms);
 }
 
-/** Runs the public textLookupTerms helper. */
+/** Creates lookup terms for text predicates so queries use the same normalization as indexing. */
 export function textLookupTerms(operator: "CONTAINS" | "STARTS WITH" | "ENDS WITH", value: unknown, options: { caseSensitive?: boolean; minGram?: number; maxGram?: number }): string[] {
   const text = normalizeIndexText(value, options.caseSensitive);
   if (!text) return [];
@@ -65,7 +65,7 @@ export function textLookupTerms(operator: "CONTAINS" | "STARTS WITH" | "ENDS WIT
   return terms;
 }
 
-/** Runs the public indexStatistics helper. */
+/** Calculates bucket counts, selectivity, and skew metrics for one index map. */
 export function indexStatistics(buckets: Iterable<readonly unknown[]>): StorageIndexStatistics {
   let keys = 0;
   let entries = 0;

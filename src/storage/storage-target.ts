@@ -21,26 +21,26 @@ const ENCRYPTED_STORAGE_MAGIC = Buffer.from("GVENC1");
 const ENCRYPTED_STORAGE_IV_BYTES = 12;
 const ENCRYPTED_STORAGE_TAG_BYTES = 16;
 
-/** Describes the public LocalFilesystemTargetOptions contract. */
+/** Durability options for local filesystem writes. */
 export interface LocalFilesystemTargetOptions {
   syncWrites?: boolean;
 }
 
-/** Provides the public LocalFilesystemTarget API. */
+/** Storage target implementation backed by the local filesystem. */
 export class LocalFilesystemTarget implements StorageTarget {
   private readonly syncWrites: boolean;
 
-  /** Creates a LocalFilesystemTarget instance. */
+  /** Creates a Local Filesystem Target backed by the supplied target configuration. */
   constructor(options: LocalFilesystemTargetOptions = {}) {
     this.syncWrites = options.syncWrites ?? true;
   }
 
-  /** Runs LocalFilesystemTarget.ensureDirectory asynchronously. */
+  /** Creates the directory namespace required by the storage layout when the backend needs one. */
   async ensureDirectory(path: string): Promise<void> {
     await mkdir(path, { recursive: true });
   }
 
-  /** Runs LocalFilesystemTarget.exists asynchronously. */
+  /** Returns whether a storage path currently exists and can be read by this target. */
   async exists(path: string): Promise<boolean> {
     try {
       await access(path, constants.R_OK);
@@ -50,27 +50,27 @@ export class LocalFilesystemTarget implements StorageTarget {
     }
   }
 
-  /** Runs LocalFilesystemTarget.list asynchronously. */
+  /** Lists direct child names below a storage path. */
   async list(path: string): Promise<string[]> {
     return readdir(path);
   }
 
-  /** Runs LocalFilesystemTarget.readText asynchronously. */
+  /** Reads a storage object as UTF-8 text. */
   async readText(path: string): Promise<string> {
     return readFile(path, "utf8");
   }
 
-  /** Runs LocalFilesystemTarget.readBuffer asynchronously. */
+  /** Reads a storage object as bytes. */
   async readBuffer(path: string): Promise<Buffer> {
     return readFile(path);
   }
 
-  /** Runs LocalFilesystemTarget.writeTextAtomic asynchronously. */
+  /** Writes UTF-8 text so readers see either the previous complete value or the new complete value. */
   async writeTextAtomic(path: string, value: string): Promise<void> {
     await this.writeBufferAtomic(path, Buffer.from(value));
   }
 
-  /** Runs LocalFilesystemTarget.writeBufferAtomic asynchronously. */
+  /** Writes bytes so readers see either the previous complete value or the new complete value. */
   async writeBufferAtomic(path: string, value: Buffer): Promise<void> {
     await mkdir(dirname(path), { recursive: true });
     const tempPath = `${path}.${process.pid}.${Date.now()}.tmp`;
@@ -86,18 +86,18 @@ export class LocalFilesystemTarget implements StorageTarget {
     await rename(tempPath, path);
   }
 
-  /** Runs LocalFilesystemTarget.appendText asynchronously. */
+  /** Appends UTF-8 text to an existing storage object, creating it when the backend supports that behavior. */
   async appendText(path: string, value: string): Promise<void> {
     await mkdir(dirname(path), { recursive: true });
     await writeFile(path, value, { flag: "a" });
   }
 
-  /** Runs LocalFilesystemTarget.remove asynchronously. */
+  /** Deletes a storage path, optionally removing all nested children for directory-like backends. */
   async remove(path: string, options: { recursive?: boolean } = {}): Promise<void> {
     await rm(path, { force: true, recursive: options.recursive ?? false });
   }
 
-  /** Runs LocalFilesystemTarget.acquireLock asynchronously. */
+  /** Acquires an exclusive storage lock and returns a fencing token that can be revalidated before publishing. */
   async acquireLock(path: string, timeoutMs: number, options: StorageLockOptions = {}): Promise<StorageTargetLock> {
     const deadline = Date.now() + timeoutMs;
     while (true) {
@@ -150,25 +150,25 @@ interface MemoryLockRecord {
   fencingToken: number;
 }
 
-/** Provides the public MemoryStorageTarget API. */
+/** In-memory storage target for tests, demos, and non-durable ephemeral stores. */
 export class MemoryStorageTarget implements StorageTarget {
   private readonly files = new Map<string, Buffer>();
   private readonly directories = new Set<string>();
   private readonly locks = new Map<string, MemoryLockRecord>();
   private readonly fencingTokens = new Map<string, number>();
 
-  /** Runs MemoryStorageTarget.ensureDirectory asynchronously. */
+  /** Creates the directory namespace required by the storage layout when the backend needs one. */
   async ensureDirectory(path: string): Promise<void> {
     this.directories.add(normalize(path));
   }
 
-  /** Runs MemoryStorageTarget.exists asynchronously. */
+  /** Returns whether a storage path currently exists and can be read by this target. */
   async exists(path: string): Promise<boolean> {
     const key = normalize(path);
     return this.files.has(key) || this.directories.has(key);
   }
 
-  /** Runs MemoryStorageTarget.list asynchronously. */
+  /** Lists direct child names below a storage path. */
   async list(path: string): Promise<string[]> {
     const directory = normalize(path);
     const prefix = directory.endsWith("/") ? directory : `${directory}/`;
@@ -194,12 +194,12 @@ export class MemoryStorageTarget implements StorageTarget {
     return Array.from(names).sort();
   }
 
-  /** Runs MemoryStorageTarget.readText asynchronously. */
+  /** Reads a storage object as UTF-8 text. */
   async readText(path: string): Promise<string> {
     return this.readBuffer(path).then((buffer) => buffer.toString("utf8"));
   }
 
-  /** Runs MemoryStorageTarget.readBuffer asynchronously. */
+  /** Reads a storage object as bytes. */
   async readBuffer(path: string): Promise<Buffer> {
     const value = this.files.get(normalize(path));
     if (!value) {
@@ -208,18 +208,18 @@ export class MemoryStorageTarget implements StorageTarget {
     return Buffer.from(value);
   }
 
-  /** Runs MemoryStorageTarget.writeTextAtomic asynchronously. */
+  /** Writes UTF-8 text so readers see either the previous complete value or the new complete value. */
   async writeTextAtomic(path: string, value: string): Promise<void> {
     await this.writeBufferAtomic(path, Buffer.from(value));
   }
 
-  /** Runs MemoryStorageTarget.writeBufferAtomic asynchronously. */
+  /** Writes bytes so readers see either the previous complete value or the new complete value. */
   async writeBufferAtomic(path: string, value: Buffer): Promise<void> {
     this.ensureParent(path);
     this.files.set(normalize(path), Buffer.from(value));
   }
 
-  /** Runs MemoryStorageTarget.appendText asynchronously. */
+  /** Appends UTF-8 text to an existing storage object, creating it when the backend supports that behavior. */
   async appendText(path: string, value: string): Promise<void> {
     this.ensureParent(path);
     const key = normalize(path);
@@ -227,7 +227,7 @@ export class MemoryStorageTarget implements StorageTarget {
     this.files.set(key, Buffer.concat([current, Buffer.from(value)]));
   }
 
-  /** Runs MemoryStorageTarget.remove asynchronously. */
+  /** Deletes a storage path, optionally removing all nested children for directory-like backends. */
   async remove(path: string, options: { recursive?: boolean } = {}): Promise<void> {
     const key = normalize(path);
     this.files.delete(key);
@@ -249,7 +249,7 @@ export class MemoryStorageTarget implements StorageTarget {
     }
   }
 
-  /** Runs MemoryStorageTarget.acquireLock asynchronously. */
+  /** Acquires an exclusive storage lock and returns a fencing token that can be revalidated before publishing. */
   async acquireLock(path: string, timeoutMs: number, options: StorageLockOptions = {}): Promise<StorageTargetLock> {
     const key = normalize(path);
     const deadline = Date.now() + timeoutMs;
@@ -287,144 +287,144 @@ export class MemoryStorageTarget implements StorageTarget {
   }
 }
 
-/** Describes the public EncryptedStorageTargetOptions contract. */
+/** Configuration for wrapping another storage target with AES-GCM encryption. */
 export interface EncryptedStorageTargetOptions {
   target: StorageTarget;
   key: string | Buffer;
 }
 
-/** Provides the public EncryptedStorageTarget API. */
+/** Storage target wrapper that encrypts payload bytes before delegating to another target. */
 export class EncryptedStorageTarget implements StorageTarget {
   private readonly target: StorageTarget;
   private readonly key: Buffer;
 
-  /** Creates a EncryptedStorageTarget instance. */
+  /** Creates a Encrypted Storage Target backed by the supplied target configuration. */
   constructor(options: EncryptedStorageTargetOptions) {
     this.target = options.target;
     this.key = normalizeEncryptionKey(options.key);
   }
 
-  /** Runs EncryptedStorageTarget.ensureDirectory asynchronously. */
+  /** Creates the directory namespace required by the storage layout when the backend needs one. */
   async ensureDirectory(path: string): Promise<void> {
     await this.target.ensureDirectory(path);
   }
 
-  /** Runs EncryptedStorageTarget.exists asynchronously. */
+  /** Returns whether a storage path currently exists and can be read by this target. */
   async exists(path: string): Promise<boolean> {
     return this.target.exists(path);
   }
 
-  /** Runs EncryptedStorageTarget.list asynchronously. */
+  /** Lists direct child names below a storage path. */
   async list(path: string): Promise<string[]> {
     return this.target.list(path);
   }
 
-  /** Runs EncryptedStorageTarget.readText asynchronously. */
+  /** Reads a storage object as UTF-8 text. */
   async readText(path: string): Promise<string> {
     return (await this.readBuffer(path)).toString("utf8");
   }
 
-  /** Runs EncryptedStorageTarget.readBuffer asynchronously. */
+  /** Reads a storage object as bytes. */
   async readBuffer(path: string): Promise<Buffer> {
     return decryptStorageBuffer(await this.target.readBuffer(path), this.key);
   }
 
-  /** Runs EncryptedStorageTarget.writeTextAtomic asynchronously. */
+  /** Writes UTF-8 text so readers see either the previous complete value or the new complete value. */
   async writeTextAtomic(path: string, value: string): Promise<void> {
     await this.writeBufferAtomic(path, Buffer.from(value));
   }
 
-  /** Runs EncryptedStorageTarget.writeBufferAtomic asynchronously. */
+  /** Writes bytes so readers see either the previous complete value or the new complete value. */
   async writeBufferAtomic(path: string, value: Buffer): Promise<void> {
     await this.target.writeBufferAtomic(path, encryptStorageBuffer(value, this.key));
   }
 
-  /** Runs EncryptedStorageTarget.appendText asynchronously. */
+  /** Appends UTF-8 text to an existing storage object, creating it when the backend supports that behavior. */
   async appendText(path: string, value: string): Promise<void> {
     const current = (await this.exists(path)) ? await this.readBuffer(path) : Buffer.alloc(0);
     await this.writeBufferAtomic(path, Buffer.concat([current, Buffer.from(value)]));
   }
 
-  /** Runs EncryptedStorageTarget.remove asynchronously. */
+  /** Deletes a storage path, optionally removing all nested children for directory-like backends. */
   async remove(path: string, options: { recursive?: boolean } = {}): Promise<void> {
     await this.target.remove(path, options);
   }
 
-  /** Runs EncryptedStorageTarget.acquireLock asynchronously. */
+  /** Acquires an exclusive storage lock and returns a fencing token that can be revalidated before publishing. */
   async acquireLock(path: string, timeoutMs: number, options: StorageLockOptions = {}): Promise<StorageTargetLock> {
     return this.target.acquireLock(path, timeoutMs, options);
   }
 }
 
-/** Describes the public HttpStorageTargetOptions contract. */
+/** Endpoint, headers, and fetch implementation for the HTTP storage target. */
 export interface HttpStorageTargetOptions {
   baseUrl: string;
   headers?: Record<string, string>;
   fetch?: typeof fetch;
 }
 
-/** Provides the public HttpStorageTarget API. */
+/** Storage target implementation that maps GraphVault file operations onto an HTTP storage service. */
 export class HttpStorageTarget implements StorageTarget {
   private readonly baseUrl: string;
   private readonly headers: Record<string, string>;
   private readonly fetchImpl: typeof fetch;
 
-  /** Creates a HttpStorageTarget instance. */
+  /** Creates a Http Storage Target backed by the supplied target configuration. */
   constructor(options: HttpStorageTargetOptions) {
     this.baseUrl = options.baseUrl.replace(/\/+$/, "");
     this.headers = options.headers ?? {};
     this.fetchImpl = options.fetch ?? fetch;
   }
 
-  /** Runs HttpStorageTarget.ensureDirectory asynchronously. */
+  /** Creates the directory namespace required by the storage layout when the backend needs one. */
   async ensureDirectory(path: string): Promise<void> {
     await this.request("PUT", path, Buffer.alloc(0), { directory: "1" });
   }
 
-  /** Runs HttpStorageTarget.exists asynchronously. */
+  /** Returns whether a storage path currently exists and can be read by this target. */
   async exists(path: string): Promise<boolean> {
     const response = await this.rawRequest("HEAD", path);
     return response.status >= 200 && response.status < 300;
   }
 
-  /** Runs HttpStorageTarget.list asynchronously. */
+  /** Lists direct child names below a storage path. */
   async list(path: string): Promise<string[]> {
     const response = await this.request("GET", path, undefined, { list: "1" });
     return (await response.json()) as string[];
   }
 
-  /** Runs HttpStorageTarget.readText asynchronously. */
+  /** Reads a storage object as UTF-8 text. */
   async readText(path: string): Promise<string> {
     return this.readBuffer(path).then((buffer) => buffer.toString("utf8"));
   }
 
-  /** Runs HttpStorageTarget.readBuffer asynchronously. */
+  /** Reads a storage object as bytes. */
   async readBuffer(path: string): Promise<Buffer> {
     const response = await this.request("GET", path);
     return Buffer.from(await response.arrayBuffer());
   }
 
-  /** Runs HttpStorageTarget.writeTextAtomic asynchronously. */
+  /** Writes UTF-8 text so readers see either the previous complete value or the new complete value. */
   async writeTextAtomic(path: string, value: string): Promise<void> {
     await this.writeBufferAtomic(path, Buffer.from(value));
   }
 
-  /** Runs HttpStorageTarget.writeBufferAtomic asynchronously. */
+  /** Writes bytes so readers see either the previous complete value or the new complete value. */
   async writeBufferAtomic(path: string, value: Buffer): Promise<void> {
     await this.request("PUT", path, value);
   }
 
-  /** Runs HttpStorageTarget.appendText asynchronously. */
+  /** Appends UTF-8 text to an existing storage object, creating it when the backend supports that behavior. */
   async appendText(path: string, value: string): Promise<void> {
     await this.request("POST", path, Buffer.from(value), { append: "1" });
   }
 
-  /** Runs HttpStorageTarget.remove asynchronously. */
+  /** Deletes a storage path, optionally removing all nested children for directory-like backends. */
   async remove(path: string, options: { recursive?: boolean } = {}): Promise<void> {
     await this.request("DELETE", path, undefined, options.recursive ? { recursive: "1" } : undefined);
   }
 
-  /** Runs HttpStorageTarget.acquireLock asynchronously. */
+  /** Acquires an exclusive storage lock and returns a fencing token that can be revalidated before publishing. */
   async acquireLock(path: string, timeoutMs: number, options: StorageLockOptions = {}): Promise<StorageTargetLock> {
     const deadline = Date.now() + timeoutMs;
     while (true) {

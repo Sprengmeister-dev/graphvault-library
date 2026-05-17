@@ -60,7 +60,7 @@ import type {
 import type { GvqlExecutionOptions, GvqlResult } from "../gvql/gvql-types.js";
 import type { GvqlGraphIndex } from "../gvql/gvql-types.js";
 
-/** Provides the public StorageManager API. */
+/** Coordinates a GraphVault store, including startup recovery, transactions, GVQL, indexes, backups, and maintenance. */
 export class StorageManager<TRoot = unknown> {
   private readonly options: Required<Pick<StorageManagerOptions<TRoot>, "lockTimeoutMs" | "housekeepingIntervalMs">> &
     StorageManagerOptions<TRoot>;
@@ -86,7 +86,7 @@ export class StorageManager<TRoot = unknown> {
   private schemaVersion = 0;
   private storageIndexRecord: StorageIndexRecord | undefined;
 
-  /** Creates a StorageManager instance. */
+  /** Creates a manager for one store; call start() before reading or writing the root. */
   constructor(options: StorageManagerOptions<TRoot>, serializer = new GraphSerializer(options.types ?? [])) {
     this.options = { lockTimeoutMs: 5_000, housekeepingIntervalMs: 0, ...options };
     this.writeOptions = resolveStorageWriteOptions(this.options);
@@ -114,7 +114,7 @@ export class StorageManager<TRoot = unknown> {
     });
   }
 
-  /** Returns the current root value. */
+  /** Returns the loaded application root and throws when the manager has not been started. */
   get root(): TRoot {
     if (!this.started) {
       throw new StorageNotStartedError("Storage manager has not been started.");
@@ -122,7 +122,7 @@ export class StorageManager<TRoot = unknown> {
     return this.rootValue as TRoot;
   }
 
-  /** Runs StorageManager.start asynchronously. */
+  /** Initializes storage directories, recovers committed WAL entries, loads or creates the root, and starts housekeeping. */
   async start(): Promise<this> {
     if (this.started) {
       return this;
@@ -174,7 +174,7 @@ export class StorageManager<TRoot = unknown> {
     return this;
   }
 
-  /** Runs StorageManager.shutdown asynchronously. */
+  /** Stops housekeeping and releases any startup lock held by this manager. */
   async shutdown(): Promise<void> {
     this.stopHousekeeping();
     if (this.lockHandle) {
@@ -184,12 +184,12 @@ export class StorageManager<TRoot = unknown> {
     this.started = false;
   }
 
-  /** Runs StorageManager.onApplicationShutdown asynchronously. */
+  /** NestJS lifecycle hook that releases GraphVault resources during application shutdown. */
   async onApplicationShutdown(): Promise<void> {
     await this.shutdown();
   }
 
-  /** Runs StorageManager.storeRoot asynchronously. */
+  /** Commits the full reachable root graph as the next transaction. */
   async storeRoot(): Promise<StoreMetadata> {
     this.assertStarted();
     this.assertWritable();
@@ -197,7 +197,7 @@ export class StorageManager<TRoot = unknown> {
     return this.mutex.runExclusive(() => this.writeWithConflictCheck((lock) => this.storeLocked("eager", [this.root], lock)));
   }
 
-  /** Runs StorageManager.store asynchronously. */
+  /** Commits one modified object, using a full root write when the root itself is passed. */
   async store(_modifiedObject: unknown): Promise<StoreMetadata> {
     this.assertStarted();
     this.assertWritable();
@@ -206,11 +206,11 @@ export class StorageManager<TRoot = unknown> {
     return this.mutex.runExclusive(() => this.writeWithConflictCheck((lock) => this.storeLocked(mode, [_modifiedObject], lock)));
   }
 
-  /** Runs StorageManager.storeAll asynchronously. */
+  /** Commits multiple modified objects as one transaction. */
   async storeAll(instances: Iterable<unknown>): Promise<StoreMetadata>;
-  /** Runs StorageManager.storeAll asynchronously. */
+  /** Commits multiple modified objects as one transaction. */
   async storeAll(...instances: unknown[]): Promise<StoreMetadata>;
-  /** Runs StorageManager.storeAll asynchronously. */
+  /** Commits multiple modified objects as one transaction. */
   async storeAll(firstOrInstances: Iterable<unknown> | unknown, ...rest: unknown[]): Promise<StoreMetadata> {
     this.assertStarted();
     this.assertWritable();
@@ -219,22 +219,22 @@ export class StorageManager<TRoot = unknown> {
     return this.mutex.runExclusive(() => this.writeWithConflictCheck((lock) => this.storeLocked("standard", targets, lock)));
   }
 
-  /** Runs StorageManager.createStorer. */
+  /** Creates a storer for batching explicit objects before one standard commit. */
   createStorer(): Storer {
     return new Storer(this, "standard");
   }
 
-  /** Runs StorageManager.createLazyStorer. */
+  /** Creates a storer for explicitly persisting lazy references and lazy collection segments. */
   createLazyStorer(): Storer {
     return new Storer(this, "lazy");
   }
 
-  /** Runs StorageManager.createEagerStorer. */
+  /** Creates a storer that rewrites the full reachable graph for maximum consistency after broad changes. */
   createEagerStorer(): Storer {
     return new Storer(this, "eager");
   }
 
-  /** Runs StorageManager.commitStorer asynchronously. */
+  /** Commits targets collected by a Storer using the storer's selected write mode. */
   async commitStorer(mode: StoreMode, targets: readonly unknown[]): Promise<StoreMetadata> {
     this.assertStarted();
     this.assertWritable();
@@ -242,6 +242,7 @@ export class StorageManager<TRoot = unknown> {
     return this.mutex.runExclusive(() => this.writeWithConflictCheck((lock) => this.storeLocked(mode, targets, lock)));
   }
 
+  /** Mutates the loaded root, rolls back in-memory changes if the callback fails, and commits once on success. */
   async update<T>(mutator: (root: TRoot) => T | Promise<T>, storeTarget?: (root: TRoot) => unknown): Promise<T> {
     this.assertStarted();
     this.assertWritable();
@@ -265,7 +266,7 @@ export class StorageManager<TRoot = unknown> {
     });
   }
 
-  /** Runs StorageManager.transaction asynchronously. */
+  /** Runs a callback against the root and commits its changes atomically with pessimistic or optimistic locking. */
   async transaction<T>(
     work: (context: GraphVaultTransactionContext<TRoot>) => T | Promise<T>,
     options: GraphVaultTransactionOptions<TRoot> = {},
@@ -276,7 +277,7 @@ export class StorageManager<TRoot = unknown> {
     return mode === "optimistic" ? this.optimisticTransaction(work, options) : this.pessimisticTransaction(work, options);
   }
 
-  /** Runs StorageManager.createLazyRef asynchronously. */
+  /** Creates, binds, and persists a LazyRef under a stable key. */
   async createLazyRef<T>(key: string, initialValue: T): Promise<LazyRef<T>> {
     this.assertStarted();
     this.assertWritable();
@@ -287,13 +288,13 @@ export class StorageManager<TRoot = unknown> {
     return ref;
   }
 
-  /** Runs StorageManager.loadLazy asynchronously. */
+  /** Loads and deserializes a lazy value by key from the lazy storage area. */
   async loadLazy<T>(key: string): Promise<T> {
     const content = await this.target.readText(join(this.layout.lazyDirectory, `${encodeURIComponent(key)}.json`));
     return this.serializer.deserialize<T>(JSON.parse(content) as SerializedEnvelope);
   }
 
-  /** Runs StorageManager.storeLazy asynchronously. */
+  /** Serializes and writes a lazy value under its stable key. */
   async storeLazy<T>(key: string, value: T): Promise<void> {
     this.assertStarted();
     this.assertWritable();
@@ -301,7 +302,7 @@ export class StorageManager<TRoot = unknown> {
     await this.writer.writeJson(join(this.layout.lazyDirectory, `${encodeURIComponent(key)}.json`), this.serializer.serialize(value));
   }
 
-  /** Runs StorageManager.compact asynchronously. */
+  /** Removes older snapshots while keeping the current pointer and the requested number of recent snapshots. */
   async compact(keepLatest = 2): Promise<CompactionResult> {
     this.assertStarted();
     this.assertWritable();
@@ -324,14 +325,14 @@ export class StorageManager<TRoot = unknown> {
     return { kept: snapshots.length - removed, removed };
   }
 
-  /** Runs StorageManager.collectGarbage asynchronously. */
+  /** Removes persisted object, binary, and lazy records that are no longer reachable from the manifest. */
   async collectGarbage(): Promise<GarbageCollectionResult> {
     this.assertStarted();
     this.assertWritable();
     return this.mutex.runExclusive(() => this.collectGarbageLocked());
   }
 
-  /** Runs StorageManager.backup asynchronously. */
+  /** Copies the store to another directory or target, optionally holding a write lock for a consistent backup. */
   async backup(destination: { storageDirectory: string; storageTarget?: StorageTarget; consistent?: boolean }): Promise<BackupResult> {
     this.assertStarted();
     this.assertOutsideTransaction("backup()");
@@ -362,7 +363,7 @@ export class StorageManager<TRoot = unknown> {
     );
   }
 
-  /** Runs StorageManager.verify asynchronously. */
+  /** Checks manifests, object records, transaction hashes, WAL state, lazy files, and optional indexes. */
   async verify(): Promise<VerificationResult> {
     return verifyStorage({
       target: this.target,
@@ -377,7 +378,7 @@ export class StorageManager<TRoot = unknown> {
     });
   }
 
-  /** Runs StorageManager.maintain asynchronously. */
+  /** Runs garbage collection, snapshot compaction, and optional verification as one maintenance operation. */
   async maintain(options: MaintenanceOptions = {}): Promise<MaintenanceResult> {
     const garbageCollection = await this.collectGarbage();
     const compaction = await this.compact(options.keepSnapshots ?? 2);
@@ -387,32 +388,32 @@ export class StorageManager<TRoot = unknown> {
     return { garbageCollection, compaction, verification: await this.verify() };
   }
 
-  /** Runs StorageManager.issueFullGarbageCollection asynchronously. */
+  /** Runs garbage collection through a compatibility-style maintenance alias. */
   async issueFullGarbageCollection(): Promise<GarbageCollectionResult> {
     return this.collectGarbage();
   }
 
-  /** Runs StorageManager.issueGarbageCollection asynchronously. */
+  /** Runs garbage collection through a compatibility-style maintenance alias. */
   async issueGarbageCollection(_timeBudgetMs?: number): Promise<GarbageCollectionResult> {
     return this.collectGarbage();
   }
 
-  /** Runs StorageManager.issueFullFileCheck asynchronously. */
+  /** Runs full verification through a compatibility-style maintenance alias. */
   async issueFullFileCheck(): Promise<VerificationResult> {
     return this.verify();
   }
 
-  /** Runs StorageManager.issueFileCheck asynchronously. */
+  /** Runs verification through a compatibility-style maintenance alias. */
   async issueFileCheck(_timeBudgetMs?: number): Promise<VerificationResult> {
     return this.verify();
   }
 
-  /** Runs StorageManager.issueFullMaintenance asynchronously. */
+  /** Runs garbage collection, aggressive compaction, and optional verification. */
   async issueFullMaintenance(options: MaintenanceOptions = {}): Promise<MaintenanceResult> {
     return this.maintain({ keepSnapshots: 1, ...options });
   }
 
-  /** Runs StorageManager.gvql asynchronously. */
+  /** Executes a GVQL query or mutation against the current root, committing mutations unless dryRun is enabled. */
   async gvql(query: string, options: GvqlExecutionOptions = {}): Promise<GvqlResult> {
     this.assertStarted();
     const statement = parseGvql(query);
@@ -461,16 +462,16 @@ export class StorageManager<TRoot = unknown> {
     });
   }
 
-  /** Runs StorageManager.previewGvql asynchronously. */
+  /** Executes GVQL in dry-run mode so updates return planned changes without committing them. */
   async previewGvql(query: string, options: Omit<GvqlExecutionOptions, "dryRun"> = {}): Promise<GvqlResult> {
     return this.gvql(query, { ...options, dryRun: true });
   }
 
-  /** Runs StorageManager.loadSubtree asynchronously. */
+  /** Loads a bounded serialized subgraph from the current store, optionally rooted at a specific object ID. */
   async loadSubtree(options?: SubtreeLoadOptions): Promise<SubtreeLoadResult>;
-  /** Runs StorageManager.loadSubtree asynchronously. */
+  /** Loads a bounded serialized subgraph from the current store, optionally rooted at a specific object ID. */
   async loadSubtree(rootObjectId: string, options?: SubtreeLoadOptions): Promise<SubtreeLoadResult>;
-  /** Runs StorageManager.loadSubtree asynchronously. */
+  /** Loads a bounded serialized subgraph from the current store, optionally rooted at a specific object ID. */
   async loadSubtree(rootObjectIdOrOptions: string | SubtreeLoadOptions = {}, options: SubtreeLoadOptions = {}): Promise<SubtreeLoadResult> {
     this.assertStarted();
     const subtreeOptions = typeof rootObjectIdOrOptions === "string" ? { ...options, rootObjectId: rootObjectIdOrOptions } : rootObjectIdOrOptions;
@@ -487,7 +488,7 @@ export class StorageManager<TRoot = unknown> {
     return collectStorageGarbage({ target: this.target, layout: this.layout, reader: this.reader });
   }
 
-  /** Runs StorageManager.status. */
+  /** Returns the in-memory manager status without performing storage verification. */
   status(): StorageStatus {
     return {
       started: this.started,
@@ -504,7 +505,7 @@ export class StorageManager<TRoot = unknown> {
     };
   }
 
-  /** Runs StorageManager.operations asynchronously. */
+  /** Returns low-level operational counters for WAL, manifests, transaction logs, locks, and object records. */
   async operations(): Promise<StorageOperationsStatus> {
     const manifest = await this.reader.readManifest();
     const latestTransaction = await this.reader.readLatestTransactionRecord();
@@ -535,7 +536,7 @@ export class StorageManager<TRoot = unknown> {
     };
   }
 
-  /** Runs StorageManager.safetyProfile asynchronously. */
+  /** Calculates a production-safety profile from current operations and write configuration. */
   async safetyProfile(): Promise<StorageSafetyProfile> {
     return assessStorageSafety({
       operations: await this.operations(),
@@ -548,7 +549,7 @@ export class StorageManager<TRoot = unknown> {
     });
   }
 
-  /** Runs StorageManager.health asynchronously. */
+  /** Builds an operational health report from safety settings and optional full storage verification. */
   async health(options: StorageHealthOptions = {}): Promise<StorageHealthReport> {
     return buildStorageHealthReport({
       options,
@@ -563,7 +564,7 @@ export class StorageManager<TRoot = unknown> {
     });
   }
 
-  /** Runs StorageManager.indexStatus asynchronously. */
+  /** Reports whether the persistent index is enabled, present, fresh, stale, or missing. */
   async indexStatus(): Promise<StorageIndexStatus> {
     this.assertStarted();
     const record = this.storageIndexRecord ?? await this.reader.readStorageIndex();
@@ -571,7 +572,7 @@ export class StorageManager<TRoot = unknown> {
     return storageIndexStatus({ options: this.indexOptions, record, transactionId: this.transactionId });
   }
 
-  /** Runs StorageManager.rebuildIndexes asynchronously. */
+  /** Rebuilds and persists all configured indexes from the currently loaded root graph. */
   async rebuildIndexes(): Promise<StorageIndexStatus> {
     this.assertStarted();
     this.assertWritable();
@@ -585,21 +586,21 @@ export class StorageManager<TRoot = unknown> {
     }));
   }
 
-  /** Runs StorageManager.verifyIndexes asynchronously. */
+  /** Compares the persisted index against a freshly built index for the current root graph. */
   async verifyIndexes(): Promise<StorageIndexVerificationResult> { this.assertStarted(); const envelope = this.serializer.serialize(this.rootValue);
     const expected = this.indexRecordForEnvelope(envelope, this.transactionId);
     const actual = this.storageIndexRecord ?? await this.reader.readStorageIndex();
     this.storageIndexRecord = actual;
     return verifyStorageIndexRecord({ expected, actual });
   }
-  /** Runs StorageManager.repairIndexes asynchronously. */
+  /** Rebuilds indexes to repair missing or stale persisted index data. */
   async repairIndexes(): Promise<StorageIndexStatus> { return this.rebuildIndexes(); }
-  /** Runs StorageManager.currentSchemaVersion. */
+  /** Returns the schema version currently loaded for this store. */
   currentSchemaVersion(): number {
     return this.schemaVersion;
   }
 
-  /** Runs StorageManager.migrationStatus. */
+  /** Returns pending schema migration steps between the current and requested target version. */
   migrationStatus(targetVersion = this.targetSchemaVersion()): StorageMigrationStatus {
     const migrations = this.sortedSchemaMigrations();
     return {
@@ -610,7 +611,7 @@ export class StorageManager<TRoot = unknown> {
     };
   }
 
-  /** Runs StorageManager.migrateTo asynchronously. */
+  /** Runs schema migrations up or down inside committed transactions until the target version is reached. */
   async migrateTo(targetVersion = this.targetSchemaVersion()): Promise<StorageMigrationResult> {
     this.assertStarted();
     this.assertWritable();
@@ -650,23 +651,23 @@ export class StorageManager<TRoot = unknown> {
     };
   }
 
-  /** Runs StorageManager.getRoot. */
+  /** Returns the active application root, throwing if the manager has not been started. */
   getRoot(): TRoot {
     return this.root;
   }
 
-  /** Runs StorageManager.setRoot. */
+  /** Replaces the in-memory root object and rebinds lazy references without committing immediately. */
   setRoot(root: TRoot): void {
     this.rootValue = root;
     this.bindLazyRefs(this.rootValue);
   }
 
-  /** Runs StorageManager.defaultRoot. */
+  /** Returns the active root object; kept for API compatibility with EmbeddedStorage-style access. */
   defaultRoot(): TRoot {
     return this.root;
   }
 
-  /** Runs StorageManager.customRoot. */
+  /** Returns the custom root object supplied in options, if one was configured. */
   customRoot(): TRoot | undefined {
     return this.options.customRoot;
   }

@@ -3,7 +3,7 @@ import type { GvqlBinding, GvqlBooleanExpression, GvqlGraphIndex, GvqlPathExpres
 
 export type GvqlPathReader = (index: GvqlGraphIndex, binding: GvqlBinding, expression: GvqlPathExpression) => unknown;
 
-/** Runs the public evaluateGvqlValueExpression helper. */
+/** Evaluates a GVQL value expression against one row binding. */
 export function evaluateGvqlValueExpression(
   index: GvqlGraphIndex,
   binding: GvqlBinding,
@@ -43,7 +43,7 @@ export function evaluateGvqlValueExpression(
   return isPathExpression(expression) ? readPath(index, binding, expression) : literalToJs(expression, parameters);
 }
 
-/** Runs the public evaluateGvqlWhereExpression helper. */
+/** Evaluates an optional GVQL WHERE predicate, treating a missing predicate as true. */
 export function evaluateGvqlWhereExpression(
   index: GvqlGraphIndex,
   binding: GvqlBinding,
@@ -54,7 +54,7 @@ export function evaluateGvqlWhereExpression(
   return evaluateGvqlBooleanExpression(expression, (predicate) => evaluatePredicate(index, binding, predicate, parameters, readPath));
 }
 
-/** Runs the public evaluateGvqlBooleanExpression helper. */
+/** Evaluates a GVQL boolean expression against one row binding. */
 export function evaluateGvqlBooleanExpression<TPredicate>(
   expression: GvqlBooleanExpression<TPredicate>,
   evaluate: (predicate: TPredicate) => boolean,

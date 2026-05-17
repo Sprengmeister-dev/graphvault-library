@@ -18,15 +18,15 @@ export type LoadedEnvelope =
   | { source: "snapshot"; envelope: SerializedEnvelope; transactionId: number; objectVersions: Map<string, number>; schemaVersion: number }
   | { source: "wal"; envelope: SerializedEnvelope; transactionId: number; objectVersions: Map<string, number>; schemaVersion: number };
 
-/** Provides the public StorageReader API. */
+/** Reads manifests, object records, WAL entries, indexes, and snapshots from a storage target. */
 export class StorageReader {
-  /** Creates a StorageReader instance. */
+  /** Creates a Storage Reader with the supplied configuration. */
   constructor(
     private readonly target: StorageTarget,
     private readonly layout: StorageLayout,
   ) {}
 
-  /** Runs StorageReader.loadExistingEnvelope asynchronously. */
+  /** Loads the newest recoverable envelope from WAL, manifest, or snapshot data. */
   async loadExistingEnvelope(options: { includeWal?: boolean } = {}): Promise<LoadedEnvelope | undefined> {
     const manifest = await this.readManifest();
     if (options.includeWal ?? true) {
@@ -87,13 +87,13 @@ export class StorageReader {
     return undefined;
   }
 
-  /** Runs StorageReader.readLatestTransactionRecord asynchronously. */
+  /** Reads the most recent transaction record from the transaction log. */
   async readLatestTransactionRecord(): Promise<TransactionRecord | undefined> {
     const records = await this.readTransactionRecords();
     return records.sort((a, b) => b.transactionId - a.transactionId)[0];
   }
 
-  /** Runs StorageReader.readTransactionRecords asynchronously. */
+  /** Reads all transaction records in transaction order. */
   async readTransactionRecords(): Promise<TransactionRecord[]> {
     const records: TransactionRecord[] = [];
     for (const file of await this.readDirectoryIfExists(this.layout.transactionsDirectory)) {
@@ -112,7 +112,7 @@ export class StorageReader {
     return records.sort((a, b) => a.transactionId - b.transactionId);
   }
 
-  /** Runs StorageReader.readCommittedWalRecords asynchronously. */
+  /** Reads committed WAL records that may need recovery or inspection. */
   async readCommittedWalRecords(): Promise<WalCommitRecord[]> {
     const records: WalCommitRecord[] = [];
     for (const file of await this.readDirectoryIfExists(this.layout.walDirectory)) {
@@ -131,7 +131,7 @@ export class StorageReader {
     return records.sort((a, b) => a.transactionId - b.transactionId);
   }
 
-  /** Runs StorageReader.readWalPrepareRecord asynchronously. */
+  /** Reads the prepared WAL payload for a transaction ID. */
   async readWalPrepareRecord(file: string): Promise<WalPrepareRecord | undefined> {
     try {
       const record = JSON.parse(await this.target.readText(join(this.layout.walDirectory, file))) as WalPrepareRecord;
@@ -144,7 +144,7 @@ export class StorageReader {
     return undefined;
   }
 
-  /** Runs StorageReader.readCurrentPointer asynchronously. */
+  /** Reads the CURRENT snapshot pointer, returning undefined when no store has been published. */
   async readCurrentPointer(): Promise<string | undefined> {
     try {
       if (!(await this.target.exists(this.layout.currentFile))) {
@@ -157,7 +157,7 @@ export class StorageReader {
     }
   }
 
-  /** Runs StorageReader.readManifest asynchronously. */
+  /** Reads the current manifest, returning undefined for an empty store. */
   async readManifest(): Promise<StorageManifest | undefined> {
     try {
       if (!(await this.target.exists(this.layout.manifestFile))) {
@@ -169,7 +169,7 @@ export class StorageReader {
     }
   }
 
-  /** Runs StorageReader.readParentIndex asynchronously. */
+  /** Reads the persisted reverse parent index when present. */
   async readParentIndex(): Promise<ParentIndexRecord | undefined> {
     try {
       if (!(await this.target.exists(this.layout.parentIndexFile))) {
@@ -181,7 +181,7 @@ export class StorageReader {
     }
   }
 
-  /** Runs StorageReader.readStorageIndex asynchronously. */
+  /** Reads the persisted storage-wide graph index when present. */
   async readStorageIndex(): Promise<StorageIndexRecord | undefined> {
     try {
       if (!(await this.target.exists(this.layout.indexFile))) {
@@ -194,7 +194,7 @@ export class StorageReader {
     }
   }
 
-  /** Runs StorageReader.envelopeFromManifest asynchronously. */
+  /** Reconstructs a serialized envelope from the object records referenced by a manifest. */
   async envelopeFromManifest(manifest: StorageManifest): Promise<SerializedEnvelope> {
     const nodes: SerializedEnvelope["nodes"] = {};
     const objectVersions = objectVersionsFromManifest(manifest);
@@ -211,7 +211,7 @@ export class StorageReader {
     };
   }
 
-  /** Runs StorageReader.readObjectRecord asynchronously. */
+  /** Reads one persisted object record by object ID and optional transaction version. */
   async readObjectRecord(objectId: string, transactionId?: number): Promise<ObjectRecord> {
     try {
       return decodeBinaryRecord<ObjectRecord>(await this.target.readBuffer(this.layout.binaryObjectPath(objectId, transactionId)));
@@ -227,7 +227,7 @@ export class StorageReader {
     }
   }
 
-  /** Runs StorageReader.readDirectoryIfExists asynchronously. */
+  /** Lists a directory if present and returns an empty list when it is absent. */
   async readDirectoryIfExists(path: string): Promise<string[]> {
     try {
       return await this.target.list(path);
@@ -237,7 +237,7 @@ export class StorageReader {
   }
 }
 
-/** Runs the public objectVersionsFromManifest helper. */
+/** Reads object-version counters from a manifest, defaulting absent versions to zero. */
 export function objectVersionsFromManifest(manifest: StorageManifest): Map<string, number> {
   const versions = new Map<string, number>();
   for (const objectId of manifest.objectIds) {
@@ -246,7 +246,7 @@ export function objectVersionsFromManifest(manifest: StorageManifest): Map<strin
   return versions;
 }
 
-/** Runs the public schemaVersionFromManifest helper. */
+/** Reads the schema version from a manifest, treating old or empty manifests as version zero. */
 export function schemaVersionFromManifest(manifest: StorageManifest): number {
   return manifest.schemaVersion ?? 0;
 }

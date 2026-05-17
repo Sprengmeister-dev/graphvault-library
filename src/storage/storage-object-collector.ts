@@ -2,7 +2,7 @@ import { LazyRef } from "../lazy/lazy-ref.js";
 import type { GraphSerializer } from "../core/serializer.js";
 import type { EagerFieldEvaluator, SerializedEnvelope } from "../core/types.js";
 
-/** Runs the public collectObjectIdsForTargets helper. */
+/** Finds serialized object IDs reachable from the provided target objects. */
 export function collectObjectIdsForTargets(input: {
   envelope: SerializedEnvelope;
   targets: readonly unknown[];

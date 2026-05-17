@@ -3,7 +3,7 @@ import { stableIndexValueKey } from "./gvql-index-keys.js";
 import type { EncodedNode, EncodedValue, SerializedEnvelope } from "../core/types.js";
 import type { GvqlGraphEdge, GvqlGraphIndex, GvqlGraphNode } from "./gvql-types.js";
 
-/** Describes the public GvqlGraphIndexBuildOptions contract. */
+/** Options used to configure GVQL Graph Index Build behavior. */
 export interface GvqlGraphIndexBuildOptions {
   propertyMode?: "all" | "configured";
   properties?: Array<{ type?: string; path: string }>;
@@ -11,7 +11,7 @@ export interface GvqlGraphIndexBuildOptions {
   transactionId?: number;
 }
 
-/** Runs the public buildGvqlGraphIndex helper. */
+/** Builds the in-memory node, edge, type, and property indexes used by GVQL execution. */
 export function buildGvqlGraphIndex(envelope: SerializedEnvelope, options: GvqlGraphIndexBuildOptions = {}): GvqlGraphIndex {
   const nodes = new Map<string, GvqlGraphNode>();
   const byType = new Map<string, string[]>();
@@ -68,7 +68,7 @@ export function buildGvqlGraphIndex(envelope: SerializedEnvelope, options: GvqlG
   };
 }
 
-/** Runs the public propertyIndexKey helper. */
+/** Builds the canonical key used for property index buckets. */
 export function propertyIndexKey(type: string | undefined, path: string, value: unknown): string {
   return `${type ?? "*"}\u0000${path}\u0000${stableValueKey(value)}`;
 }
@@ -101,7 +101,7 @@ function addIndexedPropertyKeys(keys: Set<string>, type: string | undefined, pat
   }
 }
 
-/** Runs the public propertyKey helper. */
+/** Builds a type-qualified property key used by GVQL and storage indexes. */
 export function propertyKey(type: string | undefined, path: string): string {
   return `${type ?? "*"}\u0000${path}`;
 }
@@ -110,7 +110,7 @@ function stableValueKey(value: unknown): string {
   return stableIndexValueKey(value);
 }
 
-/** Runs the public referencedEdges helper. */
+/** Extracts object-reference edges from one encoded node. */
 export function referencedEdges(from: string, node: EncodedNode): GvqlGraphEdge[] {
   const edges: GvqlGraphEdge[] = [];
   visitEncodedNode(node, (path, value) => {
@@ -121,7 +121,7 @@ export function referencedEdges(from: string, node: EncodedNode): GvqlGraphEdge[
   return edges;
 }
 
-/** Runs the public visitEncodedNode helper. */
+/** Visits encoded object references recursively while protecting against graph cycles. */
 export function visitEncodedNode(node: EncodedNode, visit: (path: string, value: EncodedValue) => void): void {
   if (node.kind === "array" || node.kind === "set") {
     node.items.forEach((value, index) => visit(`[${index}]`, value));

@@ -17,7 +17,7 @@ import type {
 
 const OBJECT_RECORD_WRITE_CONCURRENCY = 32;
 
-/** Describes the public StorageWriterOptions contract. */
+/** Low-level write behavior for object-record format, snapshots, durability, and index output. */
 export interface StorageWriterOptions {
   objectRecordFormat?: ObjectRecordWriteFormat;
   objectRecordWriteConcurrency?: number;
@@ -25,14 +25,14 @@ export interface StorageWriterOptions {
   indexes?: ResolvedStorageIndexOptions;
 }
 
-/** Provides the public StorageWriter API. */
+/** Writes GraphVault manifests, object records, WAL entries, indexes, and transaction metadata. */
 export class StorageWriter {
   private readonly objectRecordFormat: ObjectRecordWriteFormat;
   private readonly objectRecordWriteConcurrency: number;
   private readonly prettyJson: boolean;
   private readonly indexes: ResolvedStorageIndexOptions;
 
-  /** Creates a StorageWriter instance. */
+  /** Creates a Storage Writer with the supplied configuration. */
   constructor(
     private readonly target: StorageTarget,
     private readonly layout: StorageLayout,
@@ -49,13 +49,13 @@ export class StorageWriter {
     };
   }
 
-  /** Runs StorageWriter.writeJson asynchronously. */
+  /** Serializes a JSON value and writes it atomically to the target. */
   async writeJson(path: string, value: unknown): Promise<void> {
     const spacing = this.prettyJson ? 2 : 0;
     await this.target.writeTextAtomic(path, `${JSON.stringify(value, null, spacing)}\n`);
   }
 
-  /** Runs StorageWriter.writeObjectRecords asynchronously. */
+  /** Writes changed object records and optional binary object records for a serialized envelope. */
   async writeObjectRecords(envelope: SerializedEnvelope, transactionId: number, objectIds: readonly string[]): Promise<void> {
     const storedAt = new Date().toISOString();
     await mapWithConcurrency(objectIds, this.objectRecordWriteConcurrency, async (objectId) => {
@@ -82,7 +82,7 @@ export class StorageWriter {
     });
   }
 
-  /** Runs StorageWriter.writeManifest asynchronously. */
+  /** Writes the current manifest and updates the CURRENT pointer for a committed transaction. */
   async writeManifest(
     envelope: SerializedEnvelope,
     transactionId: number,
@@ -107,12 +107,12 @@ export class StorageWriter {
     } satisfies StorageManifest);
   }
 
-  /** Runs StorageWriter.writeParentIndex asynchronously. */
+  /** Writes the reverse parent index for a serialized envelope. */
   async writeParentIndex(envelope: SerializedEnvelope, transactionId: number): Promise<void> {
     await this.writeJson(this.layout.parentIndexFile, buildParentIndexRecord(envelope, transactionId));
   }
 
-  /** Runs StorageWriter.writePersistentIndex asynchronously. */
+  /** Writes the storage-wide graph and advanced index record for a serialized envelope. */
   async writePersistentIndex(envelope: SerializedEnvelope, transactionId: number): Promise<void> {
     const record = buildStorageIndexRecord(envelope, transactionId, this.indexes);
     if (record) {
@@ -122,7 +122,7 @@ export class StorageWriter {
     }
   }
 
-  /** Runs StorageWriter.writeTransactionRecord asynchronously. */
+  /** Appends a transaction record and updates the transaction log. */
   async writeTransactionRecord(record: TransactionRecord): Promise<string> {
     const journalFile = `transaction-${String(record.transactionId).padStart(12, "0")}.json`;
     await this.writeJson(join(this.layout.transactionsDirectory, journalFile), record);
@@ -130,21 +130,21 @@ export class StorageWriter {
     return journalFile;
   }
 
-  /** Runs StorageWriter.writeWalPrepare asynchronously. */
+  /** Writes the WAL prepare payload before the manifest is advanced. */
   async writeWalPrepare(record: WalPrepareRecord): Promise<string> {
     const file = `transaction-${String(record.transactionId).padStart(12, "0")}.prepare.json`;
     await this.writeJson(join(this.layout.walDirectory, file), record);
     return file;
   }
 
-  /** Runs StorageWriter.writeWalCommit asynchronously. */
+  /** Writes the WAL commit marker that makes a prepared transaction recoverable. */
   async writeWalCommit(record: WalCommitRecord): Promise<string> {
     const file = `transaction-${String(record.transactionId).padStart(12, "0")}.commit.json`;
     await this.writeJson(join(this.layout.walDirectory, file), record);
     return file;
   }
 
-  /** Runs StorageWriter.writeTypeDictionary asynchronously. */
+  /** Writes the registered type dictionary used to inspect and migrate persisted classes. */
   async writeTypeDictionary(types: TypeDictionaryEntry[]): Promise<void> {
     await this.writeJson(this.layout.typeDictionaryFile, {
       format: "graphvault-type-dictionary",

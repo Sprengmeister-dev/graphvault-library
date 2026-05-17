@@ -1,4 +1,4 @@
-/** Provides the public AsyncMutex API. */
+/** Serializes asynchronous critical sections inside one Node.js process. */
 export class AsyncMutex {
   private tail: Promise<void> = Promise.resolve();
 

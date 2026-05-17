@@ -6,7 +6,7 @@ import type {
   StorageWriteProfile,
 } from "../core/types.js";
 
-/** Describes the public StorageSafetyAssessmentInput contract. */
+/** Represents Storage Safety Assessment Input in the public GraphVault data model. */
 export interface StorageSafetyAssessmentInput {
   operations: StorageOperationsStatus;
   writeProfile: StorageWriteProfile;
@@ -17,7 +17,7 @@ export interface StorageSafetyAssessmentInput {
   commitValidatorCount: number;
 }
 
-/** Runs the public assessStorageSafety helper. */
+/** Rates a store configuration for production readiness from locking, WAL, durability, and validation settings. */
 export function assessStorageSafety(input: StorageSafetyAssessmentInput): StorageSafetyProfile {
   const issues: StorageSafetyIssue[] = [];
   const { operations } = input;

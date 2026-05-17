@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.8
+
+- Replace placeholder-style TSDoc across the public TypeScript API with usage-oriented documentation for managers, storage targets, serializers, lazy helpers, GVQL helpers, and NestJS integration.
+- Strengthen the source-quality gate so exported declarations and public members cannot regress to generic TSDoc such as `Runs X` or `Provides the public X API`.
+- Extend the public-member TSDoc check to catch `static async` methods.
+
 ## 0.2.7
 
 - Rename write profiles to `production`, `balanced`, and `inspect`.

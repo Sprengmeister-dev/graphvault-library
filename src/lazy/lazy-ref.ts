@@ -1,7 +1,7 @@
 export type LazyLoader<T> = (key: string) => Promise<T>;
 export type LazySaver<T> = (key: string, value: T) => Promise<void>;
 
-/** Provides the public LazyRef API. */
+/** Reference wrapper for values that should be loaded from storage only when accessed. */
 export class LazyRef<T> {
   readonly key: string;
   private value: T | undefined;
@@ -9,7 +9,7 @@ export class LazyRef<T> {
   private loader: LazyLoader<T> | undefined;
   private saver: LazySaver<T> | undefined;
 
-  /** Creates a LazyRef instance. */
+  /** Creates a Lazy Ref with the supplied configuration. */
   constructor(key: string, initialValue?: T) {
     this.key = key;
     if (arguments.length > 1) {
@@ -18,29 +18,29 @@ export class LazyRef<T> {
     }
   }
 
-  /** Creates or configures LazyRef through unloaded. */
+  /** Creates a LazyRef placeholder that will load its value on first access. */
   static unloaded<T>(key: string): LazyRef<T> {
     return new LazyRef<T>(key);
   }
 
-  /** Runs LazyRef.bind. */
+  /** Connects this lazy reference to load and store callbacks supplied by a StorageManager. */
   bind(loader: LazyLoader<T>, saver: LazySaver<T>): void {
     this.loader = loader;
     this.saver = saver;
   }
 
-  /** Runs LazyRef.isLoaded. */
+  /** Returns whether the lazy value is currently materialized in memory. */
   isLoaded(): boolean {
     return this.loaded;
   }
 
-  /** Runs LazyRef.clear. */
+  /** Removes all cache entries and persists the empty cache root. */
   clear(): void {
     this.value = undefined;
     this.loaded = false;
   }
 
-  /** Runs LazyRef.get asynchronously. */
+  /** Returns the cached value for a key, or undefined when the key is absent. */
   async get(): Promise<T> {
     if (!this.loaded) {
       if (!this.loader) {
@@ -52,13 +52,13 @@ export class LazyRef<T> {
     return this.value as T;
   }
 
-  /** Runs LazyRef.set. */
+  /** Sets a cache value and persists the updated cache root. */
   set(value: T): void {
     this.value = value;
     this.loaded = true;
   }
 
-  /** Runs LazyRef.store asynchronously. */
+  /** Stores the currently loaded value through the bound storage callback, if a callback is configured. */
   async store(): Promise<void> {
     if (!this.loaded) {
       return;
@@ -70,7 +70,7 @@ export class LazyRef<T> {
   }
 }
 
-/** Runs the public lazy helper. */
+/** Creates a LazyRef bound to an initial value for explicit lazy persistence. */
 export function lazy<T>(key: string, initialValue?: T): LazyRef<T> {
   return arguments.length > 1 ? new LazyRef<T>(key, initialValue) : LazyRef.unloaded<T>(key);
 }

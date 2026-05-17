@@ -1,6 +1,6 @@
 import type { EncodedNode, EncodedValue, ParentIndexRecord, SerializedEnvelope } from "../core/types.js";
 
-/** Runs the public buildParentIndexRecord helper. */
+/** Builds the reverse parent index that maps each child object to all direct parent references. */
 export function buildParentIndexRecord(envelope: SerializedEnvelope, transactionId: number): ParentIndexRecord {
   const parents: ParentIndexRecord["parents"] = {};
   for (const [objectId, node] of Object.entries(envelope.nodes)) {

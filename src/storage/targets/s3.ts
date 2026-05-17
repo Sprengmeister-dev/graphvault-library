@@ -1,41 +1,41 @@
 import { StorageLockError } from "../../core/errors.js";
 import type { StorageLockOptions, StorageTarget, StorageTargetLock } from "../../core/types.js";
 
-/** Describes the public S3StorageTargetOptions contract. */
+/** Bucket, prefix, client, and lock settings for the S3-compatible storage target. */
 export interface S3StorageTargetOptions {
   bucket: string;
   prefix?: string;
   client: S3StorageClient;
 }
 
-/** Describes the public S3StorageClient contract. */
+/** Represents S3 Storage Client in the public GraphVault data model. */
 export interface S3StorageClient {
-  /** Runs S3StorageClient.headObject. */
+  /** Reads object metadata and fails when the key is absent. */
   headObject(input: S3ObjectRequest): Promise<unknown>;
-  /** Runs S3StorageClient.getObject. */
+  /** Reads object bytes for a GraphVault storage key. */
   getObject(input: S3ObjectRequest): Promise<{ body?: S3Body }>;
-  /** Runs S3StorageClient.putObject. */
+  /** Writes object bytes and optional conditional-create metadata. */
   putObject(input: S3PutObjectRequest): Promise<unknown>;
-  /** Runs S3StorageClient.deleteObject. */
+  /** Removes one object key if it exists. */
   deleteObject(input: S3ObjectRequest): Promise<unknown>;
-  /** Runs S3StorageClient.listObjects. */
+  /** Lists object keys and common prefixes below a prefix. */
   listObjects(input: S3ListObjectsRequest): Promise<S3ListObjectsResponse>;
 }
 
-/** Describes the public S3ObjectRequest contract. */
+/** Represents S3 Object Request in the public GraphVault data model. */
 export interface S3ObjectRequest {
   bucket: string;
   key: string;
 }
 
-/** Describes the public S3PutObjectRequest contract. */
+/** Represents S3 Put Object Request in the public GraphVault data model. */
 export interface S3PutObjectRequest extends S3ObjectRequest {
   body: Buffer;
   ifNoneMatch?: "*";
   metadata?: Record<string, string>;
 }
 
-/** Describes the public S3ListObjectsRequest contract. */
+/** Represents S3 List Objects Request in the public GraphVault data model. */
 export interface S3ListObjectsRequest {
   bucket: string;
   prefix: string;
@@ -43,7 +43,7 @@ export interface S3ListObjectsRequest {
   continuationToken?: string;
 }
 
-/** Describes the public S3ListObjectsResponse contract. */
+/** Represents S3 List Objects Response in the public GraphVault data model. */
 export interface S3ListObjectsResponse {
   objects?: Array<{ key: string }>;
   commonPrefixes?: string[];
@@ -58,20 +58,20 @@ export type S3Body =
   | AsyncIterable<Uint8Array>
   | { transformToByteArray(): Promise<Uint8Array> };
 
-/** Provides the public S3StorageTarget API. */
+/** Storage target implementation backed by an S3-compatible object store. */
 export class S3StorageTarget implements StorageTarget {
   private readonly bucket: string;
   private readonly prefix: string;
   private readonly client: S3StorageClient;
 
-  /** Creates a S3StorageTarget instance. */
+  /** Creates a S3 Storage Target backed by the supplied target configuration. */
   constructor(options: S3StorageTargetOptions) {
     this.bucket = options.bucket;
     this.prefix = normalizeS3Key(options.prefix ?? "");
     this.client = options.client;
   }
 
-  /** Runs S3StorageTarget.ensureDirectory asynchronously. */
+  /** Creates the directory namespace required by the storage layout when the backend needs one. */
   async ensureDirectory(path: string): Promise<void> {
     await this.client.putObject({
       bucket: this.bucket,
@@ -81,7 +81,7 @@ export class S3StorageTarget implements StorageTarget {
     });
   }
 
-  /** Runs S3StorageTarget.exists asynchronously. */
+  /** Returns whether a storage path currently exists and can be read by this target. */
   async exists(path: string): Promise<boolean> {
     const key = this.key(path);
     try {
@@ -97,7 +97,7 @@ export class S3StorageTarget implements StorageTarget {
     }
   }
 
-  /** Runs S3StorageTarget.list asynchronously. */
+  /** Lists direct child names below a storage path. */
   async list(path: string): Promise<string[]> {
     const prefix = `${this.key(path)}/`;
     const names = new Set<string>();
@@ -128,12 +128,12 @@ export class S3StorageTarget implements StorageTarget {
     return Array.from(names).sort();
   }
 
-  /** Runs S3StorageTarget.readText asynchronously. */
+  /** Reads a storage object as UTF-8 text. */
   async readText(path: string): Promise<string> {
     return this.readBuffer(path).then((buffer) => buffer.toString("utf8"));
   }
 
-  /** Runs S3StorageTarget.readBuffer asynchronously. */
+  /** Reads a storage object as bytes. */
   async readBuffer(path: string): Promise<Buffer> {
     const result = await this.client.getObject({ bucket: this.bucket, key: this.key(path) });
     if (!result.body) {
@@ -142,17 +142,17 @@ export class S3StorageTarget implements StorageTarget {
     return s3BodyToBuffer(result.body);
   }
 
-  /** Runs S3StorageTarget.writeTextAtomic asynchronously. */
+  /** Writes UTF-8 text so readers see either the previous complete value or the new complete value. */
   async writeTextAtomic(path: string, value: string): Promise<void> {
     await this.writeBufferAtomic(path, Buffer.from(value));
   }
 
-  /** Runs S3StorageTarget.writeBufferAtomic asynchronously. */
+  /** Writes bytes so readers see either the previous complete value or the new complete value. */
   async writeBufferAtomic(path: string, value: Buffer): Promise<void> {
     await this.client.putObject({ bucket: this.bucket, key: this.key(path), body: value });
   }
 
-  /** Runs S3StorageTarget.appendText asynchronously. */
+  /** Appends UTF-8 text to an existing storage object, creating it when the backend supports that behavior. */
   async appendText(path: string, value: string): Promise<void> {
     let current: Buffer = Buffer.alloc(0);
     if (await this.exists(path)) {
@@ -161,7 +161,7 @@ export class S3StorageTarget implements StorageTarget {
     await this.writeBufferAtomic(path, Buffer.concat([current, Buffer.from(value)]));
   }
 
-  /** Runs S3StorageTarget.remove asynchronously. */
+  /** Deletes a storage path, optionally removing all nested children for directory-like backends. */
   async remove(path: string, options: { recursive?: boolean } = {}): Promise<void> {
     if (options.recursive) {
       const prefix = `${this.key(path)}/`;
@@ -182,7 +182,7 @@ export class S3StorageTarget implements StorageTarget {
     await this.client.deleteObject({ bucket: this.bucket, key: this.key(`${path}/.dir`) });
   }
 
-  /** Runs S3StorageTarget.acquireLock asynchronously. */
+  /** Acquires an exclusive storage lock and returns a fencing token that can be revalidated before publishing. */
   async acquireLock(path: string, timeoutMs: number, options: StorageLockOptions = {}): Promise<StorageTargetLock> {
     const key = this.key(path);
     const deadline = Date.now() + timeoutMs;

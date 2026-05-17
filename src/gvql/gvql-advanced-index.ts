@@ -15,7 +15,7 @@ import type {
 } from "../core/types.js";
 import type { GvqlAdvancedGraphIndex } from "./gvql-types.js";
 
-/** Describes the public AdvancedIndexOptions contract. */
+/** Options used while building GVQL's configured composite, range, text, unique, and expression indexes. */
 export interface AdvancedIndexOptions {
   composites: StorageCompositeIndexDefinition[];
   ranges: StorageRangeIndexDefinition[];
@@ -25,7 +25,7 @@ export interface AdvancedIndexOptions {
   expressions: StorageExpressionIndexDefinition[];
 }
 
-/** Runs the public buildAdvancedIndexRecord helper. */
+/** Builds configured composite, range, text, full-text, unique, and expression indexes for an envelope. */
 export function buildAdvancedIndexRecord(envelope: SerializedEnvelope, options: AdvancedIndexOptions): StorageAdvancedIndexRecord | undefined {
   const definitions = advancedDefinitions(options);
   if (definitions.length === 0) return undefined;
@@ -67,7 +67,7 @@ export function buildAdvancedIndexRecord(envelope: SerializedEnvelope, options: 
   };
 }
 
-/** Runs the public advancedIndexFromRecord helper. */
+/** Converts a persisted advanced index record into the GVQL lookup structures used at query time. */
 export function advancedIndexFromRecord(record: StorageAdvancedIndexRecord | undefined): GvqlAdvancedGraphIndex | undefined {
   if (!record) return undefined;
   return {
@@ -82,7 +82,7 @@ export function advancedIndexFromRecord(record: StorageAdvancedIndexRecord | und
   };
 }
 
-/** Runs the public advancedDefinitions helper. */
+/** Returns every configured advanced index definition from the normalized storage index options. */
 export function advancedDefinitions(options: AdvancedIndexOptions): StorageAdvancedIndexDefinitionRecord[] {
   return [
     ...options.composites.map((item) => ({ ...item, kind: "composite" as const, name: item.name ?? indexName("composite", item.type, item.paths) })),

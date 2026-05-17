@@ -1,7 +1,7 @@
 import type { EncodedNode, EncodedValue } from "../core/types.js";
 import type { GvqlLiteral } from "./gvql-types.js";
 
-/** Runs the public encodedValueToJs helper. */
+/** Converts a serialized GraphVault value into the JavaScript value shape exposed in GVQL rows. */
 export function encodedValueToJs(value: EncodedValue | undefined): unknown {
   if (value === undefined) return undefined;
   if (value === null || typeof value === "string" || typeof value === "number" || typeof value === "boolean") return value;
@@ -36,7 +36,7 @@ export function encodedValueToJs(value: EncodedValue | undefined): unknown {
   }
 }
 
-/** Runs the public jsValueToEncoded helper. */
+/** Converts JavaScript values from GVQL mutation expressions into encoded GraphVault values. */
 export function jsValueToEncoded(value: unknown): EncodedValue {
   if (value === null || typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
     return value;
@@ -53,7 +53,7 @@ export function jsValueToEncoded(value: unknown): EncodedValue {
   throw new Error("GVQL SET currently supports primitives, bigint, Date, null, and undefined.");
 }
 
-/** Runs the public literalToJs helper. */
+/** Converts a parsed GVQL literal into the corresponding JavaScript value. */
 export function literalToJs(literal: GvqlLiteral, parameters: Record<string, unknown> = {}): unknown {
   if (Array.isArray(literal)) {
     return literal.map((item) => literalToJs(item, parameters));
@@ -64,7 +64,7 @@ export function literalToJs(literal: GvqlLiteral, parameters: Record<string, unk
   return literal;
 }
 
-/** Runs the public getNodePath helper. */
+/** Reads a nested property path from an encoded object node. */
 export function getNodePath(node: EncodedNode, path: string | undefined): EncodedValue | undefined {
   if (!path) {
     return nodeSummary(node) as EncodedValue;
@@ -84,7 +84,7 @@ export function getNodePath(node: EncodedNode, path: string | undefined): Encode
   return undefined;
 }
 
-/** Runs the public setNodePath helper. */
+/** Writes a nested property path on an encoded object node. */
 export function setNodePath(node: EncodedNode, path: string | undefined, value: EncodedValue): void {
   if (!path) {
     throw new Error("GVQL SET requires an aliased property path, for example SET doc.status = \"archived\".");
@@ -110,7 +110,7 @@ export function setNodePath(node: EncodedNode, path: string | undefined, value: 
   throw new Error(`GVQL cannot set fields on ${node.kind} nodes.`);
 }
 
-/** Runs the public removeNodePath helper. */
+/** Removes a nested property path from an encoded object node. */
 export function removeNodePath(node: EncodedNode, path: string | undefined): { before: EncodedValue | undefined; removed: boolean } {
   if (!path) {
     throw new Error("GVQL REMOVE requires an aliased property path, for example REMOVE doc.archivedAt.");
@@ -126,7 +126,7 @@ export function removeNodePath(node: EncodedNode, path: string | undefined): { b
   return { before, removed: true };
 }
 
-/** Runs the public nodeSummary helper. */
+/** Creates the compact node summary used in GVQL query result rows. */
 export function nodeSummary(node: EncodedNode): unknown {
   if (node.kind === "object") {
     const result: Record<string, unknown> = { kind: "object", ...(node.type ? { type: node.type } : {}) };

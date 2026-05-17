@@ -6,34 +6,34 @@ export const GRAPHVAULT_OPTIONS = Symbol("GRAPHVAULT_OPTIONS");
 
 export type NestInjectionToken = string | symbol | Function | NestType;
 
-/** Describes the public NestType contract. */
+/** Constructor shape used by NestJS provider definitions. */
 export interface NestType<T = unknown> extends Function {
-  /** Runs NestType.new. */
+  /** Constructs a Nest provider class instance. */
   new (...args: any[]): T;
 }
 
 export type NestProvider = NestValueProvider | NestFactoryProvider | NestExistingProvider;
 
-/** Describes the public NestValueProvider contract. */
+/** Represents Nest Value Provider in the public GraphVault data model. */
 export interface NestValueProvider {
   provide: NestInjectionToken;
   useValue: unknown;
 }
 
-/** Describes the public NestFactoryProvider contract. */
+/** Represents Nest Factory Provider in the public GraphVault data model. */
 export interface NestFactoryProvider {
   provide: NestInjectionToken;
   useFactory: (...args: any[]) => unknown;
   inject?: NestInjectionToken[];
 }
 
-/** Describes the public NestExistingProvider contract. */
+/** Represents Nest Existing Provider in the public GraphVault data model. */
 export interface NestExistingProvider {
   provide: NestInjectionToken;
   useExisting: NestInjectionToken;
 }
 
-/** Describes the public DynamicModuleLike contract. */
+/** Small subset of NestJS DynamicModule used so GraphVault can integrate without a hard Nest dependency. */
 export interface DynamicModuleLike {
   module: NestType;
   global?: boolean;
@@ -43,21 +43,21 @@ export interface DynamicModuleLike {
 
 export type GraphVaultModuleOptions<TRoot> = StorageManagerOptions<TRoot> & { global?: boolean };
 
-/** Describes the public GraphVaultModuleAsyncOptions contract. */
+/** NestJS async provider options for creating StorageManagerOptions at module-registration time. */
 export interface GraphVaultModuleAsyncOptions<TRoot> {
   global?: boolean;
   inject?: NestInjectionToken[];
   useFactory: (...args: any[]) => StorageManagerOptions<TRoot> | Promise<StorageManagerOptions<TRoot>>;
 }
 
-/** Describes the public GraphVaultTransactionalOptions contract. */
+/** Decorator options that control which StorageManager property is used for a transactional method. */
 export interface GraphVaultTransactionalOptions<TRoot = unknown> extends GraphVaultTransactionOptions<TRoot> {
   managerProperty?: string | symbol;
 }
 
-/** Provides the public GraphVaultModule API. */
+/** Minimal NestJS dynamic module factory for providing a StorageManager through dependency injection. */
 export class GraphVaultModule {
-  /** Creates or configures GraphVaultModule through forRoot. */
+  /** Registers a StorageManager provider from concrete GraphVault options in a NestJS module. */
   static forRoot<TRoot>(options: GraphVaultModuleOptions<TRoot>): DynamicModuleLike {
     return this.moduleFromOptionsProvider(options.global, {
       provide: GRAPHVAULT_OPTIONS,
@@ -65,7 +65,7 @@ export class GraphVaultModule {
     });
   }
 
-  /** Creates or configures GraphVaultModule through forRootAsync. */
+  /** Registers a StorageManager provider whose GraphVault options are produced asynchronously by NestJS. */
   static forRootAsync<TRoot>(options: GraphVaultModuleAsyncOptions<TRoot>): DynamicModuleLike {
     return this.moduleFromOptionsProvider(options.global, {
       provide: GRAPHVAULT_OPTIONS,
@@ -95,7 +95,7 @@ export class GraphVaultModule {
   }
 }
 
-/** Runs the public GraphVaultTransactional helper. */
+/** Method decorator that wraps a service method in a GraphVault transaction using a manager property on the instance. */
 export function GraphVaultTransactional<TRoot = unknown>(
   options: GraphVaultTransactionalOptions<TRoot> = {},
 ): MethodDecorator {

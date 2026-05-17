@@ -1,6 +1,6 @@
 import type { StorageIndexRecord, StorageIndexVerificationResult } from "../core/types.js";
 
-/** Runs the public verifyStorageIndexRecord helper. */
+/** Compares expected and persisted index records and reports missing or stale index data. */
 export function verifyStorageIndexRecord(input: {
   expected: StorageIndexRecord | undefined;
   actual: StorageIndexRecord | undefined;

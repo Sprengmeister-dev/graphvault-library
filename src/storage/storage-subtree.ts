@@ -9,9 +9,9 @@ import type {
   SubtreeReference,
 } from "../core/types.js";
 
-/** Describes the public ManifestSubtreeReader contract. */
+/** Minimal reader contract needed to load bounded subtrees from persisted object records. */
 export interface ManifestSubtreeReader {
-  /** Runs ManifestSubtreeReader.readObjectRecord. */
+  /** Reads one persisted object record by object ID and optional transaction version. */
   readObjectRecord(objectId: string, transactionId?: number): Promise<ObjectRecord>;
 }
 
@@ -54,7 +54,7 @@ export async function loadSubtreeFromManifest(
   });
 }
 
-/** Runs the public loadSubtreeFromEnvelope helper. */
+/** Builds a bounded subtree envelope directly from an already serialized root graph. */
 export function loadSubtreeFromEnvelope(envelope: SerializedEnvelope, options: SubtreeLoadOptions = {}, transactionId = 0): SubtreeLoadResult {
   const depth = normalizeDepth(options.depth);
   const rootObjectId = options.rootObjectId ?? objectIdFromRef(envelope.root);

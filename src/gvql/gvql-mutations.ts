@@ -10,7 +10,7 @@ import type {
 } from "./gvql-types.js";
 import type { GvqlPathReader } from "./gvql-expressions.js";
 
-/** Runs the public applyGvqlMutations helper. */
+/** Applies parsed GVQL mutation expressions to the serialized envelope and returns change summaries. */
 export function applyGvqlMutations(
   index: GvqlGraphIndex,
   bindings: GvqlBinding[],

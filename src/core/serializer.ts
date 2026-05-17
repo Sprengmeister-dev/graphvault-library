@@ -23,12 +23,12 @@ interface RegisteredType {
   migrate?: (state: Record<string, unknown>, fromVersion: number) => Record<string, unknown>;
 }
 
-/** Provides the public TypeRegistry API. */
+/** Maps application classes to persisted type names, versions, factories, and migration hooks. */
 export class TypeRegistry {
   private byName = new Map<string, RegisteredType>();
   private byCtor = new Map<ClassConstructor, RegisteredType>();
 
-  /** Creates a TypeRegistry instance. */
+  /** Creates a registry and pre-registers GraphVault's built-in lazy collection type. */
   constructor(types: Array<TypeRegistration<any>> = []) {
     this.register({ name: "LazyArrayList", ctor: LazyArrayList });
     for (const type of types) {
@@ -36,7 +36,7 @@ export class TypeRegistry {
     }
   }
 
-  /** Runs TypeRegistry.register. */
+  /** Registers a class name, version, factory, and optional serialization hooks for persistence. */
   register<T extends object>(type: TypeRegistration<T>): void {
     const registered: RegisteredType = {
       name: type.name,
@@ -51,17 +51,17 @@ export class TypeRegistry {
     this.byCtor.set(type.ctor, registered);
   }
 
-  /** Runs TypeRegistry.byConstructor. */
+  /** Looks up the registered type metadata for an application object instance. */
   byConstructor(value: object): RegisteredType | undefined {
     return this.byCtor.get(value.constructor as ClassConstructor);
   }
 
-  /** Runs TypeRegistry.byTypeName. */
+  /** Looks up the registered type metadata stored in a serialized node. */
   byTypeName(name: string): RegisteredType | undefined {
     return this.byName.get(name);
   }
 
-  /** Runs TypeRegistry.entries. */
+  /** Returns registered type dictionary entries sorted by persisted type name. */
   entries(): TypeDictionaryEntry[] {
     return Array.from(this.byName.values())
       .map((type) => ({
@@ -73,12 +73,12 @@ export class TypeRegistry {
   }
 }
 
-/** Provides the public ObjectIdRegistry API. */
+/** Maintains stable object IDs during serialization and rehydration of a graph. */
 export class ObjectIdRegistry {
   private readonly ids = new WeakMap<object, string>();
   private nextId = 1;
 
-  /** Runs ObjectIdRegistry.idFor. */
+  /** Returns the stable persisted object ID for an object, allocating one if the object is new. */
   idFor(value: object): string {
     const existing = this.ids.get(value);
     if (existing) {
@@ -89,7 +89,7 @@ export class ObjectIdRegistry {
     return id;
   }
 
-  /** Runs ObjectIdRegistry.remember. */
+  /** Associates an existing persisted object ID with a hydrated object instance. */
   remember(id: string, value: object): void {
     this.ids.set(value, id);
     const numeric = Number(id);
@@ -99,18 +99,18 @@ export class ObjectIdRegistry {
   }
 }
 
-/** Provides the public GraphSerializer API. */
+/** Serializes and hydrates object graphs while preserving identity, cycles, special values, and registered types. */
 export class GraphSerializer {
   readonly types: TypeRegistry;
   readonly objectIds: ObjectIdRegistry;
 
-  /** Creates a GraphSerializer instance. */
+  /** Creates a serializer with type registrations and an object-ID registry. */
   constructor(types: Array<TypeRegistration<any>> | TypeRegistry = [], objectIds = new ObjectIdRegistry()) {
     this.types = Array.isArray(types) ? new TypeRegistry(types) : types;
     this.objectIds = objectIds;
   }
 
-  /** Runs GraphSerializer.serialize. */
+  /** Serializes a root value into a GraphVault envelope while preserving identity, cycles, and special values. */
   serialize(root: unknown): SerializedEnvelope {
     const seen = new Map<object, string>();
     const nodes: Record<string, EncodedNode> = {};
@@ -253,7 +253,7 @@ export class GraphSerializer {
     };
   }
 
-  /** Runs GraphSerializer.deserialize. */
+  /** Hydrates a serialized envelope back into live objects, preserving shared references and cycles. */
   deserialize<TRoot>(envelope: SerializedEnvelope): TRoot {
     const cache = new Map<string, unknown>();
     const hydrated = new Set<string>();

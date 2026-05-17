@@ -5,6 +5,14 @@ const root = process.cwd();
 const sourceRoot = join(root, "src");
 const maxLines = 1000;
 const files = [];
+const forbiddenTsDocPatterns = [
+  /Runs the public\b/,
+  /Provides the public\b/,
+  /Describes the public\b/,
+  /Creates or configures\b/,
+  /^Runs [A-Z][A-Za-z0-9_]*\.[A-Za-z0-9_]+(?: asynchronously)?\.$/,
+  /^Executes the [a-z]+(?: [A-Z][A-Za-z0-9_]*)? operation\.$/,
+];
 
 await collectTypeScriptFiles(sourceRoot);
 
@@ -45,6 +53,7 @@ async function checkPublicApiTsDoc(indexFile) {
       cursor--;
     }
     if (cursor >= 0 && isSingleLineTsDoc(lines[cursor].trim())) {
+      assertHelpfulTsDoc(lines[cursor].trim().slice(3, -2).trim(), indexFile, cursor);
       continue;
     }
     if (cursor < 0 || lines[cursor].trim() !== "*/") {
@@ -55,6 +64,7 @@ async function checkPublicApiTsDoc(indexFile) {
       const trimmed = lines[cursor].trim();
       if (trimmed === "/**") {
         sawStart = true;
+        assertHelpfulTsDoc(extractTsDocText(lines, cursor, index - 1), indexFile, cursor);
         break;
       }
       if (!trimmed.startsWith("*") && trimmed !== "*/") {
@@ -111,7 +121,7 @@ function isPublicMember(line, exportedKind) {
   if (/^(if|for|while|switch|catch|return|const|let|throw|await|try)\b/.test(trimmed)) return false;
   if (trimmed.includes("=>") || trimmed === "}") return false;
   if (trimmed.startsWith("constructor")) return true;
-  if (/^(?:async\s+)?(?:static\s+)?(?:get\s+)?[A-Za-z_$][\w$]*\s*[<(]/.test(trimmed)) return true;
+  if (/^(?:(?:static|async)\s+)*(?:get\s+)?[A-Za-z_$][\w$]*\s*[<(]/.test(trimmed)) return true;
   return exportedKind === "interface" && /^[A-Za-z_$][\w$]*\([^)]*\)\s*:/.test(trimmed);
 }
 
@@ -121,6 +131,7 @@ function assertTsDoc(lines, index, file, label) {
     cursor--;
   }
   if (cursor >= 0 && isSingleLineTsDoc(lines[cursor].trim())) {
+    assertHelpfulTsDoc(lines[cursor].trim().slice(3, -2).trim(), file, cursor);
     return;
   }
   if (cursor < 0 || lines[cursor].trim() !== "*/") {
@@ -129,6 +140,7 @@ function assertTsDoc(lines, index, file, label) {
   for (; cursor >= 0; cursor--) {
     const trimmed = lines[cursor].trim();
     if (trimmed === "/**") {
+      assertHelpfulTsDoc(extractTsDocText(lines, cursor, index - 1), file, cursor);
       return;
     }
     if (!trimmed.startsWith("*") && trimmed !== "*/") {
@@ -136,6 +148,23 @@ function assertTsDoc(lines, index, file, label) {
     }
   }
   throw new Error(`${relative(root, file)}:${index + 1} ${label} has a malformed TSDoc block.`);
+}
+
+function assertHelpfulTsDoc(text, file, index) {
+  for (const pattern of forbiddenTsDocPatterns) {
+    if (pattern.test(text)) {
+      throw new Error(`${relative(root, file)}:${index + 1} TSDoc is too generic: "${text}"`);
+    }
+  }
+}
+
+function extractTsDocText(lines, start, end) {
+  return lines
+    .slice(start, end + 1)
+    .map((line) => line.trim().replace(/^\/\*\*\s?/, "").replace(/^\*\s?/, "").replace(/\s?\*\/$/, ""))
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function count(value, needle) {

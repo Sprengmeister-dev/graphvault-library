@@ -15,7 +15,7 @@ export type GvqlClauseName =
   | "LIMIT"
   | "OFFSET";
 
-/** Describes the public GvqlClause contract. */
+/** Parsed top-level GVQL clause name and body before full statement construction. */
 export interface GvqlClause {
   name: GvqlClauseName;
   body: string;
@@ -40,7 +40,7 @@ const CLAUSE_NAMES: GvqlClauseName[] = [
   "SET",
 ];
 
-/** Runs the public splitGvqlClauses helper. */
+/** Splits a GVQL statement into top-level clauses while respecting strings, brackets, and parentheses. */
 export function splitGvqlClauses(source: string): GvqlClause[] {
   const normalized = source.trim().replace(/;$/, "");
   const matches: Array<{ name: GvqlClauseName; index: number; end: number }> = [];
@@ -62,7 +62,7 @@ export function splitGvqlClauses(source: string): GvqlClause[] {
   }));
 }
 
-/** Runs the public clausesByName helper. */
+/** Groups scanned GVQL clauses by lowercase clause name for parser lookup. */
 export function clausesByName(clauses: GvqlClause[]): Map<GvqlClauseName, string> {
   const result = new Map<GvqlClauseName, string>();
   for (const clause of clauses) {

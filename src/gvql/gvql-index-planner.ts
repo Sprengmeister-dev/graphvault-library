@@ -10,7 +10,7 @@ import type {
   GvqlValueExpression,
 } from "./gvql-types.js";
 
-/** Describes the public PlannedIndexSelection contract. */
+/** Chosen GVQL index access path and estimated scan set for a predicate. */
 export interface PlannedIndexSelection {
   path: string;
   source: "composite-index" | "range-index" | "text-index" | "fulltext-index" | "expression-index" | "unique-index";
@@ -19,7 +19,7 @@ export interface PlannedIndexSelection {
   operation: string;
 }
 
-/** Runs the public advancedIndexSelections helper. */
+/** Finds advanced indexes that can satisfy a parsed GVQL predicate. */
 export function advancedIndexSelections(index: GvqlGraphIndex, statement: GvqlStatement, pattern: GvqlMatchPattern, parameters: Record<string, unknown>): PlannedIndexSelection[] {
   if (!index.advanced || !statement.where) return [];
   const predicates = flattenAndPredicates(statement.where);

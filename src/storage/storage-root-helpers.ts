@@ -1,9 +1,9 @@
-/** Runs the public isIterable helper. */
+/** Detects iterable inputs while excluding strings from storeAll target expansion. */
 export function isIterable(value: unknown): value is Iterable<unknown> {
   return Boolean(value) && typeof (value as { [Symbol.iterator]?: unknown })[Symbol.iterator] === "function";
 }
 
-/** Runs the public replaceObjectContents helper. */
+/** Replaces an existing object or collection with another value while preserving the root reference. */
 export function replaceObjectContents(target: object, source: object): void {
   if (Array.isArray(target) && Array.isArray(source)) {
     target.splice(0, target.length, ...source);

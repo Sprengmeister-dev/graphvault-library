@@ -1,6 +1,6 @@
 import { LazyRef } from "../lazy/lazy-ref.js";
 
-/** Runs the public bindStorageLazyRefs helper. */
+/** Binds LazyRef instances in a root graph to the manager's load and store callbacks. */
 export function bindStorageLazyRefs(
   value: unknown,
   handlers: { load: <T>(key: string) => Promise<T>; store: <T>(key: string, value: T) => Promise<void> },

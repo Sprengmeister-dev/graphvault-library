@@ -4,7 +4,7 @@ import type { GvqlBinding, GvqlGraphIndex, GvqlReturnExpression, GvqlStatement }
 export type GvqlPathReader = (index: GvqlGraphIndex, binding: GvqlBinding, expression: { alias: string; path?: string }) => unknown;
 export type GvqlNodeReader = (index: GvqlGraphIndex, objectId: string | undefined) => unknown;
 
-/** Runs the public projectGvqlRows helper. */
+/** Projects matched GVQL bindings into return columns, grouping, ordering, and aggregate output. */
 export function projectGvqlRows(
   index: GvqlGraphIndex,
   bindings: GvqlBinding[],

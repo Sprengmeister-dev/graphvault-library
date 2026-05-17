@@ -3,89 +3,89 @@ import { CorruptStorageError } from "../core/errors.js";
 
 export type ObjectRecordKind = "json" | "binary";
 
-/** Provides the public StorageLayout API. */
+/** Computes canonical file and directory paths for a GraphVault storage directory. */
 export class StorageLayout {
   readonly storageDirectory: string;
   readonly channelCount: number;
 
-  /** Creates a StorageLayout instance. */
+  /** Creates a Storage Layout with the supplied configuration. */
   constructor(storageDirectory: string, channelCount = 1) {
     validateChannelCount(channelCount);
     this.storageDirectory = storageDirectory;
     this.channelCount = channelCount;
   }
 
-  /** Returns the current snapshotsDirectory value. */
+  /** Returns the resolved snapshotsDirectory path used by the storage layout. */
   get snapshotsDirectory(): string {
     return join(this.storageDirectory, "snapshots");
   }
 
-  /** Returns the current lazyDirectory value. */
+  /** Returns the resolved lazyDirectory path used by the storage layout. */
   get lazyDirectory(): string {
     return join(this.storageDirectory, "lazy");
   }
 
-  /** Returns the current objectsDirectory value. */
+  /** Returns the resolved objectsDirectory path used by the storage layout. */
   get objectsDirectory(): string {
     return join(this.storageDirectory, "objects");
   }
 
-  /** Returns the current binaryObjectsDirectory value. */
+  /** Returns the resolved binaryObjectsDirectory path used by the storage layout. */
   get binaryObjectsDirectory(): string {
     return join(this.storageDirectory, "objects-bin");
   }
 
-  /** Returns the current currentFile value. */
+  /** Returns the resolved currentFile path used by the storage layout. */
   get currentFile(): string {
     return join(this.storageDirectory, "CURRENT");
   }
 
-  /** Returns the current manifestFile value. */
+  /** Returns the resolved manifestFile path used by the storage layout. */
   get manifestFile(): string {
     return join(this.storageDirectory, "manifest.json");
   }
 
-  /** Returns the current typeDictionaryFile value. */
+  /** Returns the resolved typeDictionaryFile path used by the storage layout. */
   get typeDictionaryFile(): string {
     return join(this.storageDirectory, "type-dictionary.json");
   }
 
-  /** Returns the current parentIndexFile value. */
+  /** Returns the resolved parentIndexFile path used by the storage layout. */
   get parentIndexFile(): string {
     return join(this.storageDirectory, "parent-index.json");
   }
 
-  /** Returns the current indexFile value. */
+  /** Returns the resolved indexFile path used by the storage layout. */
   get indexFile(): string {
     return join(this.storageDirectory, "index.json");
   }
 
-  /** Returns the current journalFile value. */
+  /** Returns the resolved journalFile path used by the storage layout. */
   get journalFile(): string {
     return join(this.storageDirectory, "journal.log");
   }
 
-  /** Returns the current transactionsDirectory value. */
+  /** Returns the resolved transactionsDirectory path used by the storage layout. */
   get transactionsDirectory(): string {
     return join(this.storageDirectory, "transactions");
   }
 
-  /** Returns the current walDirectory value. */
+  /** Returns the resolved walDirectory path used by the storage layout. */
   get walDirectory(): string {
     return join(this.storageDirectory, "wal");
   }
 
-  /** Returns the current channelsDirectory value. */
+  /** Returns the resolved channelsDirectory path used by the storage layout. */
   get channelsDirectory(): string {
     return join(this.storageDirectory, "channels");
   }
 
-  /** Returns the current lockFile value. */
+  /** Returns the resolved lockFile path used by the storage layout. */
   get lockFile(): string {
     return join(this.storageDirectory, "LOCK");
   }
 
-  /** Runs StorageLayout.objectRecordPath. */
+  /** Returns the canonical JSON object-record path for an object and optional transaction version. */
   objectRecordPath(objectId: string, transactionId?: number): string {
     const fileName = transactionId ? `${objectId}.${transactionId}.json` : `${objectId}.json`;
     if (this.channelCount === 1) {
@@ -94,7 +94,7 @@ export class StorageLayout {
     return join(this.channelDirectoryFor(objectId), "objects", fileName);
   }
 
-  /** Runs StorageLayout.binaryObjectPath. */
+  /** Returns the canonical binary object-record path for an object and optional transaction version. */
   binaryObjectPath(objectId: string, transactionId?: number): string {
     const fileName = transactionId ? `${objectId}.${transactionId}.bin` : `${objectId}.bin`;
     if (this.channelCount === 1) {
@@ -103,7 +103,7 @@ export class StorageLayout {
     return join(this.channelDirectoryFor(objectId), "objects-bin", fileName);
   }
 
-  /** Runs StorageLayout.objectRecordDirectories. */
+  /** Returns every directory that may contain object records for the requested record kind. */
   objectRecordDirectories(kind: ObjectRecordKind): string[] {
     if (this.channelCount === 1) {
       return [kind === "json" ? this.objectsDirectory : this.binaryObjectsDirectory];
@@ -111,7 +111,7 @@ export class StorageLayout {
     return this.channelDirectories().map((directory) => join(directory, kind === "json" ? "objects" : "objects-bin"));
   }
 
-  /** Runs StorageLayout.channelDirectories. */
+  /** Returns the channel directories used to shard object records across multiple folders. */
   channelDirectories(): string[] {
     if (this.channelCount === 1) {
       return [];
@@ -119,7 +119,7 @@ export class StorageLayout {
     return Array.from({ length: this.channelCount }, (_, index) => join(this.channelsDirectory, `ch_${index}`));
   }
 
-  /** Runs StorageLayout.parseTransactionId. */
+  /** Extracts the numeric transaction ID from a snapshot file name and rejects invalid pointers. */
   parseTransactionId(snapshotFile: string): number {
     const match = /^snapshot-(\d+)\.json$/.exec(snapshotFile);
     if (!match?.[1]) {
@@ -128,12 +128,12 @@ export class StorageLayout {
     return Number(match[1]);
   }
 
-  /** Runs StorageLayout.walPrepareFile. */
+  /** Returns the canonical WAL prepare file path for a transaction ID. */
   walPrepareFile(transactionId: number): string {
     return join(this.walDirectory, `transaction-${String(transactionId).padStart(12, "0")}.prepare.json`);
   }
 
-  /** Runs StorageLayout.walCommitFile. */
+  /** Returns the canonical WAL commit file path for a transaction ID. */
   walCommitFile(transactionId: number): string {
     return join(this.walDirectory, `transaction-${String(transactionId).padStart(12, "0")}.commit.json`);
   }

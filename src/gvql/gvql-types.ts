@@ -20,25 +20,25 @@ export type GvqlArithmeticOperator = "+" | "-" | "*" | "/";
 export type GvqlAggregateFunction = "count" | "sum" | "avg" | "min" | "max";
 export type GvqlScalarFunction = "lower" | "upper" | "trim" | "length" | "coalesce";
 
-/** Describes the public GvqlNodePattern contract. */
+/** Represents GVQL Node Pattern in the public GraphVault data model. */
 export interface GvqlNodePattern {
   alias: string;
   type?: string;
 }
 
-/** Describes the public GvqlEdgePattern contract. */
+/** Represents GVQL Edge Pattern in the public GraphVault data model. */
 export interface GvqlEdgePattern {
   direction: GvqlDirection;
   label?: string;
 }
 
-/** Describes the public GvqlMatchPattern contract. */
+/** Represents GVQL Match Pattern in the public GraphVault data model. */
 export interface GvqlMatchPattern {
   start: GvqlNodePattern;
   chain: Array<{ edge: GvqlEdgePattern; node: GvqlNodePattern }>;
 }
 
-/** Describes the public GvqlPathExpression contract. */
+/** Represents GVQL Path Expression in the public GraphVault data model. */
 export interface GvqlPathExpression {
   alias: string;
   path?: string;
@@ -52,7 +52,7 @@ export type GvqlLiteral =
   | { parameter: string }
   | GvqlLiteral[];
 
-/** Describes the public GvqlPredicate contract. */
+/** Represents GVQL Predicate in the public GraphVault data model. */
 export interface GvqlPredicate {
   left: GvqlValueExpression;
   operator: GvqlCompareOperator;
@@ -66,12 +66,12 @@ export type GvqlBooleanExpression<TPredicate> =
 
 export type GvqlWhereClause = GvqlBooleanExpression<GvqlPredicate>;
 
-/** Describes the public GvqlRowReference contract. */
+/** Represents GVQL Row Reference in the public GraphVault data model. */
 export interface GvqlRowReference {
   aliasName: string;
 }
 
-/** Describes the public GvqlRowPredicate contract. */
+/** Represents GVQL Row Predicate in the public GraphVault data model. */
 export interface GvqlRowPredicate {
   left: GvqlRowReference;
   operator: GvqlCompareOperator;
@@ -97,23 +97,23 @@ export type GvqlValueExpression =
 
 export type GvqlSetValueExpression = GvqlValueExpression;
 
-/** Describes the public GvqlSetExpression contract. */
+/** Represents GVQL Set Expression in the public GraphVault data model. */
 export interface GvqlSetExpression {
   target: GvqlPathExpression;
   value: GvqlSetValueExpression;
 }
 
-/** Describes the public GvqlRemoveExpression contract. */
+/** Represents GVQL Remove Expression in the public GraphVault data model. */
 export interface GvqlRemoveExpression {
   target: GvqlPathExpression;
 }
 
-/** Describes the public GvqlDeleteExpression contract. */
+/** Represents GVQL Delete Expression in the public GraphVault data model. */
 export interface GvqlDeleteExpression {
   alias: string;
 }
 
-/** Describes the public GvqlCreateExpression contract. */
+/** Represents GVQL Create Expression in the public GraphVault data model. */
 export interface GvqlCreateExpression {
   alias: string;
   type?: string;
@@ -121,7 +121,7 @@ export interface GvqlCreateExpression {
   into: GvqlPathExpression;
 }
 
-/** Describes the public GvqlMergeExpression contract. */
+/** Represents GVQL Merge Expression in the public GraphVault data model. */
 export interface GvqlMergeExpression extends GvqlCreateExpression {
   on: GvqlPathExpression;
 }
@@ -130,20 +130,20 @@ export type GvqlOrderExpression =
   | { kind: "path"; expression: GvqlPathExpression }
   | { kind: "alias"; aliasName: string };
 
-/** Describes the public GvqlOrderBy contract. */
+/** Represents GVQL Order By in the public GraphVault data model. */
 export interface GvqlOrderBy {
   expression: GvqlOrderExpression;
   direction: "asc" | "desc";
 }
 
-/** Describes the public GvqlWithClause contract. */
+/** Represents GVQL With Clause in the public GraphVault data model. */
 export interface GvqlWithClause {
   returns: GvqlReturnExpression[];
   distinct: boolean;
   where?: GvqlHavingClause;
 }
 
-/** Describes the public GvqlStatement contract. */
+/** Represents GVQL Statement in the public GraphVault data model. */
 export interface GvqlStatement {
   kind: GvqlStatementKind;
   match: GvqlMatchPattern;
@@ -165,14 +165,14 @@ export interface GvqlStatement {
   offset?: number;
 }
 
-/** Describes the public GvqlGraphNode contract. */
+/** Represents GVQL Graph Node in the public GraphVault data model. */
 export interface GvqlGraphNode {
   objectId: string;
   kind: string;
   type?: string;
 }
 
-/** Describes the public GvqlGraphEdge contract. */
+/** Directed graph edge representation used by GVQL Graph. */
 export interface GvqlGraphEdge {
   from: string;
   to: string;
@@ -180,7 +180,7 @@ export interface GvqlGraphEdge {
   label: string;
 }
 
-/** Describes the public GvqlGraphIndex contract. */
+/** In-memory graph index used by GVQL to avoid full graph scans where possible. */
 export interface GvqlGraphIndex {
   envelope: SerializedEnvelope;
   nodes: Map<string, GvqlGraphNode>;
@@ -195,7 +195,7 @@ export interface GvqlGraphIndex {
   transactionId?: number;
 }
 
-/** Describes the public GvqlAdvancedGraphIndex contract. */
+/** Represents GVQL Advanced Graph Index in the public GraphVault data model. */
 export interface GvqlAdvancedGraphIndex {
   definitions: StorageAdvancedIndexRecord["definitions"];
   composite: Map<string, Map<string, string[]>>;
@@ -207,7 +207,7 @@ export interface GvqlAdvancedGraphIndex {
   statistics: StorageAdvancedIndexRecord["statistics"];
 }
 
-/** Describes the public GvqlExecutionOptions contract. */
+/** Execution options for GVQL queries, previews, graph indexes, limits, and mutation permissions. */
 export interface GvqlExecutionOptions {
   parameters?: Record<string, unknown>;
   allowMutations?: boolean;
@@ -217,7 +217,7 @@ export interface GvqlExecutionOptions {
 
 export type GvqlCandidateSource = "property-index" | "composite-index" | "range-index" | "text-index" | "fulltext-index" | "expression-index" | "unique-index" | "type-index" | "id-index" | "full-scan";
 
-/** Describes the public GvqlExecutionPlan contract. */
+/** Index-selection and scan information returned with a GVQL result when planning is requested. */
 export interface GvqlExecutionPlan {
   nodeCount: number;
   candidateSource: GvqlCandidateSource;
@@ -248,7 +248,7 @@ export interface GvqlExecutionPlan {
   operations: string[];
 }
 
-/** Describes the public GvqlQueryResult contract. */
+/** Rows, columns, plan, and summary returned by a read-only GVQL query. */
 export interface GvqlQueryResult {
   kind: "select";
   statement: GvqlStatement;
@@ -259,7 +259,7 @@ export interface GvqlQueryResult {
   plan: GvqlExecutionPlan;
 }
 
-/** Describes the public GvqlMutationPreview contract. */
+/** Represents GVQL Mutation Preview in the public GraphVault data model. */
 export interface GvqlMutationPreview {
   objectId: string;
   alias: string;
@@ -269,7 +269,7 @@ export interface GvqlMutationPreview {
   operation?: "set" | "remove" | "detach" | "delete" | "create" | "attach" | "merge";
 }
 
-/** Describes the public GvqlMutationResult contract. */
+/** Changes, preview data, and optional store metadata returned by a mutating GVQL statement. */
 export interface GvqlMutationResult {
   kind: "update";
   statement: GvqlStatement;
@@ -288,7 +288,7 @@ export type GvqlResult = GvqlQueryResult | GvqlMutationResult;
 
 export type GvqlBinding = Record<string, string>;
 
-/** Describes the public GvqlExecutableContext contract. */
+/** Runtime graph, index, and mutation settings used by the GVQL executor. */
 export interface GvqlExecutableContext {
   envelope: SerializedEnvelope;
   transactionId?: number;

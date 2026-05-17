@@ -13,7 +13,7 @@ import type { StorageLayout } from "./storage-layout.js";
 import type { StorageWriter } from "./storage-writer.js";
 import type { ResolvedStorageWriteOptions } from "./storage-write-options.js";
 
-/** Describes the public StorageCommitterDependencies contract. */
+/** Collaborators required by StorageCommitter to validate, write, and publish a transaction. */
 export interface StorageCommitterDependencies {
   target: StorageTarget;
   layout: StorageLayout;
@@ -27,7 +27,7 @@ export interface StorageCommitterDependencies {
   schemaVersion: () => number;
 }
 
-/** Describes the public CommitEnvelopeOptions contract. */
+/** Options for publishing one serialized envelope as a committed GraphVault transaction. */
 export interface CommitEnvelopeOptions {
   envelope: SerializedEnvelope;
   baseTransactionId: number;
@@ -40,12 +40,12 @@ export interface CommitEnvelopeOptions {
   metadata?: TransactionMetadata;
 }
 
-/** Provides the public StorageCommitter API. */
+/** Publishes prepared storage envelopes through WAL, manifest, index, and transaction records. */
 export class StorageCommitter {
-  /** Creates a StorageCommitter instance. */
+  /** Creates a Storage Committer with the supplied configuration. */
   constructor(private readonly dependencies: StorageCommitterDependencies) {}
 
-  /** Runs StorageCommitter.commitEnvelope asynchronously. */
+  /** Writes object records and metadata for one serialized envelope, then publishes it as a transaction. */
   async commitEnvelope(options: CommitEnvelopeOptions): Promise<StoreMetadata> {
     const { envelope, baseTransactionId, mode, allObjectIds, targetCount, lock } = options;
     const nextTransactionId = baseTransactionId + 1;
@@ -110,7 +110,7 @@ export class StorageCommitter {
     };
   }
 
-  /** Runs StorageCommitter.publishPreparedCommit asynchronously. */
+  /** Publishes an already prepared WAL commit by advancing manifest, CURRENT, and transaction metadata. */
   async publishPreparedCommit(options: {
     envelope: SerializedEnvelope;
     transactionId: number;
@@ -163,7 +163,7 @@ export class StorageCommitter {
   }
 }
 
-/** Runs the public sortedObjectIds helper. */
+/** Sorts object IDs numerically where possible so storage output remains deterministic. */
 export function sortedObjectIds(envelope: SerializedEnvelope): string[] {
   return Object.keys(envelope.nodes).sort((a, b) => Number(a) - Number(b));
 }

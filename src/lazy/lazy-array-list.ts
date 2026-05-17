@@ -1,13 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { lazy, LazyRef } from "./lazy-ref.js";
 
-/** Provides the public LazyArrayList API. */
+/** Segmented list for large arrays whose chunks can be loaded and stored independently. */
 export class LazyArrayList<T> {
   private readonly segmentSize: number;
   private length = 0;
   private readonly segments: Array<LazyRef<T[]>> = [];
 
-  /** Creates a LazyArrayList instance. */
+  /** Creates an empty segmented list with the requested maximum items per lazy segment. */
   constructor(segmentSize = 1_000) {
     if (!Number.isSafeInteger(segmentSize) || segmentSize < 1) {
       throw new RangeError("segmentSize must be a positive safe integer.");
@@ -15,12 +15,12 @@ export class LazyArrayList<T> {
     this.segmentSize = segmentSize;
   }
 
-  /** Returns the current size value. */
+  /** Returns the logical number of items tracked by the segmented list. */
   get size(): number {
     return this.length;
   }
 
-  /** Runs LazyArrayList.push asynchronously. */
+  /** Appends a value to the final segment, creating a new lazy segment when the current one is full. */
   async push(value: T): Promise<number> {
     const index = this.length;
     const segment = await this.segmentFor(index, true);
@@ -29,21 +29,21 @@ export class LazyArrayList<T> {
     return this.length;
   }
 
-  /** Runs LazyArrayList.get asynchronously. */
+  /** Loads the containing segment when necessary and returns the item at the requested index. */
   async get(index: number): Promise<T | undefined> {
     this.assertIndex(index);
     const segment = await this.segmentFor(index, false);
     return segment?.[index % this.segmentSize];
   }
 
-  /** Runs LazyArrayList.set asynchronously. */
+  /** Loads or creates the containing segment and replaces the item at the requested index. */
   async set(index: number, value: T): Promise<void> {
     this.assertIndex(index);
     const segment = await this.segmentFor(index, true);
     segment[index % this.segmentSize] = value;
   }
 
-  /** Runs LazyArrayList.toArray asynchronously. */
+  /** Loads all list segments and returns the list values as a dense array. */
   async toArray(): Promise<T[]> {
     const result: T[] = [];
     for (let index = 0; index < this.length; index++) {
@@ -52,14 +52,14 @@ export class LazyArrayList<T> {
     return result;
   }
 
-  /** Runs LazyArrayList.clearLoadedSegments. */
+  /** Drops loaded list segments from memory while keeping persisted segment keys intact. */
   clearLoadedSegments(): void {
     for (const segment of this.segments) {
       segment.clear();
     }
   }
 
-  /** Runs LazyArrayList.storeSegments asynchronously. */
+  /** Persists every loaded segment through its LazyRef binding. */
   async storeSegments(): Promise<void> {
     for (const segment of this.segments) {
       await segment.store();

@@ -41,7 +41,7 @@ interface IndexablePredicateSet {
   predicates: IndexablePredicate[];
 }
 
-/** Runs the public executeGvqlStatement helper. */
+/** Executes a parsed GVQL query or update against a serialized envelope. */
 export function executeGvqlStatement(envelope: SerializedEnvelope, statement: GvqlStatement, options: GvqlExecutionOptions = {}): GvqlResult {
   const started = performance.now();
   const parameters = options.parameters ?? {};
@@ -127,7 +127,7 @@ function projectRowsFromRows(rows: Array<Record<string, unknown>>, returns: Gvql
   });
 }
 
-/** Runs the public matchBindings helper. */
+/** Returns row bindings produced by matching a GVQL graph pattern against an envelope. */
 export function matchBindings(index: GvqlGraphIndex, statement: GvqlStatement, parameters: Record<string, unknown> = {}): GvqlBinding[] {
   return matchBindingsWithPlan(index, statement, parameters).bindings;
 }
