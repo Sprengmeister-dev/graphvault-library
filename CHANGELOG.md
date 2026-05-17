@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Rename write profiles to `production`, `balanced`, and `inspect`.
+- Make `production` the default write profile.
+- Rename benchmark targets to `filesystem/production` and `filesystem/inspect`.
+
 ## 0.2.6
 
 - Support Node.js 22+ explicitly, including current LTS lines.

@@ -38,7 +38,7 @@ const storage = await EmbeddedStorage.start({
 });
 ```
 
-For write-heavy embedded stores, add `writeProfile: "maximum"` and keep `transactionLog: "full"` unless the store is disposable.
+For write-heavy embedded stores, use the default `writeProfile: "production"` and keep `transactionLog: "full"` unless the store is disposable.
 
 ## Persistent Indexes
 

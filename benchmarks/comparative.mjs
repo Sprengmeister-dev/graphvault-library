@@ -40,7 +40,7 @@ async function benchmarkGraphVault(count) {
       storageDirectory: directory,
       root: createRoot(count),
       types: typeRegistrations(),
-      writeProfile: "maximum",
+      writeProfile: "production",
       indexes: {
         mode: "configured",
         properties: [
@@ -61,11 +61,11 @@ async function benchmarkGraphVault(count) {
         storageDirectory: directory,
         rootFactory: () => ({ cases: [] }),
         types: typeRegistrations(),
-        writeProfile: "maximum",
+        writeProfile: "production",
       });
       await loaded.shutdown();
     });
-    return { target: "graphvault/maximum", count, storeMs: store.ms, queryMs: query.ms, loadMs: load.ms, bytes: await directorySize(directory) };
+    return { target: "graphvault/production", count, storeMs: store.ms, queryMs: query.ms, loadMs: load.ms, bytes: await directorySize(directory) };
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

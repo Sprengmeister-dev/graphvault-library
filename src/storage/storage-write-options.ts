@@ -17,22 +17,23 @@ export interface ResolvedStorageWriteOptions {
 
 /** Runs the public resolveStorageWriteOptions helper. */
 export function resolveStorageWriteOptions(options: StorageManagerOptions<any>): ResolvedStorageWriteOptions {
-  const profile = options.writeProfile ?? "standard";
+  const profile = options.writeProfile ?? "production";
+  const inspectable = profile === "inspect";
   return {
     profile,
-    objectRecordFormat: options.objectRecordFormat ?? (profile === "standard" ? "binary-and-json" : "binary"),
+    objectRecordFormat: options.objectRecordFormat ?? (inspectable ? "binary-and-json" : "binary"),
     objectRecordWriteConcurrency: options.objectRecordWriteConcurrency ?? defaultObjectRecordWriteConcurrency(profile),
-    prettyJson: options.prettyJson ?? profile === "standard",
-    durability: options.writeDurability ?? (profile === "standard" ? "strict" : "relaxed"),
-    writeSnapshots: options.writeSnapshots ?? profile !== "maximum",
+    prettyJson: options.prettyJson ?? inspectable,
+    durability: options.writeDurability ?? (inspectable ? "strict" : "relaxed"),
+    writeSnapshots: options.writeSnapshots ?? profile !== "production",
   };
 }
 
 function defaultObjectRecordWriteConcurrency(profile: StorageWriteProfile): number {
-  if (profile === "maximum") {
+  if (profile === "production") {
     return 128;
   }
-  if (profile === "fast") {
+  if (profile === "balanced") {
     return 64;
   }
   return 32;

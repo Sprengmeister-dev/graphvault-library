@@ -34,7 +34,7 @@ export class DocumentsService {
       global: true,
       storageDirectory: "./data/graphvault",
       rootFactory: () => new AppRoot(),
-      writeProfile: "fast",
+      writeProfile: "balanced",
     }),
   ],
   providers: [DocumentsService],
@@ -43,4 +43,4 @@ export class DocumentsService {
 export class AppModule {}
 ```
 
-Use `writeProfile: "standard"` when inspectable local files and strict fsync behavior matter most. Use `writeProfile: "fast"` or `"maximum"` for write-heavy services after measuring your own graph.
+Use `writeProfile: "inspect"` when inspectable local files and strict fsync behavior matter most. The default `writeProfile: "production"` is the write-heavy profile; `balanced` keeps compact writes but still writes checkpoint snapshots.

@@ -149,7 +149,7 @@ Ignored fields are filtered after custom `serialize(...)` and before custom `hyd
 - `indexes`: persistent index configuration. `true` or omitted uses automatic direct-property indexing. Use `{ mode: "configured", properties: ["id", { type: "Invoice", path: "customerId" }] }` for bounded large-graph indexes, `{ mode: "off" }` to disable, and `consistency: "committed"` only when read queries intentionally target the last committed graph.
 - `transaction(..., { metadata })`: records actor, reason, source, trace ID, tags, and simple audit attributes in the transaction record. Metadata is included in the transaction hash.
 - `housekeepingIntervalMs`: periodic maintenance interval.
-- `writeProfile`: `standard`, `fast`, or `maximum` write throughput profile.
+- `writeProfile`: `production`, `balanced`, or `inspect` write profile. Defaults to `production`.
 - `writeDurability`: `strict` for fsynced local atomic writes, `relaxed` for higher throughput.
 - `objectRecordFormat`: `binary-and-json`, `binary`, or `json`.
 - `objectRecordWriteConcurrency`: parallelism for object-record writes.

@@ -6,7 +6,8 @@ import { EmbeddedStorage, MemoryStorageTarget, StorageLockError } from "../dist/
 
 const workingDirectory = await mkdtemp(join(tmpdir(), "graphvault-storage-tests-"));
 const backupDirectory = await mkdtemp(join(tmpdir(), "graphvault-storage-backup-"));
-const maximumWriteDirectory = await mkdtemp(join(tmpdir(), "graphvault-storage-maximum-"));
+const productionWriteDirectory = await mkdtemp(join(tmpdir(), "graphvault-storage-production-"));
+const inspectWriteDirectory = await mkdtemp(join(tmpdir(), "graphvault-storage-inspect-"));
 const nestedMutationDirectory = await mkdtemp(join(tmpdir(), "graphvault-storage-nested-"));
 const consistentBackupDirectory = await mkdtemp(join(tmpdir(), "graphvault-storage-consistent-backup-"));
 const integrityDirectory = await mkdtemp(join(tmpdir(), "graphvault-storage-integrity-"));
@@ -17,6 +18,7 @@ const migrationDirectory = await mkdtemp(join(tmpdir(), "graphvault-storage-migr
 try {
   const writeable = await EmbeddedStorage.start({
     storageDirectory: workingDirectory,
+    writeProfile: "inspect",
     rootFactory: () => ({
       docs: [{ id: "doc-1", title: "First" }, { id: "doc-2", title: "Second" }],
     }),
@@ -125,25 +127,37 @@ try {
   assert.equal(manifest.format, "graphvault-manifest");
   assert.equal(Array.isArray(manifest.objectIds), true);
 
-  const maximumWrite = await EmbeddedStorage.start({
-    storageDirectory: maximumWriteDirectory,
+  const productionWrite = await EmbeddedStorage.start({
+    storageDirectory: productionWriteDirectory,
     rootFactory: () => ({
       docs: [{ id: "doc-fast", title: "Binary only" }],
     }),
-    writeProfile: "maximum",
   });
-  await maximumWrite.storeRoot();
-  await maximumWrite.shutdown();
-  assert.deepEqual(await readdir(join(maximumWriteDirectory, "objects")), []);
-  assert.equal((await readdir(join(maximumWriteDirectory, "objects-bin"))).length >= 2, true);
-  assert.deepEqual(await readdir(join(maximumWriteDirectory, "snapshots")), []);
-  const maximumRestored = await EmbeddedStorage.start({
-    storageDirectory: maximumWriteDirectory,
+  await productionWrite.storeRoot();
+  await productionWrite.shutdown();
+  assert.deepEqual(await readdir(join(productionWriteDirectory, "objects")), []);
+  assert.equal((await readdir(join(productionWriteDirectory, "objects-bin"))).length >= 2, true);
+  assert.deepEqual(await readdir(join(productionWriteDirectory, "snapshots")), []);
+  const productionRestored = await EmbeddedStorage.start({
+    storageDirectory: productionWriteDirectory,
     rootFactory: () => ({ docs: [] }),
     readOnly: true,
   });
-  assert.equal(maximumRestored.root.docs[0].title, "Binary only");
-  await maximumRestored.shutdown();
+  assert.equal(productionRestored.root.docs[0].title, "Binary only");
+  await productionRestored.shutdown();
+
+  const inspectWrite = await EmbeddedStorage.start({
+    storageDirectory: inspectWriteDirectory,
+    rootFactory: () => ({
+      docs: [{ id: "doc-inspect", title: "Inspectable" }],
+    }),
+    writeProfile: "inspect",
+  });
+  await inspectWrite.storeRoot();
+  await inspectWrite.shutdown();
+  assert.equal((await readdir(join(inspectWriteDirectory, "objects"))).length >= 2, true);
+  assert.equal((await readdir(join(inspectWriteDirectory, "objects-bin"))).length >= 2, true);
+  assert.equal((await readdir(join(inspectWriteDirectory, "snapshots"))).length >= 1, true);
 
   const nestedMutations = await EmbeddedStorage.start({
     storageDirectory: nestedMutationDirectory,
@@ -241,6 +255,7 @@ try {
     staleLockTimeoutMs: 60_000,
     transactionLog: "full",
     writeDurability: "strict",
+    writeSnapshots: true,
     commitValidators: [
       ({ root }) => {
         assert.equal(Array.isArray(root.ledger), true);
@@ -264,7 +279,7 @@ try {
     storageDirectory: unsafeSafetyDirectory,
     rootFactory: () => ({ cache: [{ id: "cache-1" }] }),
     transactionLog: "off",
-    writeProfile: "maximum",
+    writeProfile: "production",
   });
   await unsafeStore.storeRoot();
   const unsafeProfile = await unsafeStore.safetyProfile();
@@ -376,7 +391,8 @@ try {
 } finally {
   await rm(workingDirectory, { recursive: true, force: true });
   await rm(backupDirectory, { recursive: true, force: true });
-  await rm(maximumWriteDirectory, { recursive: true, force: true });
+  await rm(productionWriteDirectory, { recursive: true, force: true });
+  await rm(inspectWriteDirectory, { recursive: true, force: true });
   await rm(nestedMutationDirectory, { recursive: true, force: true });
   await rm(consistentBackupDirectory, { recursive: true, force: true });
   await rm(integrityDirectory, { recursive: true, force: true });

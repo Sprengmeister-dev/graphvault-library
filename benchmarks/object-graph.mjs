@@ -5,11 +5,11 @@ import { performance } from "node:perf_hooks";
 import { EmbeddedStorage, MemoryStorageTarget } from "../dist/index.js";
 
 const defaultSizes = [100, 300, 750];
-const allTargets = ["memory", "filesystem", "filesystem/maximum"];
+const allTargets = ["memory", "filesystem/production", "filesystem/inspect"];
 const performanceBudgets = {
   memory: { storeMs: 250, loadMs: 150, gvqlIndexedMs: 100 },
-  filesystem: { storeMs: 8_000, loadMs: 500, gvqlIndexedMs: 150 },
-  "filesystem/maximum": { storeMs: 1_500, loadMs: 500, gvqlIndexedMs: 150 },
+  "filesystem/production": { storeMs: 1_500, loadMs: 500, gvqlIndexedMs: 150 },
+  "filesystem/inspect": { storeMs: 8_000, loadMs: 500, gvqlIndexedMs: 150 },
 };
 
 class Owner {
@@ -307,11 +307,11 @@ for (const count of options.sizes) {
   if (options.targets.includes("memory")) {
     rows.push(await benchmarkMemory(count));
   }
-  if (options.targets.includes("filesystem")) {
-    rows.push(await benchmarkFilesystem(count));
+  if (options.targets.includes("filesystem/production")) {
+    rows.push(await benchmarkFilesystem(count, { target: "filesystem/production" }));
   }
-  if (options.targets.includes("filesystem/maximum")) {
-    rows.push(await benchmarkFilesystem(count, { target: "filesystem/maximum", storageOptions: { writeProfile: "maximum" } }));
+  if (options.targets.includes("filesystem/inspect")) {
+    rows.push(await benchmarkFilesystem(count, { target: "filesystem/inspect", storageOptions: { writeProfile: "inspect" } }));
   }
 }
 

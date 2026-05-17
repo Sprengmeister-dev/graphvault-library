@@ -21,7 +21,7 @@ const safeOperations = {
 
 const productionProfile = assessStorageSafety({
   operations: safeOperations,
-  writeProfile: "maximum",
+  writeProfile: "production",
   durability: "strict",
   writeSnapshots: true,
   recoverCommittedWal: true,

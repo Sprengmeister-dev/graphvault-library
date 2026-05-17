@@ -120,13 +120,13 @@ The benchmark is reproducible with `npm run benchmark`; a comparative JSON/SQLit
 | target | documents | storeRoot | indexed GVQL aggregate | reload | storage size |
 | --- | ---: | ---: | ---: | ---: | ---: |
 | memory | 100 | 21.8 ms | 2.5 ms | 5.0 ms | - |
-| filesystem | 100 | 2856.9 ms | 1.7 ms | 40.7 ms | 1.02 MiB |
-| filesystem/maximum | 100 | 60.1 ms | 2.2 ms | 31.9 ms | 0.44 MiB |
+| filesystem/production | 100 | 60.1 ms | 2.2 ms | 31.9 ms | 0.44 MiB |
+| filesystem/inspect | 100 | 2856.9 ms | 1.7 ms | 40.7 ms | 1.02 MiB |
 | memory | 750 | 76.5 ms | 8.5 ms | 20.8 ms | - |
-| filesystem | 750 | 19891.3 ms | 8.7 ms | 244.6 ms | 6.62 MiB |
-| filesystem/maximum | 750 | 323.1 ms | 8.9 ms | 197.0 ms | 2.88 MiB |
+| filesystem/production | 750 | 323.1 ms | 8.9 ms | 197.0 ms | 2.88 MiB |
+| filesystem/inspect | 750 | 19891.3 ms | 8.7 ms | 244.6 ms | 6.62 MiB |
 
-The default filesystem profile favors inspectable JSON sidecars and conservative local durability. `writeProfile: "maximum"` is the write-heavy profile: binary object records, compact metadata, no debug-oriented duplicate object writes, and higher local write concurrency.
+The default filesystem profile is `writeProfile: "production"`: binary object records, compact metadata, no debug-oriented duplicate object writes, and higher local write concurrency. Use `writeProfile: "inspect"` when human-readable JSON sidecars and conservative local flush behavior matter more than write throughput.
 
 ## Important Workflows
 

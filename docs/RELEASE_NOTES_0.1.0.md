@@ -11,7 +11,7 @@ GraphVault TS 0.1.0 is the first public TypeScript implementation of GraphVault:
 - Local filesystem, memory, HTTP, S3-compatible, and SQL-backed storage targets.
 - NestJS module integration.
 - Verification, backup, compaction, garbage collection, transaction journal, manifest, parent index, and benchmark tooling.
-- `writeProfile: "maximum"` for high-throughput local writes.
+- `writeProfile: "production"` for high-throughput local writes.
 
 ## Install
 

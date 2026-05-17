@@ -62,8 +62,9 @@ Every writer lock has a fencing token. If a stale lock is recovered and a newer 
 
 ## Durability Tradeoffs
 
-- `writeDurability: "strict"` is the production default and favors safer local atomic writes.
-- `writeDurability: "relaxed"` favors throughput and is suitable for disposable or rebuildable stores.
+- `writeProfile: "production"` is the default and favors write throughput with compact binary records.
+- `writeDurability: "strict"` favors safer local atomic writes and should be set explicitly for critical stores.
+- `writeDurability: "relaxed"` is the default for the production and balanced profiles and favors throughput.
 - `staleLockTimeoutMs` should be higher than the longest transaction you intentionally allow.
 
 ## Remaining Boundary

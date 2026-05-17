@@ -63,7 +63,8 @@ const storage = await EmbeddedStorage.start({
   recoverCommittedWal: true,
   readCommittedWal: true,
   writeDurability: "strict",
-  writeProfile: "standard",
+  writeProfile: "production",
+  writeSnapshots: true,
   commitValidators: [
     ({ root }) => {
       if (!Array.isArray(root.cases)) {

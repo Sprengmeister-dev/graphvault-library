@@ -38,7 +38,7 @@ const storage = await EmbeddedStorage.start({
 });
 ```
 
-For high-throughput local stores where operational debugging JSON is less important, use `writeProfile: "maximum"` and keep `transactionLog: "full"` unless the store is disposable.
+For high-throughput local stores where operational debugging JSON is less important, use the default `writeProfile: "production"` and keep `transactionLog: "full"` unless the store is disposable.
 
 ## Bounded Graph Export
 

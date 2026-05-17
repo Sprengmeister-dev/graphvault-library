@@ -691,7 +691,7 @@ export interface MaintenanceResult {
 
 export type StoreMode = "standard" | "lazy" | "eager";
 
-export type StorageWriteProfile = "standard" | "fast" | "maximum";
+export type StorageWriteProfile = "production" | "balanced" | "inspect";
 
 export type ObjectRecordWriteFormat = "binary-and-json" | "binary" | "json";
 

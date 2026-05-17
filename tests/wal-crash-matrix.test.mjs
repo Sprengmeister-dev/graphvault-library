@@ -41,6 +41,7 @@ async function assertCrashPhase(phase) {
     storageDirectory,
     storageTarget: target,
     lockStrategy: "pessimistic",
+    writeSnapshots: true,
     rootFactory: () => ({ items: [] }),
   });
   baseline.root.items.push("baseline");
@@ -52,6 +53,7 @@ async function assertCrashPhase(phase) {
     storageDirectory,
     storageTarget: target,
     lockStrategy: "pessimistic",
+    writeSnapshots: true,
     rootFactory: () => ({ items: [] }),
   });
   crashingWriter.root.items.push("after-crash");
@@ -74,6 +76,7 @@ async function assertCrashPhase(phase) {
     storageDirectory,
     storageTarget: target,
     lockStrategy: "pessimistic",
+    writeSnapshots: true,
     rootFactory: () => ({ items: [] }),
   });
   assert.deepEqual(recoveringWriter.root.items, phase.expectedReadableItems, phase.name);

@@ -22,7 +22,8 @@ const storage = await EmbeddedStorage.start({
   recoverCommittedWal: true,
   readCommittedWal: true,
   writeDurability: "strict",
-  writeProfile: "standard",
+  writeProfile: "production",
+  writeSnapshots: true,
   commitValidators: [
     ({ root }) => {
       if (root.ledger.total < 0) {
@@ -45,7 +46,7 @@ const storage = await EmbeddedStorage.start({
   root,
   lockStrategy: "startup",
   transactionLog: "off",
-  writeProfile: "maximum",
+  writeProfile: "production",
   writeDurability: "relaxed",
   writeSnapshots: false,
 });

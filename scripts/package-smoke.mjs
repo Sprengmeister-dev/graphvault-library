@@ -99,7 +99,7 @@ const assessed = assessStorageSafety({
     objectCount: 1,
     latestTransactionHash: "hash",
   },
-  writeProfile: "standard",
+  writeProfile: "production",
   durability: "strict",
   writeSnapshots: true,
   recoverCommittedWal: true,

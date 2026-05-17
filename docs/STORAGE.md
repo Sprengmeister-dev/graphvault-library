@@ -6,7 +6,7 @@ GraphVault always has a logical `storageDirectory`. With the default local targe
 
 ### Local Filesystem
 
-This is the default. It writes manifests, object records, binary object records, snapshots, transactions, and lock files below the directory.
+This is the default. It writes manifests, binary object records, transactions, indexes, and lock files below the directory. Inspectable JSON object records and checkpoint snapshots are available through `writeProfile: "inspect"` or explicit write options.
 
 Object records are transaction-versioned. The manifest stores the live object id list plus the transaction version to read for each object, which lets garbage collection remove old versions while preserving crash-safe manifest reads.
 
@@ -29,21 +29,21 @@ const storage = await EmbeddedStorage.start({
 });
 ```
 
-For write-heavy services, choose an explicit write profile:
+The default write profile is optimized for production write throughput:
 
 ```ts
 const storage = await EmbeddedStorage.start({
   storageDirectory: "./data",
   rootFactory: () => ({ documents: [] }),
-  writeProfile: "maximum",
+  writeProfile: "production",
 });
 ```
 
 Write profiles:
 
-- `standard`: strict local writes, inspectable JSON object records, binary object records, snapshots, manifest, parent index, and journal.
-- `fast`: relaxed local writes, compact JSON metadata, binary-only object records, snapshots, manifest, parent index, and journal.
-- `maximum`: relaxed local writes, compact JSON metadata, binary-only object records, no checkpoint snapshots, manifest, parent index, and journal.
+- `production`: relaxed local writes, compact JSON metadata, binary-only object records, no checkpoint snapshots, manifest, parent index, and journal. This is the default.
+- `balanced`: relaxed local writes, compact JSON metadata, binary-only object records, snapshots, manifest, parent index, and journal.
+- `inspect`: strict local writes, inspectable JSON object records, binary object records, snapshots, manifest, parent index, and journal.
 
 You can override the profile details with `objectRecordFormat`, `objectRecordWriteConcurrency`, `prettyJson`, `writeDurability`, and `writeSnapshots`.
 
@@ -248,7 +248,7 @@ const storage = await EmbeddedStorage.start({
 - `optimisticMaxRetries` and `optimisticRetryDelayMs`: retry policy for optimistic transactions.
 - `housekeepingIntervalMs`: enables periodic garbage collection and maintenance work.
 - `readOnly`: opens a store without acquiring a writer lock or mutating files.
-- `writeProfile`: selects `standard`, `fast`, or `maximum` write behavior.
+- `writeProfile`: selects `production`, `balanced`, or `inspect` write behavior.
 - `objectRecordFormat`: writes object records as `binary-and-json`, `binary`, or `json`.
 - `objectRecordWriteConcurrency`: controls parallel object-record writes.
 - `prettyJson`: keeps metadata human-formatted when `true`; compact JSON is faster and smaller.

@@ -84,7 +84,7 @@ try {
   const storage = await startStorage({
     storageDirectory: directory,
     rootFactory: () => ({ docs: [{ id: "doc-1" }] }),
-    writeProfile: "maximum",
+    writeProfile: "production",
   });
   assert.equal(storage.root.docs[0].id, "doc-1");
   await storage.shutdown();
