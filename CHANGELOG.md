@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.7
 
 - Rename write profiles to `production`, `balanced`, and `inspect`.
 - Make `production` the default write profile.

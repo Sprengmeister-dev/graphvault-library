@@ -12,7 +12,7 @@ GraphVault is embedded object-graph persistence for TypeScript and NestJS applic
 
 It is not a SQL server and it is not an ORM. You keep your domain model in memory, mutate normal TypeScript objects, then explicitly commit a verifiable graph store with WAL recovery, locking, indexes, GVQL, and an admin UI.
 
-Current release: [0.2.6](./docs/RELEASE_NOTES_0.2.6.md), with explicit Node.js LTS support, field annotations for save/load filtering, professional persistent indexes, and NestJS smoke tests.
+Current release: [0.2.7](./docs/RELEASE_NOTES_0.2.7.md), with production write defaults, explicit Node.js LTS support, field annotations for save/load filtering, professional persistent indexes, and NestJS smoke tests.
 
 ## 30-Second Quickstart
 
@@ -176,6 +176,7 @@ For a fuller graph-shaped product demo, see the [CaseGraph demo concept](./docs/
 - [CaseGraph demo concept](./docs/CASEGRAPH.md) - the reference use case for graph-shaped, audit-heavy application data.
 - [API reference](./docs/API.md) - public entry points and important options.
 - [Benchmarks](./docs/BENCHMARKS.md) - reproducible performance numbers and write profiles.
+- [0.2.7 release notes](./docs/RELEASE_NOTES_0.2.7.md) - production write defaults and renamed write profiles.
 - [0.2.6 release notes](./docs/RELEASE_NOTES_0.2.6.md) - explicit Node.js 22+ LTS support and CI validation.
 - [0.2.5 release notes](./docs/RELEASE_NOTES_0.2.5.md) - field annotations for save/load filtering and current package baseline.
 - [0.2.4 release notes](./docs/RELEASE_NOTES_0.2.4.md) - professional persistent indexes, index verification/repair, and current package baseline.
