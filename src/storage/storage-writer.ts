@@ -1,12 +1,15 @@
 import { join } from "node:path";
 import { encodeBinaryRecord } from "../core/binary-codec.js";
 import { buildParentIndexRecord } from "./storage-parent-index.js";
+import { validateStorageConstraints, type ResolvedStorageConstraintOptions } from "./storage-constraints.js";
 import { buildStorageIndexRecord, type ResolvedStorageIndexOptions } from "./storage-index.js";
 import type { StorageLayout } from "./storage-layout.js";
 import type {
   ObjectRecordWriteFormat,
   ObjectRecord,
   SerializedEnvelope,
+  StorageConstraintRecord,
+  StorageConstraintValidationResult,
   StorageManifest,
   StorageTarget,
   TransactionRecord,
@@ -23,6 +26,7 @@ export interface StorageWriterOptions {
   objectRecordWriteConcurrency?: number;
   prettyJson?: boolean;
   indexes?: ResolvedStorageIndexOptions;
+  constraints?: ResolvedStorageConstraintOptions;
 }
 
 /** Writes GraphVault manifests, object records, WAL entries, indexes, and transaction metadata. */
@@ -31,6 +35,7 @@ export class StorageWriter {
   private readonly objectRecordWriteConcurrency: number;
   private readonly prettyJson: boolean;
   private readonly indexes: ResolvedStorageIndexOptions;
+  private readonly constraints: ResolvedStorageConstraintOptions;
 
   /** Creates a Storage Writer with the supplied configuration. */
   constructor(
@@ -47,6 +52,7 @@ export class StorageWriter {
       properties: [],
       advanced: { composites: [], ranges: [], text: [], fullText: [], unique: [], expressions: [] },
     };
+    this.constraints = options.constraints ?? { mode: "enforce", definitions: [] };
   }
 
   /** Serializes a JSON value and writes it atomically to the target. */
@@ -120,6 +126,30 @@ export class StorageWriter {
     } else if (await this.target.exists(this.layout.indexFile)) {
       await this.target.remove(this.layout.indexFile);
     }
+  }
+
+  /** Writes the active storage constraint contract and last validation result. */
+  async writeConstraintRecord(
+    envelope: SerializedEnvelope,
+    transactionId: number,
+    validation?: StorageConstraintValidationResult,
+  ): Promise<void> {
+    if (this.constraints.mode === "off" || this.constraints.definitions.length === 0) {
+      if (await this.target.exists(this.layout.constraintFile)) {
+        await this.target.remove(this.layout.constraintFile);
+      }
+      return;
+    }
+    const record: StorageConstraintRecord = {
+      format: "graphvault-constraints",
+      version: 1,
+      transactionId,
+      createdAt: new Date().toISOString(),
+      mode: this.constraints.mode,
+      definitions: this.constraints.definitions,
+      validation: validation ?? validateStorageConstraints({ envelope, options: this.constraints }),
+    };
+    await this.writeJson(this.layout.constraintFile, record);
   }
 
   /** Appends a transaction record and updates the transaction log. */

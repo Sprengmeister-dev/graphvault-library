@@ -15,6 +15,8 @@ import { collectStorageGarbage } from "./storage-garbage.js";
 import { collectObjectIdsForTargets } from "./storage-object-collector.js";
 import { verifyStorageIndexRecord } from "./storage-index-maintenance.js";
 import { buildStorageIndexRecord, graphIndexFromStorageRecord, isUsableStorageIndexRecord, resolveStorageIndexOptions, storageIndexStatus, type ResolvedStorageIndexOptions } from "./storage-index.js";
+import { graphVaultConstraintDefinitionsForTypes } from "../core/constraints.js";
+import { resolveStorageConstraintOptions, validateStorageConstraints, type ResolvedStorageConstraintOptions } from "./storage-constraints.js";
 import { migrationContext, migrationMetadata, migrationPlan, sortedSchemaMigrations, targetSchemaVersion } from "./storage-migrations.js";
 import { bindStorageLazyRefs, storeLoadedStorageLazyRefs } from "./storage-lazy-helpers.js";
 import { isIterable, replaceObjectContents } from "./storage-root-helpers.js";
@@ -51,6 +53,8 @@ import type {
   StorageIndexRecord,
   StorageIndexStatus,
   StorageIndexVerificationResult,
+  StorageConstraintRecord,
+  StorageConstraintValidationResult,
   TransactionLockMode,
   TransactionMetadata,
   VerificationResult,
@@ -72,6 +76,7 @@ export class StorageManager<TRoot = unknown> {
   private readonly committer: StorageCommitter;
   private readonly writeOptions: ResolvedStorageWriteOptions;
   private readonly indexOptions: ResolvedStorageIndexOptions;
+  private readonly constraintOptions: ResolvedStorageConstraintOptions;
   private readonly mutex = new AsyncMutex();
   private rootValue?: TRoot;
   private started = false;
@@ -91,18 +96,26 @@ export class StorageManager<TRoot = unknown> {
     this.options = { lockTimeoutMs: 5_000, housekeepingIntervalMs: 0, ...options };
     this.writeOptions = resolveStorageWriteOptions(this.options);
     this.indexOptions = resolveStorageIndexOptions(this.options.indexes);
+    this.constraintOptions = resolveStorageConstraintOptions(
+      this.options.constraints,
+      graphVaultConstraintDefinitionsForTypes(this.options.types ?? []),
+    );
     this.layout = new StorageLayout(this.options.storageDirectory, this.options.channelCount ?? 1);
     this.serializer = serializer;
     this.target = options.storageTarget ?? new LocalFilesystemTarget({ syncWrites: this.writeOptions.durability === "strict" });
     this.reader = new StorageReader(this.target, this.layout);
-    this.writer = new StorageWriter(this.target, this.layout, { ...this.writeOptions, indexes: this.indexOptions });
+    this.writer = new StorageWriter(this.target, this.layout, {
+      ...this.writeOptions,
+      indexes: this.indexOptions,
+      constraints: this.constraintOptions,
+    });
     this.committer = new StorageCommitter({
       target: this.target,
       layout: this.layout,
       writer: this.writer,
       writeOptions: this.writeOptions,
       transactionLogEnabled: () => this.transactionLogEnabled,
-      validateCommit: (envelope, transactionId) => this.runCommitValidators(envelope, transactionId),
+      validateCommit: (envelope, transactionId, objectIds) => this.runCommitValidators(envelope, transactionId, objectIds),
       beforePublish: () => this.writeTypeDictionaryIfChanged(),
       readLatestTransactionRecord: () => this.reader.readLatestTransactionRecord(),
       commitState: (transactionId, objectVersions, envelope) => {
@@ -545,7 +558,7 @@ export class StorageManager<TRoot = unknown> {
       writeSnapshots: this.writeOptions.writeSnapshots,
       recoverCommittedWal: this.shouldRecoverCommittedWal,
       readCommittedWal: this.shouldReadCommittedWal,
-      commitValidatorCount: this.options.commitValidators?.length ?? 0,
+      commitValidatorCount: (this.options.commitValidators?.length ?? 0) + this.constraintOptions.definitions.length,
     });
   }
 
@@ -559,7 +572,7 @@ export class StorageManager<TRoot = unknown> {
       writeSnapshots: this.writeOptions.writeSnapshots,
       recoverCommittedWal: this.shouldRecoverCommittedWal,
       readCommittedWal: this.shouldReadCommittedWal,
-      commitValidatorCount: this.options.commitValidators?.length ?? 0,
+      commitValidatorCount: (this.options.commitValidators?.length ?? 0) + this.constraintOptions.definitions.length,
       verify: () => this.verify(),
     });
   }
@@ -595,6 +608,22 @@ export class StorageManager<TRoot = unknown> {
   }
   /** Rebuilds indexes to repair missing or stale persisted index data. */
   async repairIndexes(): Promise<StorageIndexStatus> { return this.rebuildIndexes(); }
+
+  /** Validates the current loaded graph against all configured storage constraints. */
+  async validateConstraints(): Promise<StorageConstraintValidationResult> {
+    this.assertStarted();
+    return validateStorageConstraints({
+      envelope: this.serializer.serialize(this.rootValue),
+      options: this.constraintOptions,
+    });
+  }
+
+  /** Reads the persisted storage constraint contract written by the latest commit, when present. */
+  async constraintRecord(): Promise<StorageConstraintRecord | undefined> {
+    this.assertStarted();
+    return this.reader.readConstraintRecord();
+  }
+
   /** Returns the schema version currently loaded for this store. */
   currentSchemaVersion(): number {
     return this.schemaVersion;
@@ -1008,10 +1037,21 @@ export class StorageManager<TRoot = unknown> {
     this.typeDictionarySignature = signature;
   }
 
-  private async runCommitValidators(envelope: SerializedEnvelope, transactionId: number): Promise<void> {
+  private async runCommitValidators(
+    envelope: SerializedEnvelope,
+    transactionId: number,
+    objectIds: readonly string[],
+  ): Promise<StorageConstraintValidationResult | undefined> {
+    const constraintValidation = validateStorageConstraints({
+      envelope,
+      options: this.constraintOptions,
+      objectIds,
+      throwOnViolation: true,
+    });
     for (const validator of this.options.commitValidators ?? []) {
       await validator({ root: this.rootValue as TRoot, envelope, transactionId });
     }
+    return constraintValidation.checkedConstraints > 0 ? constraintValidation : undefined;
   }
 
   private fillCustomRoot(loadedRoot: TRoot, envelope: SerializedEnvelope): TRoot {

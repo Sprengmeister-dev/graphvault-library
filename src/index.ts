@@ -70,6 +70,7 @@ export {
   StorageLockError,
   StorageNotStartedError,
   ReadonlyStorageError,
+  StorageConstraintViolationError,
   TransactionScopeError,
   UnknownTypeError,
 } from "./core/errors.js";
@@ -95,6 +96,22 @@ export {
 } from "./core/field-annotations.js";
 /** Field annotation configuration types. */
 export type { GraphVaultFieldAnnotation, GraphVaultIgnoreOptions } from "./core/field-annotations.js";
+/** Constraint decorators for storage-enforced field invariants. */
+export {
+  GraphVaultConstraint,
+  GraphVaultEnum,
+  GraphVaultMax,
+  GraphVaultMin,
+  GraphVaultReferenceExists,
+  GraphVaultRequired,
+  GraphVaultType,
+  GraphVaultUnique,
+  graphVaultConstraintDefinitionsForTypes,
+  graphVaultConstraintsForPrototype,
+  registerGraphVaultConstraint,
+} from "./core/constraints.js";
+/** Constraint decorator configuration types. */
+export type { GraphVaultConstraintOptions } from "./core/constraints.js";
 /** Storage target implementations for local, memory, encrypted, HTTP, S3, and SQL backends. */
 export {
   copyStorageTargetTree,
@@ -157,6 +174,14 @@ export type {
   StorageIndexStatus,
   StorageIndexConsistency,
   StorageIndexMode,
+  StorageConstraintDefinition,
+  StorageConstraintKind,
+  StorageConstraintMode,
+  StorageConstraintOptions,
+  StorageConstraintRecord,
+  StorageConstraintValidationResult,
+  StorageConstraintValueType,
+  StorageConstraintViolation,
   StorageTextIndexDefinition,
   StorageUniqueIndexDefinition,
   StorageManifest,

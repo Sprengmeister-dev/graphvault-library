@@ -60,6 +60,11 @@ export class StorageLayout {
     return join(this.storageDirectory, "index.json");
   }
 
+  /** Returns the resolved constraintFile path used by the storage layout. */
+  get constraintFile(): string {
+    return join(this.storageDirectory, "constraints.json");
+  }
+
   /** Returns the resolved journalFile path used by the storage layout. */
   get journalFile(): string {
     return join(this.storageDirectory, "journal.log");

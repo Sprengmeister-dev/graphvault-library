@@ -5,6 +5,7 @@ import type {
   ObjectRecord,
   ParentIndexRecord,
   SerializedEnvelope,
+  StorageConstraintRecord,
   StorageIndexRecord,
   StorageManifest,
   StorageTarget,
@@ -189,6 +190,19 @@ export class StorageReader {
       }
       const record = JSON.parse(await this.target.readText(this.layout.indexFile)) as StorageIndexRecord;
       return record.format === "graphvault-index" ? record : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
+  /** Reads the persisted storage constraint contract when present. */
+  async readConstraintRecord(): Promise<StorageConstraintRecord | undefined> {
+    try {
+      if (!(await this.target.exists(this.layout.constraintFile))) {
+        return undefined;
+      }
+      const record = JSON.parse(await this.target.readText(this.layout.constraintFile)) as StorageConstraintRecord;
+      return record.format === "graphvault-constraints" ? record : undefined;
     } catch {
       return undefined;
     }

@@ -27,3 +27,6 @@ export class UnknownTypeError extends GraphVaultError {}
 
 /** Error thrown when persisted GraphVault data is structurally invalid or internally inconsistent. */
 export class CorruptStorageError extends GraphVaultError {}
+
+/** Error thrown when a storage constraint rejects a commit. */
+export class StorageConstraintViolationError extends GraphVaultError {}

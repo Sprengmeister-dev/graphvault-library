@@ -32,6 +32,8 @@ Main runtime API.
 - `indexStatus()`: returns persistent-index mode, consistency, transaction id, node count, property-key count, edge count, advanced index counts, and whether the index is loaded, missing, stale, or disabled.
 - `verifyIndexes()`: rebuilds the expected persistent index in memory and compares it with the committed sidecar.
 - `rebuildIndexes()` / `repairIndexes()`: take the writer lock and rewrite the persistent index sidecar for the currently loaded root.
+- `validateConstraints()`: validates the loaded graph against annotated and configured storage constraints without committing.
+- `constraintRecord()`: reads the latest persisted `constraints.json` contract and validation summary, when present.
 - `createStorer()`: batches several store targets into one commit.
 - `createLazyRef(key, value)`: creates and stores lazy data.
 - `loadLazy(key)` / `storeLazy(key, value)`: low-level lazy value access.
@@ -116,6 +118,19 @@ class Session {
 
 Ignored fields are filtered after custom `serialize(...)` and before custom `hydrate(...)`, so class registrations and field annotations compose.
 
+### Constraint Annotations
+
+- `GraphVaultRequired(message?)`: rejects missing, `undefined`, or `null` values.
+- `GraphVaultType(type, message?)`: checks persisted value type, e.g. `string`, `number`, `date`, `array`, `object`, or `reference`.
+- `GraphVaultEnum(values, message?)`: restricts a field to a fixed value set.
+- `GraphVaultMin(value, message?)` / `GraphVaultMax(value, message?)`: checks numeric, string, or date bounds.
+- `GraphVaultUnique(message?)`: rejects duplicate values on the same registered type.
+- `GraphVaultReferenceExists(message?)`: rejects references that do not point to an object in the committed envelope.
+- `GraphVaultConstraint(options)`: low-level decorator for combining constraint options.
+- `registerGraphVaultConstraint(...)`: low-level hook for custom decorator integrations.
+
+Annotated constraints are discovered from `types` registrations, run in the commit path before WAL prepare, and are persisted to `constraints.json` for operational inspection. `StorageManager.validateConstraints()` validates the currently loaded graph without committing, and `StorageManager.constraintRecord()` reads the latest persisted constraint contract.
+
 ### Storage Targets
 
 - `LocalFilesystemTarget`: default target for file-based embedded storage.
@@ -143,6 +158,7 @@ Ignored fields are filtered after custom `serialize(...)` and before custom `hyd
 - `recoverCommittedWal`: finishes committed WAL entries at startup; defaults to `true` when WAL is enabled.
 - `readCommittedWal`: allows readers to load committed WAL entries before manifest repair; defaults to `true`.
 - `commitValidators`: application invariants that must pass before WAL prepare and commit.
+- `constraints`: `false` disables annotated and configured constraints; `{ mode: "enforce", definitions: [...] }` adds explicit storage constraint definitions alongside annotations.
 - `schemaVersion`: target storage-wide schema version.
 - `schemaMigrations`: ordered or unordered list of `up`/`down` storage-wide migrations. Versions must be unique positive integers.
 - `migrateOnStart`: runs `migrateTo(schemaVersion)` during startup after the root is loaded. For critical deployments, prefer an explicit migration job.

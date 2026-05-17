@@ -317,6 +317,63 @@ export interface StorageIndexVerificationResult {
   warnings: string[];
 }
 
+export type StorageConstraintMode = "off" | "enforce";
+export type StorageConstraintKind = "required" | "type" | "enum" | "min" | "max" | "unique" | "referenceExists";
+export type StorageConstraintValueType = "string" | "number" | "boolean" | "bigint" | "date" | "object" | "array" | "reference";
+
+/** Configuration for one storage-wide field constraint. */
+export interface StorageConstraintDefinition {
+  name?: string;
+  type?: string;
+  path: string;
+  required?: boolean;
+  valueType?: StorageConstraintValueType;
+  enum?: unknown[];
+  min?: unknown;
+  max?: unknown;
+  unique?: boolean;
+  referenceExists?: boolean;
+  message?: string;
+}
+
+/** Options used to configure storage-wide constraint enforcement. */
+export interface StorageConstraintOptions {
+  mode?: StorageConstraintMode;
+  definitions?: StorageConstraintDefinition[];
+}
+
+/** One rejected field value produced by storage constraint validation. */
+export interface StorageConstraintViolation {
+  name: string;
+  kind: StorageConstraintKind;
+  objectId: string;
+  path: string;
+  message: string;
+  type?: string;
+  value?: EncodedValue;
+  conflictObjectId?: string;
+}
+
+/** Result returned by storage constraint validation. */
+export interface StorageConstraintValidationResult {
+  ok: boolean;
+  mode: StorageConstraintMode;
+  checkedObjects: number;
+  checkedConstraints: number;
+  violations: StorageConstraintViolation[];
+}
+
+/** Persisted record shape for the active storage constraint contract. */
+export interface StorageConstraintRecord {
+  format: "graphvault-constraints";
+  version: 1;
+  transactionId: number;
+  createdAt: string;
+  mode: StorageConstraintMode;
+  definitions: StorageConstraintDefinition[];
+  validation: StorageConstraintValidationResult;
+}
+
 /** Options used to configure Subtree Load behavior. */
 export interface SubtreeLoadOptions {
   depth?: number;
@@ -421,6 +478,7 @@ export interface StorageManagerOptions<TRoot = unknown> {
   schemaMigrations?: Array<StorageSchemaMigration<TRoot>>;
   migrateOnStart?: boolean;
   indexes?: boolean | StorageIndexOptions;
+  constraints?: boolean | StorageConstraintOptions;
 }
 
 export type StorageCommitValidator<TRoot = unknown> = (context: {

@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import type {
   SerializedEnvelope,
+  StorageConstraintValidationResult,
   StorageTarget,
   StorageTargetLock,
   TransactionRecord,
@@ -20,7 +21,7 @@ export interface StorageCommitterDependencies {
   writer: StorageWriter;
   writeOptions: ResolvedStorageWriteOptions;
   transactionLogEnabled: () => boolean;
-  validateCommit: (envelope: SerializedEnvelope, transactionId: number) => Promise<void>;
+  validateCommit: (envelope: SerializedEnvelope, transactionId: number, objectIds: readonly string[]) => Promise<StorageConstraintValidationResult | undefined>;
   beforePublish: () => Promise<void>;
   commitState: (transactionId: number, objectVersions: ReadonlyMap<string, number>, envelope: SerializedEnvelope) => void;
   readLatestTransactionRecord: () => Promise<TransactionRecord | undefined>;
@@ -53,7 +54,7 @@ export class StorageCommitter {
     const snapshotPath = join(this.dependencies.layout.snapshotsDirectory, snapshotFile);
     const objectVersions = nextObjectVersions(options.baseObjectVersions, allObjectIds, options.objectIds, nextTransactionId);
     const objectIds = objectIdsToWrite(options.baseObjectVersions, allObjectIds, options.objectIds);
-    await this.dependencies.validateCommit(envelope, nextTransactionId);
+    const constraintValidation = await this.dependencies.validateCommit(envelope, nextTransactionId, objectIds);
     let prepareFile: string | undefined;
     if (this.dependencies.transactionLogEnabled()) {
       prepareFile = await this.dependencies.writer.writeWalPrepare({
@@ -96,6 +97,7 @@ export class StorageCommitter {
       targetCount,
       lock,
       objectVersions,
+      ...(constraintValidation ? { constraintValidation } : {}),
       ...(options.metadata ? { metadata: options.metadata } : {}),
     });
     return {
@@ -120,6 +122,7 @@ export class StorageCommitter {
     lock: StorageTargetLock;
     objectVersions?: ReadonlyMap<string, number>;
     metadata?: TransactionMetadata;
+    constraintValidation?: StorageConstraintValidationResult;
   }): Promise<string> {
     const { envelope, transactionId, snapshotFile, mode, targetCount, lock } = options;
     const objectIds = sortedObjectIds(envelope);
@@ -146,6 +149,7 @@ export class StorageCommitter {
     const journalFile = existingRecord ? transactionRecordName(transactionId) : await this.dependencies.writer.writeTransactionRecord(transactionRecord);
     await lock.assertValid();
     await this.dependencies.writer.writeParentIndex(envelope, transactionId);
+    await this.dependencies.writer.writeConstraintRecord(envelope, transactionId, options.constraintValidation);
     await this.dependencies.writer.writePersistentIndex(envelope, transactionId);
     if (this.dependencies.writeOptions.writeSnapshots) {
       await lock.assertValid();

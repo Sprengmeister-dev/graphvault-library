@@ -114,6 +114,45 @@ class Account {
 
 For TypeScript legacy property decorators, enable `experimentalDecorators` in the consuming app. The annotations are applied by the serializer, so they also affect custom type registrations that provide their own `serialize` or `hydrate` functions.
 
+### Constraint Annotations
+
+Constraint annotations turn simple field invariants into storage-enforced commit gates. They run after serialization and before WAL prepare, so a rejected write publishes no partial transaction.
+
+```ts
+import {
+  GraphVaultEnum,
+  GraphVaultMax,
+  GraphVaultMin,
+  GraphVaultRequired,
+  GraphVaultType,
+  GraphVaultUnique,
+} from "@sprengmeister/graphvault";
+
+class Account {
+  @GraphVaultRequired()
+  @GraphVaultType("string")
+  id = "";
+
+  @GraphVaultUnique()
+  email = "";
+
+  @GraphVaultEnum(["active", "locked"])
+  status: "active" | "locked" = "active";
+
+  @GraphVaultMin(0)
+  @GraphVaultMax(100)
+  riskScore = 0;
+}
+
+const storage = await EmbeddedStorage.start({
+  storageDirectory: "./data",
+  rootFactory: () => ({ accounts: [] }),
+  types: [{ name: "Account", ctor: Account }],
+});
+```
+
+Supported fast constraints are `required`, persisted value type, enum membership, min/max, unique value, and reference existence. Annotated constraints are scoped to registered GraphVault types and are checked incrementally for the objects touched by a commit; unique checks use a narrow key scan for the affected field instead of arbitrary graph traversal. Use `constraints: false` to disable enforcement for a store instance.
+
 ### Read And Write Data
 
 Mutate your root like normal TypeScript objects, then store explicitly. `storeRoot()` writes the full reachable root graph, so nested changes in arrays, maps, sets, and child objects are durable even when the root object identity did not change.

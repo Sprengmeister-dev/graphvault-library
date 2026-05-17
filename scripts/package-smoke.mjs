@@ -52,8 +52,11 @@ import {
   EmbeddedStorage,
   EncryptedStorageTarget,
   GraphVaultIgnore,
+  GraphVaultRequired,
+  GraphVaultUnique,
   GraphSerializer,
   MemoryStorageTarget,
+  StorageConstraintViolationError,
   assessStorageSafety,
   startStorage,
 } from "@sprengmeister/graphvault";
@@ -129,6 +132,29 @@ const annotatedEnvelope = serializer.serialize(new PackageAnnotatedModel());
 assert.equal("secret" in annotatedEnvelope.nodes[annotatedEnvelope.root.$ref].props, false);
 assert.equal(new StorageLayout("store").manifestFile, "store/manifest.json");
 assert.equal(new InternalMemoryStorageTarget() instanceof MemoryStorageTarget, true);
+
+class PackageAccount {
+  constructor(id, email) {
+    this.id = id;
+    this.email = email;
+  }
+}
+GraphVaultRequired()(PackageAccount.prototype, "id");
+GraphVaultUnique()(PackageAccount.prototype, "email");
+const constraintStore = await EmbeddedStorage.start({
+  storageDirectory: "constraint-smoke",
+  storageTarget: new MemoryStorageTarget(),
+  types: [{ name: "PackageAccount", ctor: PackageAccount }],
+  rootFactory: () => ({
+    accounts: [new PackageAccount("account-1", "one@example.com"), new PackageAccount("account-2", "two@example.com")],
+  }),
+});
+await constraintStore.storeRoot();
+assert.equal((await constraintStore.constraintRecord()).format, "graphvault-constraints");
+constraintStore.root.accounts[1].email = "one@example.com";
+await assert.rejects(() => constraintStore.store(constraintStore.root.accounts[1]), StorageConstraintViolationError);
+assert.equal((await constraintStore.validateConstraints()).ok, false);
+await constraintStore.shutdown();
 
 const viaFactory = await startStorage({
   storageDirectory: "factory-smoke",

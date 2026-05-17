@@ -12,7 +12,7 @@ GraphVault is embedded object-graph persistence for TypeScript and NestJS applic
 
 It is not a SQL server and it is not an ORM. You keep your domain model in memory, mutate normal TypeScript objects, then explicitly commit a verifiable graph store with WAL recovery, locking, indexes, GVQL, and an admin UI.
 
-Current release: [0.2.8](./docs/RELEASE_NOTES_0.2.8.md), with stronger public TSDoc, production write defaults, explicit Node.js LTS support, field annotations for save/load filtering, professional persistent indexes, and NestJS smoke tests.
+Current release: [0.2.9](./docs/RELEASE_NOTES_0.2.9.md), with annotation-driven field constraints, stronger public TSDoc, production write defaults, explicit Node.js LTS support, field annotations for save/load filtering, professional persistent indexes, and NestJS smoke tests.
 
 ## 30-Second Quickstart
 
@@ -54,6 +54,7 @@ Reach for Postgres, SQLite, MongoDB, or Redis when:
 
 - Persist rich TypeScript object graphs with identity, shared references, cycles, classes, `Map`, `Set`, `Date`, `Buffer`, `bigint`, typed arrays, and other JS values.
 - Exclude sensitive or runtime-only class fields with field decorators such as `@GraphVaultIgnore()`, `@GraphVaultIgnoreSave()`, and `@GraphVaultIgnoreLoad()`.
+- Enforce simple DB-style field constraints with annotations such as `@GraphVaultRequired()`, `@GraphVaultUnique()`, `@GraphVaultEnum(...)`, `@GraphVaultMin(...)`, `@GraphVaultMax(...)`, and `@GraphVaultReferenceExists()`.
 - Query and batch-update committed graphs with GVQL, persistent indexes, execution plans, aggregates, previews, and GraphVault Studio.
 - Run explicit transactions with rollback, optimistic or pessimistic locking, WAL recovery, fencing tokens, transaction metadata, and a tamper-evident hash chain.
 - Operate stores with health/safety reports, verification, consistent backup, schema migrations, bounded subtree exports, and pluggable local, memory, HTTP, S3-compatible, SQLite-tested, and PostgreSQL-tested SQL storage targets.
@@ -132,6 +133,7 @@ The default filesystem profile is `writeProfile: "production"`: binary object re
 
 - Query and manipulate graphs with [GVQL](./docs/GVQL.md): graph patterns, joins, aggregates, execution plans, previews, and batch updates.
 - Keep sensitive or runtime-only model fields out of persistence with [field annotations](./docs/USAGE.md#field-annotations).
+- Keep invalid data out of committed stores with [constraint annotations](./docs/USAGE.md#constraint-annotations): required fields, type checks, enums, min/max, unique keys, and reference existence checks before WAL publish.
 - Keep large stores fast with [persistent indexes](./docs/INDEXES.md): property, composite, range, text/substring, full-text token, unique, partial/sparse, and expression indexes with verify/repair operations.
 - Protect concurrent writers with [transactions](./docs/TRANSACTIONS.md): rollback, optimistic and pessimistic locking, fencing tokens, stale-lock recovery, and NestJS decorators.
 - Run production checks with [operations guidance](./docs/PRODUCTION.md) and [ACID configuration](./docs/ACID.md): WAL recovery, strict durability, verification, backups, health reports, and safety profiles.
@@ -176,6 +178,7 @@ For a fuller graph-shaped product demo, see the [CaseGraph demo concept](./docs/
 - [CaseGraph demo concept](./docs/CASEGRAPH.md) - the reference use case for graph-shaped, audit-heavy application data.
 - [API reference](./docs/API.md) - public entry points and important options.
 - [Benchmarks](./docs/BENCHMARKS.md) - reproducible performance numbers and write profiles.
+- [0.2.9 release notes](./docs/RELEASE_NOTES_0.2.9.md) - annotation-driven storage constraints for required, type, enum, min/max, unique, and reference checks.
 - [0.2.8 release notes](./docs/RELEASE_NOTES_0.2.8.md) - public API TSDoc hardening and source-quality enforcement.
 - [0.2.7 release notes](./docs/RELEASE_NOTES_0.2.7.md) - production write defaults and renamed write profiles.
 - [0.2.6 release notes](./docs/RELEASE_NOTES_0.2.6.md) - explicit Node.js 22+ LTS support and CI validation.
