@@ -5,6 +5,8 @@ on:
   push:
     branches: [main]
     paths:
+      - "package.json"
+      - "package-lock.json"
       - ".github/workflows/github-packages.yml"
 
 permissions:
@@ -30,12 +32,14 @@ jobs:
       - run: npm run benchmark:check
       - run: npm run pack:dry-run
       - name: Prepare GitHub Packages metadata
+        id: metadata
         run: |
           node --input-type=module <<'JS'
-          import { readFile, writeFile } from "node:fs/promises";
+          import { appendFile, readFile, writeFile } from "node:fs/promises";
 
           const packageJsonPath = "package.json";
           const packageJson = JSON.parse(await readFile(packageJsonPath, "utf8"));
+          const version = packageJson.version;
 
           packageJson.name = "@sprengmeister-dev/graphvault";
           packageJson.repository = {
@@ -47,8 +51,16 @@ jobs:
           };
 
           await writeFile(packageJsonPath, `${JSON.stringify(packageJson, null, 2)}\n`);
+          await appendFile(process.env.GITHUB_OUTPUT, `package_version=${version}\n`);
           JS
+      - name: Check whether mirror version already exists
+        id: mirror
+        continue-on-error: true
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm view @sprengmeister-dev/graphvault@${{ steps.metadata.outputs.package_version }} version --registry=https://npm.pkg.github.com
       - name: Publish mirror
+        if: steps.mirror.outcome == 'failure'
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: npm publish --registry=https://npm.pkg.github.com --access public
