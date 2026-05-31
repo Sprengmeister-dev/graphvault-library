@@ -61,6 +61,16 @@ The workflow checks out the tag, installs with `npm ci`, runs tests, runs the be
 
 Only run the release workflow after the tag is intentionally created for a batched release. Do not use it as part of ordinary development or small follow-up fixes. The workflow refuses to continue unless the confirmation input is exactly `PUBLISH`.
 
+## Package Registry
+
+npmjs is the canonical public registry for GraphVault TS:
+
+```bash
+npm install @sprengmeister/graphvault
+```
+
+Do not publish a GitHub Packages mirror for consumer installs. GitHub Packages requires a GitHub-owner scope, registry mapping, and authentication even for public npm packages, so its generated install snippet can point users at a package name that does not exist on npmjs.
+
 ## Repository Visibility
 
 Recommended GitHub topics:
