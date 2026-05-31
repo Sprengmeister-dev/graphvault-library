@@ -1,7 +1,7 @@
 # GraphVault TS
 
 [![CI](https://github.com/Sprengmeister-dev/graphvault-library/actions/workflows/ci.yml/badge.svg)](https://github.com/Sprengmeister-dev/graphvault-library/actions/workflows/ci.yml)
-![npm](https://img.shields.io/npm/v/%40sprengmeister%2Fgraphvault)
+[![npm](https://img.shields.io/npm/v/%40sprengmeister%2Fgraphvault)](https://www.npmjs.com/package/@sprengmeister/graphvault)
 ![Node](https://img.shields.io/badge/node-%3E%3D22%20LTS-3c7a52)
 ![TypeScript](https://img.shields.io/badge/TypeScript-first-315c92)
 ![License](https://img.shields.io/badge/license-MIT-2f2f2f)
