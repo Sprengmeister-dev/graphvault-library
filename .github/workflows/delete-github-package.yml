@@ -25,7 +25,10 @@ jobs:
           set -euo pipefail
 
           response_file="$(mktemp)"
-          status="$(
+          delete_package() {
+            local owner_type="$1"
+            local url="https://api.github.com/${owner_type}/${PACKAGE_OWNER}/packages/npm/${PACKAGE_NAME}"
+
             curl --silent --show-error --location \
               --request DELETE \
               --output "$response_file" \
@@ -33,11 +36,26 @@ jobs:
               --header "Accept: application/vnd.github+json" \
               --header "Authorization: Bearer ${GH_TOKEN}" \
               --header "X-GitHub-Api-Version: 2022-11-28" \
-              "https://api.github.com/orgs/${PACKAGE_OWNER}/packages/npm/${PACKAGE_NAME}"
-          )"
+              "$url"
+          }
+
+          status="$(delete_package users)"
 
           if [ "$status" = "204" ]; then
-            echo "Deleted GitHub Packages mirror ${PACKAGE_OWNER}/${PACKAGE_NAME}."
+            echo "Deleted user-scoped GitHub Packages mirror ${PACKAGE_OWNER}/${PACKAGE_NAME}."
+            exit 0
+          fi
+
+          if [ "$status" != "404" ]; then
+            echo "Unexpected GitHub API status from user endpoint: ${status}" >&2
+            cat "$response_file" >&2
+            exit 1
+          fi
+
+          status="$(delete_package orgs)"
+
+          if [ "$status" = "204" ]; then
+            echo "Deleted org-scoped GitHub Packages mirror ${PACKAGE_OWNER}/${PACKAGE_NAME}."
             exit 0
           fi
 
@@ -46,6 +64,6 @@ jobs:
             exit 0
           fi
 
-          echo "Unexpected GitHub API status: ${status}" >&2
+          echo "Unexpected GitHub API status from org endpoint: ${status}" >&2
           cat "$response_file" >&2
           exit 1
