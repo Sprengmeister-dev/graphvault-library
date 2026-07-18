@@ -88,12 +88,18 @@
   "keywords": [
     "graphvault",
     "embedded-database",
+    "embedded-storage",
     "graph-database",
     "object-graph",
+    "object-database",
     "persistence",
     "local-first",
+    "offline-first",
     "typescript",
+    "typescript-database",
     "nestjs",
+    "orm-alternative",
+    "domain-driven-design",
     "gvql",
     "storage"
   ],

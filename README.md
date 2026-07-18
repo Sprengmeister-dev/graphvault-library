@@ -8,11 +8,27 @@
 
 ![GraphVault logo](./assets/graphvault-logo.jpg)
 
-GraphVault is embedded object-graph persistence for TypeScript and NestJS applications whose natural data model is a live object graph: a root object with nested objects, arrays, maps, sets, shared references, cycles, and domain classes.
+> The embedded database for TypeScript object graphs.
 
-It is not a SQL server and it is not an ORM. You keep your domain model in memory, mutate normal TypeScript objects, then explicitly commit a verifiable graph store with WAL recovery, locking, indexes, GVQL, and an admin UI.
+GraphVault persists the TypeScript domain model you already use: a root object with nested objects, arrays, maps, sets, shared references, cycles, and classes. It is designed for NestJS services, local-first tools, CLIs, desktop apps, simulations, and other applications that own a rich, connected model.
+
+It is not a SQL server and it is not an ORM. Keep normal objects in memory, change them in ordinary TypeScript, then explicitly commit a verifiable graph store with WAL recovery, locking, indexes, GVQL, and an admin UI.
 
 Current release: [0.2.9](./docs/RELEASE_NOTES_0.2.9.md), with annotation-driven field constraints, stronger public TSDoc, production write defaults, explicit Node.js LTS support, field annotations for save/load filtering, professional persistent indexes, and NestJS smoke tests.
+
+## Why GraphVault?
+
+When a TypeScript model is truly a graph, persisting it through records or JSON often means building an extra mapping layer and reassembling relationships after every read. GraphVault keeps the model as the source of truth.
+
+| If you need to... | GraphVault gives you... |
+| --- | --- |
+| preserve object identity, cycles, `Map`, `Set`, and classes | native object-graph persistence instead of a hand-built mapper |
+| decide precisely when data becomes durable | explicit commits, transactions, WAL recovery, and locking |
+| query a committed graph without shipping it elsewhere | GVQL, persistent indexes, execution plans, aggregates, previews, and batch updates |
+| run an application-owned store safely | verification, backups, health reports, schema migrations, and GraphVault Studio |
+| use an embedded store from NestJS | a NestJS module plus transactional service decorators |
+
+GraphVault is deliberately focused: it is an embedded, application-owned store, not a replacement for Postgres, SQLite, or a distributed database server.
 
 ## 30-Second Quickstart
 
@@ -23,17 +39,20 @@ npm install @sprengmeister/graphvault
 ```ts
 import { EmbeddedStorage } from "@sprengmeister/graphvault";
 
+const document = { id: "doc-1", title: "Hello object graph" };
+
 const storage = await EmbeddedStorage.start({
   storageDirectory: "./data",
-  root: { documents: [] },
+  root: { documents: [], pinned: new Set() },
 });
 
-storage.root.documents.push({ id: "doc-1", title: "Hello object graph" });
+storage.root.documents.push(document);
+storage.root.pinned.add(document); // the same object can be referenced in more than one place
 await storage.storeRoot();
 await storage.shutdown();
 ```
 
-## When To Use It
+## When GraphVault Is A Strong Fit
 
 Use GraphVault when:
 
@@ -42,6 +61,8 @@ Use GraphVault when:
 - you want embedded persistence for a NestJS service, CLI, desktop app, simulation, rules engine, local-first tool, test harness, or admin-heavy internal tool
 - writes should be explicit and auditable instead of hidden behind ORM change tracking
 - a bounded graph slice should be easy to expose through an API with `loadSubtree({ depth })`
+
+## When To Choose Something Else
 
 Reach for Postgres, SQLite, MongoDB, or Redis when:
 
@@ -188,6 +209,10 @@ For a fuller graph-shaped product demo, see the [CaseGraph demo concept](./docs/
 - [0.2.0 release notes](./docs/RELEASE_NOTES_0.2.0.md) - production hardening, ACID-oriented recovery, subtree exports, and encrypted storage.
 - [0.1.0 release notes](./docs/RELEASE_NOTES_0.1.0.md) - package overview for the first public release.
 - [Publishing checklist](./docs/PUBLISHING.md) - local release checks, tagging, npm provenance, and GitHub topics.
+
+## Help Others Find GraphVault
+
+If GraphVault has removed persistence glue from a TypeScript project, please [star the repository](https://github.com/Sprengmeister-dev/graphvault-library). It is a small signal that helps developers with graph-shaped models discover the project.
 
 ## Developer Experience
 
